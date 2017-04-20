@@ -7,7 +7,8 @@ import tintor.common.InlineChainingHashSet;
 import tintor.common.Measurer;
 import tintor.common.Zobrist;
 
-abstract class StateBase extends InlineChainingHashSet.Element implements Comparable<StateBase> {
+// State without boxes
+abstract class StateBase extends InlineChainingHashSet.Element {
 	StateBase(int agent, int dist, int dir, boolean is_push) {
 		assert 0 <= agent && agent < 256;
 		this.agent = (byte) agent;
@@ -20,14 +21,6 @@ abstract class StateBase extends InlineChainingHashSet.Element implements Compar
 
 		assert dir != -1 || !is_push;
 		this.is_push = is_push;
-	}
-
-	abstract StateBase prev(Level level);
-
-	abstract StateBase move(int dir, Level level);
-
-	public int compareTo(StateBase a) {
-		return total_dist() - a.total_dist();
 	}
 
 	public int agent() {
@@ -90,75 +83,8 @@ abstract class StateBase extends InlineChainingHashSet.Element implements Compar
 	}
 }
 
-final class State extends StateBase {
-	State(int agent, long box0, int dist, int dir, boolean is_push) {
-		super(agent, dist, dir, is_push);
-		this.box0 = box0;
-	}
-
-	boolean box(int i) {
-		assert i >= 0;
-		return i < 64 && Bits.test(box0, i);
-	}
-
-	boolean equals(State s) {
-		return box0 == s.box0 && agent() == s.agent();
-	}
-
-	@Override
-	public boolean equals(Object o) {
-		return equals((State) o);
-	}
-
-	public int hashCode(Object context) {
-		return StateBase.hashCode(agent(), box0, (Integer) context);
-	}
-
-	StateBase prev(Level level) {
-		int a = level.move(agent(), Level.reverseDir(dir));
-		assert 0 <= a && a < level.cells;
-		if (!is_push)
-			return new State(a, box0, dist() - 1, -1, false);
-
-		assert 0 <= dir && dir < 4;
-		int b = level.move(agent(), dir);
-		assert 0 <= b && b < level.alive;
-
-		long nbox0 = box0;
-		nbox0 = Bits.clear(nbox0, b);
-		nbox0 = Bits.set(nbox0, agent());
-		return new State(a, nbox0, dist() - 1, -1, false);
-	}
-
-	StateBase move(int dir, Level level) {
-		assert 0 <= dir && dir < 4;
-		int a = level.move(agent(), dir);
-		if (a == -1)
-			return null;
-		if (!box(a))
-			return new State(a, box0, dist() + 1, dir, false);
-
-		int b = level.move(a, dir);
-		if (b == -1 || b >= level.alive)
-			return null;
-		if (!box(b)) {
-			long nbox0 = box0;
-			nbox0 = Bits.clear(nbox0, a);
-			nbox0 = Bits.set(nbox0, b);
-			return new State(a, nbox0, dist() + 1, dir, true);
-		}
-		return null;
-	}
-
-	final long box0;
-
-	static {
-		Assert.assertEquals(32, Measurer.sizeOf(State.class));
-	}
-}
-
-final class State2 extends StateBase {
-	State2(int agent, long box0, long box1, int dist, int dir, boolean is_push) {
+final class State extends StateBase implements Comparable<State> {
+	State(int agent, long box0, long box1, int dist, int dir, boolean is_push) {
 		super(agent, dist, dir, is_push);
 		this.box0 = box0;
 		this.box1 = box1;
@@ -173,24 +99,28 @@ final class State2 extends StateBase {
 		return false;
 	}
 
-	boolean equals(State2 s) {
+	public int compareTo(State a) {
+		return total_dist() - a.total_dist();
+	}
+
+	boolean equals(State s) {
 		return box0 == s.box0 && agent() == s.agent() && box1 == s.box1;
 	}
 
 	@Override
 	public boolean equals(Object o) {
-		return equals((State2) o);
+		return equals((State) o);
 	}
 
 	public int hashCode(Object context) {
 		return StateBase.hashCode(agent(), box0, box1, (Integer) context);
 	}
 
-	StateBase prev(Level level) {
+	State prev(Level level) {
 		int a = level.move(agent(), Level.reverseDir(dir));
 		assert 0 <= a && a < level.cells;
 		if (!is_push)
-			return new State2(a, box0, box1, dist() - 1, -1, false);
+			return new State(a, box0, box1, dist() - 1, -1, false);
 
 		assert 0 <= dir && dir < 4;
 		int b = level.move(agent(), dir);
@@ -206,16 +136,16 @@ final class State2 extends StateBase {
 			nbox0 = Bits.set(nbox0, agent());
 		else
 			nbox1 = Bits.set(nbox1, agent() - 64);
-		return new State2(a, nbox0, nbox1, dist() - 1, -1, false);
+		return new State(a, nbox0, nbox1, dist() - 1, -1, false);
 	}
 
-	StateBase move(int dir, Level level) {
+	State move(int dir, Level level) {
 		assert 0 <= dir && dir < 4;
 		int a = level.move(agent(), dir);
 		if (a == -1)
 			return null;
 		if (!box(a))
-			return new State2(a, box0, box1, dist() + 1, dir, false);
+			return new State(a, box0, box1, dist() + 1, dir, false);
 
 		int b = level.move(a, dir);
 		if (b == -1 || b >= level.alive)
@@ -231,7 +161,7 @@ final class State2 extends StateBase {
 				nbox0 = Bits.set(nbox0, b);
 			else
 				nbox1 = Bits.set(nbox1, b - 64);
-			return new State2(a, nbox0, nbox1, dist() + 1, dir, true);
+			return new State(a, nbox0, nbox1, dist() + 1, dir, true);
 		}
 		return null;
 	}
@@ -240,6 +170,6 @@ final class State2 extends StateBase {
 	final long box1;
 
 	static {
-		Assert.assertEquals(40, Measurer.sizeOf(State2.class));
+		Assert.assertEquals(40, Measurer.sizeOf(State.class));
 	}
 }

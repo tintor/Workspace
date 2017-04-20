@@ -31,8 +31,8 @@ class ClosedSet {
 			return box0 == c.box0 && agent == c.agent;
 		}
 
-		public int hashCode(Object context) {
-			return StateBase.hashCode((int) agent & 0xFF, box0, (Integer) context);
+		protected int hashCode(Object context) {
+			return State.hashCode((int) agent & 0xFF, box0, (Integer) context);
 		}
 
 		static {
@@ -49,8 +49,8 @@ class ClosedSet {
 			return box0 == c.box0 && box1 == c.box1 && agent == c.agent;
 		}
 
-		public int hashCode(Object context) {
-			return StateBase.hashCode((int) agent & 0xFF, box0, box1, (Integer) context);
+		protected int hashCode(Object context) {
+			return State.hashCode((int) agent & 0xFF, box0, box1, (Integer) context);
 		}
 
 		static {
@@ -61,22 +61,19 @@ class ClosedSet {
 	private final CompactState1 temp_compact1 = new CompactState1();
 	private final CompactState2 temp_compact2 = new CompactState2();
 
-	CompactStateBase compress(StateBase s, boolean unique) {
+	CompactStateBase compress(State s, boolean unique) {
 		CompactStateBase c;
-		if (s instanceof State) {
+		assert box_length <= 128;
+		if (box_length <= 64) {
 			CompactState1 e = unique ? new CompactState1() : temp_compact1;
-			State f = (State) s;
-			e.box0 = f.box0;
+			e.box0 = s.box0;
 			c = e;
-		} else if (s instanceof State2) {
+		} else {
 			CompactState2 e = unique ? new CompactState2() : temp_compact2;
-			State2 f = (State2) s;
-			e.box0 = f.box0;
-			e.box1 = f.box1;
+			e.box0 = s.box0;
+			e.box1 = s.box1;
 			c = e;
-		} else
-			throw new Error();
-
+		}
 		c.agent = (byte) s.agent();
 		assert !s.is_push || (0 <= s.dir && s.dir < 4);
 		c.dir_and_is_push = (byte) (s.is_push ? s.dir + 4 : s.dir);
@@ -84,30 +81,25 @@ class ClosedSet {
 		return c;
 	}
 
-	StateBase decompress(CompactStateBase c) {
+	State decompress(CompactStateBase c) {
 		if (c == null)
 			return null;
-		long box0 = 0;
-		long box1 = 0;
-		if (c.getClass() == CompactState1.class) {
+
+		if (c instanceof CompactState1) {
 			CompactState1 e = (CompactState1) c;
-			box0 = e.box0;
 			int dir = c.dir_and_is_push >= 4 ? c.dir_and_is_push - 4 : c.dir_and_is_push;
-			return new State((int) c.agent & 0xFF, box0, c.dist, dir, c.dir_and_is_push >= 4);
-		} else if (c.getClass() == CompactState2.class) {
-			CompactState2 e = (CompactState2) c;
-			box0 = e.box0;
-			box1 = e.box1;
-			int dir = c.dir_and_is_push >= 4 ? c.dir_and_is_push - 4 : c.dir_and_is_push;
-			return new State2((int) c.agent & 0xFF, box0, box1, c.dist, dir, c.dir_and_is_push >= 4);
-		} else
-			throw new Error();
+			return new State((int) c.agent & 0xFF, e.box0, 0, c.dist, dir, c.dir_and_is_push >= 4);
+		}
+
+		CompactState2 e = (CompactState2) c;
+		int dir = c.dir_and_is_push >= 4 ? c.dir_and_is_push - 4 : c.dir_and_is_push;
+		return new State((int) c.agent & 0xFF, e.box0, e.box1, c.dist, dir, c.dir_and_is_push >= 4);
 	}
 
-	// set of CompactStateBase
+	// set of CompactState2
 	private final InlineChainingHashSet set;
 	private final ExternalBTree map;
-	private final int key_size, value_size = 4;
+	private final int key_size, value_size = 4, box_length;
 	private final ByteBuffer key_buffer;
 	private final ByteBuffer value_buffer;
 	private int size = 0;
@@ -118,6 +110,7 @@ class ClosedSet {
 
 	public ClosedSet(int box_length) {
 		set = new InlineChainingHashSet(16, box_length);
+		this.box_length = box_length;
 		key_size = 2 + (box_length + 7) / 8;
 		map = new ExternalBTree(512, key_size, value_size);
 		key_buffer = ByteBuffer.allocate(key_size);
@@ -132,7 +125,7 @@ class ClosedSet {
 		return size;
 	}
 
-	public boolean add(StateBase s) {
+	public boolean add(State s) {
 		try (Timer t = timer_add.start()) {
 			if (in_memory) {
 				if (set.add(compress(s, true))) {
@@ -149,7 +142,7 @@ class ClosedSet {
 		}
 	}
 
-	public boolean contains(StateBase s) {
+	public boolean contains(State s) {
 		try (Timer t = timer_contains.start()) {
 			if (in_memory)
 				return set.contains(compress(s, false));
@@ -157,7 +150,7 @@ class ClosedSet {
 		}
 	}
 
-	public StateBase get(StateBase s) {
+	public State get(State s) {
 		try (Timer t = timer_get.start()) {
 			if (in_memory)
 				return decompress((CompactStateBase) set.get(compress(s, false)));
@@ -172,17 +165,11 @@ class ClosedSet {
 			boolean is_push = getBoolean(b);
 			assert b.remaining() == 0;
 
-			if (s instanceof State) {
-				State e = (State) s;
-				return new State(s.agent(), e.box0, dist, dir, is_push);
-			} else {
-				State2 e = (State2) s;
-				return new State2(s.agent(), e.box0, e.box1, dist, dir, is_push);
-			}
+			return new State(s.agent(), s.box0, s.box1, dist, dir, is_push);
 		}
 	}
 
-	private byte[] value(StateBase state) {
+	private byte[] value(State state) {
 		ByteBuffer b = value_buffer;
 		b.position(0);
 		b.putShort((short) state.dist());
@@ -192,20 +179,13 @@ class ClosedSet {
 		return b.array();
 	}
 
-	private byte[] key(StateBase s) {
+	private byte[] key(State s) {
 		ByteBuffer b = key_buffer;
 		b.position(0);
 		b.put((byte) s.agent());
-		if (s instanceof State) {
-			State e = (State) s;
-			// TODO optimize (use less space)
-			b.putLong(e.box0);
-		} else {
-			State2 e = (State2) s;
-			// TODO optimize (use less space)
-			b.putLong(e.box0);
-			b.putLong(e.box1);
-		}
+		// TODO optimize (use less space)
+		b.putLong(s.box0);
+		b.putLong(s.box1);
 		assert b.remaining() == 0;
 		return b.array();
 	}

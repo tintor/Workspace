@@ -21,7 +21,7 @@ public class Nightly {
 				Deadlock deadlock = new Deadlock(level);
 
 				timer.start();
-				StateBase[] solution = Solver.solve_Astar(level, level.start, model, deadlock, new Solver.Context());
+				State[] solution = Solver.solve_Astar(level, level.start, model, deadlock, new Solver.Context());
 				timer.stop();
 
 				Assert.assertTrue(solution != null);

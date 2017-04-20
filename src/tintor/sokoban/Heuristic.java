@@ -12,7 +12,7 @@ abstract class Heuristic {
 		this.level = level;
 	}
 
-	abstract int evaluate(StateBase s, StateBase prev);
+	abstract int evaluate(State s, State prev);
 }
 
 // TODO instead of using simple distance over live cells, solve level with
@@ -54,23 +54,15 @@ final class MatchingHeuristic extends Heuristic {
 		}
 	}
 
-	public int evaluate(StateBase s, StateBase prev) {
+	public int evaluate(State s, State prev) {
 		if (prev != null && !s.is_push)
 			return prev.total_dist() - prev.dist() - agent_to_nearest_box_distance(prev)
 					+ agent_to_nearest_box_distance(s);
 
 		int w = 0;
-		if (s instanceof State) {
-			State e = (State) s;
-			for (int i = 0; i < level.alive; i++)
-				if (e.box(i))
-					boxes[w++] = i;
-		} else {
-			State2 e = (State2) s;
-			for (int i = 0; i < level.alive; i++)
-				if (e.box(i))
-					boxes[w++] = i;
-		}
+		for (int i = 0; i < level.alive; i++)
+			if (s.box(i))
+				boxes[w++] = i;
 		assert w == boxes.length;
 
 		for (int i = 0; i < boxes.length; i++)
@@ -91,19 +83,11 @@ final class MatchingHeuristic extends Heuristic {
 		return sum + agent_to_nearest_box_distance(s);
 	}
 
-	int agent_to_nearest_box_distance(StateBase s) {
+	int agent_to_nearest_box_distance(State s) {
 		int dist = Integer.MAX_VALUE;
-		if (s instanceof State) {
-			State e = (State) s;
-			for (int i = 0; i < level.alive; i++)
-				if (e.box(i))
-					dist = Math.min(level.agent_distance[s.agent()][i], dist);
-		} else {
-			State2 e = (State2) s;
-			for (int i = 0; i < level.alive; i++)
-				if (e.box(i))
-					dist = Math.min(level.agent_distance[s.agent()][i], dist);
-		}
+		for (int i = 0; i < level.alive; i++)
+			if (s.box(i))
+				dist = Math.min(level.agent_distance[s.agent()][i], dist);
 		return dist - 1;
 	}
 }

@@ -73,37 +73,25 @@ import tintor.common.Util;
 // TODO: Look at the sokoban PhD for more ideas.
 
 public class Solver {
-	static int greedy_score(StateBase s, Level level) {
+	static int greedy_score(State s, Level level) {
 		int score = 0;
-		if (s instanceof State) {
-			State e = (State) s;
-			for (int a = 0; a < level.alive; a++)
-				if (level.goal(a) && e.box(a)) {
-					score += 5;
-					for (byte dir = 0; dir < 4; dir++)
-						if (level.move(a, dir) == Level.Bad)
-							score += 1;
-				}
-		} else {
-			State2 e = (State2) s;
-			for (int a = 0; a < level.alive; a++)
-				if (level.goal(a) && e.box(a)) {
-					score += 5;
-					for (byte dir = 0; dir < 4; dir++)
-						if (level.move(a, dir) == Level.Bad)
-							score += 1;
-				}
-		}
+		for (int a = 0; a < level.alive; a++)
+			if (level.goal(a) && s.box(a)) {
+				score += 5;
+				for (byte dir = 0; dir < 4; dir++)
+					if (level.move(a, dir) == Level.Bad)
+						score += 1;
+			}
 		return score;
 	}
 
-	static StateBase[] extractPath(Level level, StateBase start, StateBase end, ClosedSet closed) {
-		ArrayDeque<StateBase> path = new ArrayDeque<StateBase>();
+	static State[] extractPath(Level level, State start, State end, ClosedSet closed) {
+		ArrayDeque<State> path = new ArrayDeque<State>();
 		while (!end.equals(start)) {
 			path.addFirst(end);
 			end = closed.get(end.prev(level));
 		}
-		return path.toArray(new StateBase[path.size()]);
+		return path.toArray(new State[path.size()]);
 	}
 
 	static State[] solve_IDAstar(Level level, State start, Heuristic model, Deadlock deadlock, Context context) {
@@ -112,7 +100,7 @@ public class Solver {
 		if (level.is_solved(start))
 			return new State[] {};
 
-		ArrayDeque<StateBase> stack = new ArrayDeque<StateBase>();
+		ArrayDeque<State> stack = new ArrayDeque<State>();
 		int total_dist_max = model.evaluate(start, null);
 		while (true) {
 			assert stack.isEmpty();
@@ -120,9 +108,9 @@ public class Solver {
 
 			int total_dist_cutoff_min = Integer.MAX_VALUE;
 			while (!stack.isEmpty()) {
-				StateBase a = stack.pop();
+				State a = stack.pop();
 				for (int dir : level.dirs[a.agent()]) {
-					StateBase b = a.move(dir, level);
+					State b = a.move(dir, level);
 					if (b == null)
 						break;
 					// TODO cut move if possible
@@ -143,21 +131,21 @@ public class Solver {
 		return null;
 	}
 
-	static StateBase[] solve_Astar(Level level, StateBase start, Heuristic model, Deadlock deadlock, Context context) {
+	static State[] solve_Astar(Level level, State start, Heuristic model, Deadlock deadlock, Context context) {
 		if (deadlock != null && deadlock.check(start))
 			return null;
 		if (level.is_solved(start))
-			return new StateBase[] {};
+			return new State[] {};
 
 		// Generate initial deadlock patterns
 		if (context.enable_populate) {
 			InlineChainingHashSet set = new InlineChainingHashSet(1 << 20, level);
-			ArrayDeque<StateBase> queue = new ArrayDeque<StateBase>();
+			ArrayDeque<State> queue = new ArrayDeque<State>();
 			queue.add(start);
 			while (!queue.isEmpty() && set.size() < (1 << 20) - 3) {
-				StateBase a = queue.removeFirst();
+				State a = queue.removeFirst();
 				for (byte dir = 0; dir < 4; dir++) {
-					StateBase b = a.move(dir, level);
+					State b = a.move(dir, level);
 					if (b == null || set.contains(b))
 						continue;
 					if (b.is_push && deadlock.check(b))
@@ -183,7 +171,7 @@ public class Solver {
 		monitor.timer.start();
 
 		while (open.size() > 0) {
-			StateBase a = open.removeMin();
+			State a = open.removeMin();
 			if (!closed.add(a)) {
 				open.garbage -= 1;
 				continue;
@@ -201,11 +189,11 @@ public class Solver {
 			for (int dir : level.dirs[a.agent()]) {
 				if (dir == reverse_dir)
 					continue;
-				StateBase b = a.move(dir, level);
+				State b = a.move(dir, level);
 				if (b == null || closed.contains(b))
 					continue;
 
-				StateBase v = open.get(b);
+				State v = open.get(b);
 				if (v == null && b.is_push && deadlock.check(b))
 					continue;
 
@@ -240,14 +228,14 @@ public class Solver {
 		return null;
 	}
 
-	static void printSolution(Level level, StateBase[] solution) {
-		ArrayList<StateBase> pushes = new ArrayList<StateBase>();
-		for (StateBase s : solution)
+	static void printSolution(Level level, State[] solution) {
+		ArrayList<State> pushes = new ArrayList<State>();
+		for (State s : solution)
 			if (s.is_push)
 				pushes.add(s);
 		for (int i = 0; i < pushes.size(); i++) {
-			StateBase s = pushes.get(i);
-			StateBase n = i == pushes.size() - 1 ? null : pushes.get(i + 1);
+			State s = pushes.get(i);
+			State n = i == pushes.size() - 1 ? null : pushes.get(i + 1);
 			if (i == pushes.size() - 1 || level.move(s.agent(), s.dir) != n.agent() || s.dir != n.dir)
 				level.print(s);
 		}
@@ -270,7 +258,7 @@ public class Solver {
 
 		Deadlock deadlock = new Deadlock(level);
 		timer.start();
-		StateBase[] solution = solve_Astar(level, level.start, model, deadlock, context);
+		State[] solution = solve_Astar(level, level.start, model, deadlock, context);
 		timer.stop();
 		if (solution == null) {
 			Log.info("no solution! %s", timer.human());

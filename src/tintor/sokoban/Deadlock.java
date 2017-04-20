@@ -10,53 +10,30 @@ import tintor.common.Visitor;
 
 class LevelUtil {
 	// TODO be more strict: try to go around box, push it back and return to original agent position
-	static boolean is_reverseable_push(StateBase s, Level level) {
+	static boolean is_reverseable_push(State s, Level level) {
 		assert s.is_push;
 		int c = level.move(level.move(s.agent(), s.dir), s.dir);
-		if (s instanceof State) {
-			State e = (State) s;
-			if (c == -1 || e.box(c))
-				return false;
-		} else {
-			State2 e = (State2) s;
-			if (c == -1 || e.box(c))
-				return false;
-		}
+		if (c == -1 || s.box(c))
+			return false;
 		return is_cell_reachable(c, s, level);
 	}
 
 	// can agent move to C without pushing any box?
-	static boolean is_cell_reachable(int c, StateBase s, Level level) {
+	static boolean is_cell_reachable(int c, State s, Level level) {
 		int[] dist = level.agent_distance[c];
 		int[] next = new int[4];
 
 		Visitor visitor = level.visitor.init(s.agent());
-		if (s instanceof State) {
-			State e = (State) s;
-			for (int a : visitor) {
-				int count = 0;
-				for (int b : level.moves[a]) {
-					if (visitor.visited(b) || e.box(b))
-						continue;
-					if (b == c)
-						return true;
-					next[count++] = b;
-				}
-				nextToVisitor(visitor, dist, next, count);
+		for (int a : visitor) {
+			int count = 0;
+			for (int b : level.moves[a]) {
+				if (visitor.visited(b) || s.box(b))
+					continue;
+				if (b == c)
+					return true;
+				next[count++] = b;
 			}
-		} else {
-			State2 e = (State2) s;
-			for (int a : visitor) {
-				int count = 0;
-				for (int b : level.moves[a]) {
-					if (visitor.visited(b) || e.box(b))
-						continue;
-					if (b == c)
-						return true;
-					next[count++] = b;
-				}
-				nextToVisitor(visitor, dist, next, count);
-			}
+			nextToVisitor(visitor, dist, next, count);
 		}
 		return false;
 	}
@@ -414,7 +391,7 @@ class Deadlock {
 	// Looks for boxes not on goal that can't be moved
 	// return true - means it is definitely a deadlock
 	// return false - not sure if it is a deadlock
-	private boolean checkInternal(State2 s, int num_boxes) {
+	private boolean checkInternal(State s, int num_boxes) {
 		if (level.is_solved(s.box0, s.box1))
 			return false;
 		if (matchesPattern(s.agent(), s.dir, s.box0, s.box1, num_boxes))
@@ -484,7 +461,7 @@ class Deadlock {
 		return false;
 	}
 
-	private boolean checkInternal64(StateBase s, long box, int num_boxes) {
+	private boolean checkInternal64(State s, long box, int num_boxes) {
 		if (level.is_solved(box, 0))
 			return false;
 		if (matchesPattern(s.agent(), s.dir, box, num_boxes) || matchesGoalZonePattern(s.agent(), box))
@@ -553,26 +530,15 @@ class Deadlock {
 		patterns += 1;
 	}
 
-	boolean check(StateBase s) {
+	boolean check(State s) {
 		try (Timer t = timer.start()) {
 			if (s.is_push && LevelUtil.is_reverseable_push(s, level)) {
 				reversable += 1;
 				return false;
 			}
-
-			int num_boxes = level.num_boxes;
-			if (s instanceof State) {
-				State e = (State) s;
-				if (checkInternal64(e, e.box0, num_boxes)) {
-					deadlocks += 1;
-					return true;
-				}
-			} else {
-				State2 e = (State2) s;
-				if (level.alive <= 64 ? checkInternal64(e, e.box0, num_boxes) : checkInternal(e, num_boxes)) {
-					deadlocks += 1;
-					return true;
-				}
+			if (level.alive <= 64 ? checkInternal64(s, s.box0, level.num_boxes) : checkInternal(s, level.num_boxes)) {
+				deadlocks += 1;
+				return true;
 			}
 			non_deadlocks += 1;
 			return false;

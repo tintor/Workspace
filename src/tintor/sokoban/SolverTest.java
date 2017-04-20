@@ -196,7 +196,7 @@ public class SolverTest {
 		level.start.set_heuristic(model.evaluate(level.start, null));
 		Deadlock deadlock = new Deadlock(level);
 
-		StateBase[] solution = Solver.solve_Astar(level, level.start, model, deadlock, new Solver.Context());
+		State[] solution = Solver.solve_Astar(level, level.start, model, deadlock, new Solver.Context());
 		Assert.assertTrue(solution != null);
 		Assert.assertEquals(expected, solution.length);
 	}

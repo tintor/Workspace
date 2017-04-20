@@ -21,7 +21,7 @@ class Monitor {
 	int model_deadlocks = 0;
 	int model_non_deadlocks = 0;
 
-	void report(StateBase a) {
+	void report(State a) {
 		closes += 1;
 		states_closed += 1;
 		if (states_closed < next_states_closed)

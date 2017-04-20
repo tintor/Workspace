@@ -119,10 +119,7 @@ class Level {
 			}
 		int new_agent = old_to_new[agent];
 
-		if (alive <= 64)
-			start = new State(new_agent, Util.compress(new_box), 0, -1, false);
-		else
-			start = new State2(new_agent, Util.compress(new_box, 0), Util.compress(new_box, 1), 0, -1, false);
+		start = new State(new_agent, Util.compress(new_box, 0), Util.compress(new_box, 1), 0, -1, false);
 		goal0 = Util.compress(new_goal, 0);
 		goal1 = Util.compress(new_goal, 1);
 		num_boxes = Util.count(new_box);
@@ -297,14 +294,8 @@ class Level {
 		});
 	}
 
-	void print(StateBase s) {
-		if (s instanceof State) {
-			State e = (State) s;
-			print(p -> s.agent() == p, p -> e.box(p));
-		} else {
-			State2 e = (State2) s;
-			print(p -> s.agent() == p, p -> e.box(p));
-		}
+	void print(State s) {
+		print(p -> s.agent() == p, p -> s.box(p));
 	}
 
 	int move(int src, int dir) {
@@ -333,20 +324,14 @@ class Level {
 		return (box0 | goal0) == goal0;
 	}
 
-	boolean is_solved(StateBase s) {
-		if (s instanceof State) {
-			State e = (State) s;
-			return (e.box0 | goal0) == goal0;
-		} else {
-			State2 e = (State2) s;
-			return (e.box0 | goal0) == goal0 && (e.box1 | goal1) == goal1;
-		}
+	boolean is_solved(State s) {
+		return (s.box0 | goal0) == goal0 && (s.box1 | goal1) == goal1;
 	}
 
 	final int alive; // number of cells that can contain boxes
 	final int cells; // number of cells agent can walk on
 	final int num_boxes;
-	final StateBase start;
+	final State start;
 	final long goal0;
 	final long goal1;
 
