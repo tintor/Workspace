@@ -9,7 +9,7 @@ import tintor.common.Util;
 final class OpenSet {
 	private final BinaryHeap<State> heap = new BinaryHeap<State>();
 	private final InlineChainingHashSet set;
-	long garbage;
+	int garbage;
 
 	private final Timer timer_get = new Timer();
 	private final Timer timer_update = new Timer();
@@ -42,37 +42,50 @@ final class OpenSet {
 
 	// Called when a better path B to state is found than existing V
 	// O(logN)
-	public void update(State v, State b) {
+	public void updateTrashy(State v, State b) {
 		try (Timer t = timer_update.start()) {
+			// TODO: try to cleanup existing garbage first if heap array is full
 			assert set.contains(v);
 			assert v.equals(b);
 			set.replaceWithEqual(v, b);
 			heap.add(b);
 			// Note: leaves garbage in heap, but that is fine
+			garbage += 1;
+			// TODO if too much garbage: 1) sort heap by (priority, identityHashCode) 2) remove duplicates (garbage), 3) done (sorted heap is a valid heap)
+			assert heap.size() == set.size() + garbage;
 		}
 	}
 
 	// O(logN)
 	public void addUnsafe(State s) {
 		try (Timer t = timer_addUnsafe.start()) {
+			// TODO: try to cleanup existing garbage first if heap array is full
 			assert !set.contains(s);
 			set.addUnsafe(s);
 			heap.add(s);
+			assert heap.size() == set.size() + garbage;
 		}
 	}
 
 	// O(logN)
 	public State removeMin() {
 		try (Timer t = timer_removeMin.start()) {
-			State s = heap.removeMin();
-			if (s == null)
-				return null;
-			set.remove(s);
-			return s;
+			while (true) {
+				State s = heap.removeMin();
+				if (s == null)
+					return null;
+				if (!set.remove(s)) {
+					garbage -= 1;
+					assert garbage >= 0;
+					continue;
+				}
+				return s;
+			}
 		}
 	}
 
 	public int size() {
-		return heap.size();
+		assert heap.size() == set.size() + garbage;
+		return set.size();
 	}
 }

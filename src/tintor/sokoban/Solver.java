@@ -63,7 +63,6 @@ import tintor.common.Util;
 // TODO: use minimal push distance in Heuristics
 
 // Other:
-// TODO: assert garbage can't be negative
 // TODO: IDA*
 // TODO: Parallelize hash table grow! as there are no conflicts
 // TODO: How can search be parallelized?
@@ -172,10 +171,8 @@ public class Solver {
 
 		while (open.size() > 0) {
 			State a = open.removeMin();
-			if (!closed.add(a)) {
-				open.garbage -= 1;
-				continue;
-			}
+			if (!closed.add(a))
+				assert false;
 
 			if (level.is_solved(a)) {
 				context.open_set_size = open.size();
@@ -218,8 +215,7 @@ public class Solver {
 					continue;
 
 				// B is better than V
-				open.update(v, b);
-				open.garbage += 1;
+				open.updateTrashy(v, b);
 			}
 
 			if (context.trace > 0)

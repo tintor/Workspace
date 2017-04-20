@@ -134,6 +134,8 @@ class Level {
 		compute_moves_and_dirs();
 		compute_delta();
 		compute_agent_distance();
+
+		current.set(this);
 	}
 
 	final int[][] moves; // TODO make also box_moves which doesn't include dead cells
@@ -338,4 +340,6 @@ class Level {
 	// index, direction => index * 4 + direction
 	// returns index to move to, or -1 if invalid (or wall)
 	private int[] move;
+
+	public static final ThreadLocal<Level> current = new ThreadLocal<Level>();
 }

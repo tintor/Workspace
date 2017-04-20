@@ -7,6 +7,10 @@ public class BinaryHeap<T extends Comparable<T>> {
 	private Object[] queue = new Object[4];
 	private int size;
 
+	public T get(int index) {
+		return (T) queue[index];
+	}
+
 	public int size() {
 		return size;
 	}
@@ -15,6 +19,16 @@ public class BinaryHeap<T extends Comparable<T>> {
 		if (size == queue.length)
 			queue = Arrays.copyOf(queue, queue.length * 2);
 		siftUp(size++, e);
+	}
+
+	public boolean remove(T e) {
+		for (int i = 0; i < queue.length; i++)
+			if (queue[i] == e) {
+				siftDown(i, (T) queue[--size]);
+				queue[size] = null; // remove reference for GC
+				return true;
+			}
+		return false;
 	}
 
 	public T removeMin() {

@@ -28,6 +28,13 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		return (double) size / buckets.length;
 	}
 
+	public boolean containsIdentical(Element s) {
+		for (Element p = buckets[index(s)]; p != null; p = p.next)
+			if (p == s)
+				return true;
+		return false;
+	}
+
 	public boolean contains(Element s) {
 		return get(s) != null;
 	}
@@ -94,6 +101,7 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 
 	public boolean replaceWithEqual(Element a, Element b) {
 		assert a.equals(b);
+		assert a.hashCode(context) == b.hashCode(context);
 		assert b.next == null;
 
 		int i = index(a);
@@ -109,9 +117,8 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		Element q = p.next;
 		while (q != null) {
 			if (q.equals(a)) {
-				p.next = q.next;
-				b.next = buckets[i].next;
-				buckets[i] = b;
+				p.next = b;
+				b.next = q.next;
 				return true;
 			}
 			p = q;
