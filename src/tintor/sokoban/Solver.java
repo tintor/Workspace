@@ -21,6 +21,7 @@ import tintor.common.Util;
 // TODO: save deadlock patterns to text file!
 // TODO: can avoid calling matchesPattern() inside containsFrozenBoxes() if box push can be reversed
 //       (can do a very cheap check here, just try to go around the box)
+// TODO: store deadlock patterns from deadlocks found by Heuristic
 
 // Search space reduction:
 // TODO: Take advantage of symmetry
@@ -69,26 +70,35 @@ import tintor.common.Util;
 // TODO: Look at the sokoban PhD for more ideas.
 
 public class Solver {
-	static int greedy_score(State s, Level level) {
+	static int greedy_score(StateBase s, Level level) {
 		int score = 0;
-		for (int a = 0; a < level.alive; a++)
-			if (level.goal[a] && s.box[a]) {
-				score += 5;
-				for (byte dir = 0; dir < 4; dir++)
-					if (level.move(a, dir) == -1)
-						score += 1;
-			}
+		if (s instanceof State) {
+			State e = (State) s;
+			for (int a = 0; a < level.alive; a++)
+				if (level.goal(a) && e.box(a)) {
+					score += 5;
+					for (byte dir = 0; dir < 4; dir++)
+						if (level.move(a, dir) == Level.Bad)
+							score += 1;
+				}
+		} else {
+			State2 e = (State2) s;
+			for (int a = 0; a < level.alive; a++)
+				if (level.goal(a) && e.box(a)) {
+					score += 5;
+					for (byte dir = 0; dir < 4; dir++)
+						if (level.move(a, dir) == Level.Bad)
+							score += 1;
+				}
+		}
 		return score;
 	}
 
-	static State[] extractPath(Level level, State start, State end, ClosedSet closed) {
-		ArrayDeque<State> path = new ArrayDeque<State>();
-		path.addFirst(end);
-		while (true) {
-			end = closed.get(end.prevAgent(level), end.prevBox(level));
-			if (end.equals(start))
-				break;
+	static StateBase[] extractPath(Level level, StateBase start, StateBase end, ClosedSet closed) {
+		ArrayDeque<StateBase> path = new ArrayDeque<StateBase>();
+		while (!end.equals(start)) {
 			path.addFirst(end);
+			end = closed.get(end.prev(level));
 		}
 		return path.toArray(new State[path.size()]);
 	}
@@ -96,10 +106,10 @@ public class Solver {
 	static State[] solve_IDAstar(Level level, State start, Model model, Deadlock deadlock, Context context) {
 		if (deadlock != null && deadlock.check(start))
 			return null;
-		if (level.is_solved(start.box))
+		if (level.is_solved(start))
 			return new State[] {};
 
-		ArrayDeque<State> stack = new ArrayDeque<State>();
+		ArrayDeque<StateBase> stack = new ArrayDeque<StateBase>();
 		int total_dist_max = model.evaluate(start, null);
 		while (true) {
 			assert stack.isEmpty();
@@ -107,19 +117,19 @@ public class Solver {
 
 			int total_dist_cutoff_min = Integer.MAX_VALUE;
 			while (!stack.isEmpty()) {
-				State a = stack.pop();
-				for (int dir : level.dirs[a.agent]) {
-					State b = a.move(dir, level);
+				StateBase a = stack.pop();
+				for (int dir : level.dirs[a.agent()]) {
+					StateBase b = a.move(dir, level);
 					if (b == null)
 						break;
 					// TODO cut move if possible
 
-					b.dist = (short) (a.dist + 1);
 					int total_dist = b.dist + model.evaluate(b, a);
 					if (total_dist > total_dist_max) {
 						total_dist_cutoff_min = Math.min(total_dist_cutoff_min, total_dist);
 						continue;
 					}
+					assert total_dist <= Short.MAX_VALUE;
 					b.total_dist = (short) total_dist;
 					stack.push(b);
 				}
@@ -132,24 +142,24 @@ public class Solver {
 		return null;
 	}
 
-	static State[] solve_Astar(Level level, State start, Model model, Deadlock deadlock, Context context) {
+	static StateBase[] solve_Astar(Level level, StateBase start, Model model, Deadlock deadlock, Context context) {
 		if (deadlock != null && deadlock.check(start))
 			return null;
-		if (level.is_solved(start.box))
-			return new State[] {};
+		if (level.is_solved(start))
+			return new StateBase[] {};
 
 		// Generate initial deadlock patterns
 		if (context.enable_populate) {
 			InlineChainingHashSet set = new InlineChainingHashSet(1 << 20);
-			ArrayDeque<State> queue = new ArrayDeque<State>();
+			ArrayDeque<StateBase> queue = new ArrayDeque<StateBase>();
 			queue.add(start);
 			while (!queue.isEmpty() && set.size() < (1 << 20) - 3) {
-				State a = queue.removeFirst();
+				StateBase a = queue.removeFirst();
 				for (byte dir = 0; dir < 4; dir++) {
-					State b = a.move(dir, level);
+					StateBase b = a.move(dir, level);
 					if (b == null || set.contains(b))
 						continue;
-					if (b.box != a.box && deadlock.check(b))
+					if (b.is_push && deadlock.check(b))
 						continue;
 					queue.addLast(b);
 					set.addUnsafe(b);
@@ -160,7 +170,7 @@ public class Solver {
 			}
 		}
 
-		final ClosedSet closed = new ClosedSet(start.box.length);
+		final ClosedSet closed = new ClosedSet(level.alive);
 		final OpenSet open = new OpenSet();
 		open.addUnsafe(start);
 
@@ -172,13 +182,13 @@ public class Solver {
 		monitor.timer.start();
 
 		while (open.size() > 0) {
-			State a = open.removeMin();
+			StateBase a = open.removeMin();
 			if (!closed.add(a)) {
 				open.garbage -= 1;
 				continue;
 			}
 
-			if (level.is_solved(a.box)) {
+			if (level.is_solved(a)) {
 				context.open_set_size = open.size();
 				context.closed_set_size = closed.size();
 				return extractPath(level, start, a, closed);
@@ -187,19 +197,19 @@ public class Solver {
 			int reverse_dir = -1;
 			if (!a.is_push && a.dir != -1)
 				reverse_dir = Level.reverseDir(a.dir);
-			for (int dir : level.dirs[a.agent]) {
+			for (int dir : level.dirs[a.agent()]) {
 				if (dir == reverse_dir)
 					continue;
-				State b = a.move(dir, level);
+				StateBase b = a.move(dir, level);
 				if (b == null || closed.contains(b))
 					continue;
 
-				State v = open.get(b);
-				if (v == null && b.box != a.box && deadlock.check(b))
+				StateBase v = open.get(b);
+				if (v == null && b.is_push && deadlock.check(b))
 					continue;
 
 				if (context.enable_greedy)
-					b.greedy_score = b.box == a.box ? a.greedy_score : (short) greedy_score(b, level);
+					b.greedy_score = b.is_push ? (byte) greedy_score(b, level) : a.greedy_score;
 				monitor.model_timer.start();
 				int h = model.evaluate(b, a);
 				monitor.model_timer.stop();
@@ -209,7 +219,6 @@ public class Solver {
 				} else
 					monitor.model_non_deadlocks += 1;
 
-				b.dist = (short) (a.dist + 1);
 				if (b.dist + h > Short.MAX_VALUE)
 					throw new Error();
 				b.total_dist = (short) (b.dist + h);
@@ -223,11 +232,7 @@ public class Solver {
 					continue;
 
 				// B is better than V
-				v.dir = b.dir;
-				v.is_push = b.is_push;
-				v.dist = b.dist;
-				v.total_dist = b.total_dist;
-				open.update(v);
+				open.update(v, b);
 				open.garbage += 1;
 			}
 
@@ -237,15 +242,15 @@ public class Solver {
 		return null;
 	}
 
-	static void printSolution(Level level, State[] solution) {
-		ArrayList<State> pushes = new ArrayList<State>();
-		for (State s : solution)
+	static void printSolution(Level level, StateBase[] solution) {
+		ArrayList<StateBase> pushes = new ArrayList<StateBase>();
+		for (StateBase s : solution)
 			if (s.is_push)
 				pushes.add(s);
 		for (int i = 0; i < pushes.size(); i++) {
-			State s = pushes.get(i);
-			State n = i == pushes.size() - 1 ? null : pushes.get(i + 1);
-			if (i == pushes.size() - 1 || level.move(s.agent, s.dir) != n.agent || s.dir != n.dir)
+			StateBase s = pushes.get(i);
+			StateBase n = i == pushes.size() - 1 ? null : pushes.get(i + 1);
+			if (i == pushes.size() - 1 || level.move(s.agent(), s.dir) != n.agent() || s.dir != n.dir)
 				level.print(s);
 		}
 	}
@@ -254,8 +259,8 @@ public class Solver {
 
 	public static void main(String[] args) throws Exception {
 		Level level = new Level("data/sokoban/original:1");
-		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive,
-				Util.count(level.start.box), level.state_space());
+		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
+				level.state_space());
 		level.print(level.start);
 		Model model = new MatchingModel();
 		model.init(level);
@@ -270,7 +275,7 @@ public class Solver {
 
 		Deadlock deadlock = new Deadlock(level);
 		timer.start();
-		State[] solution = solve_Astar(level, level.start, model, deadlock, context);
+		StateBase[] solution = solve_Astar(level, level.start, model, deadlock, context);
 		timer.stop();
 		if (solution == null) {
 			Log.info("no solution! %s", timer.human());

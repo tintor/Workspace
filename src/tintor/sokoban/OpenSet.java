@@ -7,7 +7,7 @@ import tintor.common.Util;
 
 // Set of all States for which we found some path from the start (not sure if optimal yet)
 final class OpenSet {
-	private final BinaryHeap<State> heap = new BinaryHeap<State>();
+	private final BinaryHeap<StateBase> heap = new BinaryHeap<StateBase>();
 	private final InlineChainingHashSet set = new InlineChainingHashSet();
 	long garbage;
 
@@ -30,23 +30,26 @@ final class OpenSet {
 	}
 
 	// O(1)
-	public State get(State s) {
+	public StateBase get(StateBase s) {
 		try (Timer t = timer_get.start()) {
-			return (State) set.get(s);
+			return (StateBase) set.get(s);
 		}
 	}
 
-	// Called when a better path to state is found
+	// Called when a better path B to state is found than existing V
 	// O(logN)
-	public void update(State s) {
+	public void update(StateBase v, StateBase b) {
 		try (Timer t = timer_update.start()) {
-			assert set.contains(s);
-			heap.add(s);
+			assert set.contains(v);
+			assert v.equals(b);
+			set.replaceWithEqual(v, b);
+			heap.add(b);
+			// Note: leaves garbage in heap, but that is fine
 		}
 	}
 
 	// O(logN)
-	public void addUnsafe(State s) {
+	public void addUnsafe(StateBase s) {
 		try (Timer t = timer_addUnsafe.start()) {
 			assert !set.contains(s);
 			set.addUnsafe(s);
@@ -55,9 +58,9 @@ final class OpenSet {
 	}
 
 	// O(logN)
-	public State removeMin() {
+	public StateBase removeMin() {
 		try (Timer t = timer_removeMin.start()) {
-			State s = heap.removeMin();
+			StateBase s = heap.removeMin();
 			if (s == null)
 				return null;
 			set.remove(s);

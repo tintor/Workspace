@@ -3,124 +3,163 @@ package tintor.sokoban;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import tintor.common.Bits;
 import tintor.common.Timer;
 import tintor.common.Util;
 import tintor.common.Visitor;
 
 class LevelUtil {
+	static boolean is_reverseable_push(StateBase s, Level level) {
+		assert s.is_push;
+		int c = level.move(level.move(s.agent(), s.dir), s.dir);
+		if (s instanceof State) {
+			State e = (State) s;
+			if (c == -1 || e.box(c))
+				return false;
+		} else {
+			State2 e = (State2) s;
+			if (c == -1 || e.box(c))
+				return false;
+		}
+		return is_cell_reachable(c, s, level);
+	}
+
 	// can agent move to C without pushing any box?
-	static boolean is_cell_reachable(int c, State s, Level level) {
+	static boolean is_cell_reachable(int c, StateBase s, Level level) {
 		int[] dist = level.agent_distance[c];
 		int[] next = new int[4];
 
-		Visitor visitor = level.visitor;
-		for (int a : visitor.init(s.agent)) {
-			int e = 0;
-			for (int b : level.moves[a]) {
-				if (visitor.visited(b) || s.box(b))
-					continue;
-				if (b == c)
-					return true;
-				next[e++] = b;
-			}
-			// sort 'next' by agent distance and add it to visitor
-			if (e == 0)
-				continue;
-			if (e == 1) {
-				visitor.add(next[0]);
-				continue;
-			}
-			if (e == 2) {
-				if (dist[next[1]] < dist[next[0]]) {
-					visitor.add(next[1]);
-					visitor.add(next[0]);
-				} else {
-					visitor.add(next[0]);
-					visitor.add(next[1]);
+		Visitor visitor = level.visitor.init(s.agent());
+		if (s instanceof State) {
+			State e = (State) s;
+			for (int a : visitor) {
+				int count = 0;
+				for (int b : level.moves[a]) {
+					if (visitor.visited(b) || e.box(b))
+						continue;
+					if (b == c)
+						return true;
+					next[count++] = b;
 				}
-				continue;
+				nextToVisitor(visitor, dist, next, count);
 			}
-			if (e == 3) {
-				int m = 0;
-				if (dist[next[1]] < dist[next[0]])
-					m = 1;
-				if (dist[next[2]] < dist[next[m]])
-					m = 2;
-				visitor.add(next[m]);
-				next[m] = next[0];
-
-				m = 1;
-				if (dist[next[2]] < dist[next[1]])
-					m = 2;
-				visitor.add(next[m]);
-				next[m] = next[1];
-
-				visitor.add(next[2]);
-				continue;
-			}
-			for (int i = 0; i < e; i++) {
-				int m = i;
-				for (int j = i + 1; j < e; j++)
-					if (dist[next[j]] < dist[next[m]])
-						m = j;
-				visitor.add(next[m]);
-				next[m] = next[i];
+		} else {
+			State2 e = (State2) s;
+			for (int a : visitor) {
+				int count = 0;
+				for (int b : level.moves[a]) {
+					if (visitor.visited(b) || e.box(b))
+						continue;
+					if (b == c)
+						return true;
+					next[count++] = b;
+				}
+				nextToVisitor(visitor, dist, next, count);
 			}
 		}
 		return false;
 	}
 
-	static boolean is_reverseable_push(State s, Level level) {
-		assert s.is_push;
-		int c = level.move(level.move(s.agent, s.dir), s.dir);
-		if (c == -1 || s.box(c))
-			return false;
-		return is_cell_reachable(c, s, level);
+	static void nextToVisitor(Visitor visitor, int[] dist, int[] next, int e) {
+		// sort 'next' by agent distance and add it to visitor
+		if (e == 0)
+			return;
+		if (e == 1) {
+			visitor.add(next[0]);
+			return;
+		}
+		if (e == 2) {
+			if (dist[next[1]] < dist[next[0]]) {
+				visitor.add(next[1]);
+				visitor.add(next[0]);
+			} else {
+				visitor.add(next[0]);
+				visitor.add(next[1]);
+			}
+			return;
+		}
+		if (e == 3) {
+			int m = 0;
+			if (dist[next[1]] < dist[next[0]])
+				m = 1;
+			if (dist[next[2]] < dist[next[m]])
+				m = 2;
+			visitor.add(next[m]);
+			next[m] = next[0];
+
+			m = 1;
+			if (dist[next[2]] < dist[next[1]])
+				m = 2;
+			visitor.add(next[m]);
+			next[m] = next[1];
+
+			visitor.add(next[2]);
+			return;
+		}
+		for (int i = 0; i < e; i++) {
+			int m = i;
+			for (int j = i + 1; j < e; j++)
+				if (dist[next[j]] < dist[next[m]])
+					m = j;
+			visitor.add(next[m]);
+			next[m] = next[i];
+		}
 	}
 }
 
 class Deadlock {
 	static class Patterns {
-		short[][] array_box = new short[4][];
-		long[] array_box0 = new long[4];
-		int size;
-		int[] end;
+		// TODO store them in single array for faster lookups
+		public long[] array_box0 = new long[4];
+		public long[] array_box1;
+		public int size;
+		public int[] end;
 
-		Patterns(int level_num_boxes) {
+		public Patterns(int level_num_boxes, int level_alive) {
 			end = new int[level_num_boxes + 1];
+			if (level_alive > 64)
+				array_box1 = new long[4];
 		}
 
-		void add(short[] box, long box0, int num_boxes) {
-			if (array_box.length == size) {
-				array_box = Arrays.copyOf(array_box, array_box.length * 2);
+		public void add(long box0, int num_boxes) {
+			assert array_box1 == null;
+			if (array_box0.length == size)
 				array_box0 = Arrays.copyOf(array_box0, array_box0.length * 2);
-			}
 
 			int x = end[num_boxes];
-			System.arraycopy(array_box, x, array_box, x + 1, size - x);
 			System.arraycopy(array_box0, x, array_box0, x + 1, size - x);
-			array_box[x] = box;
 			array_box0[x] = box0;
 			size += 1;
 			for (int i = num_boxes; i < end.length; i++)
 				end[i] += 1;
 		}
 
-		boolean matches64(int agent, long box0, int num_boxes) {
+		public void add(long box0, long box1, int num_boxes) {
+			if (array_box0.length == size) {
+				array_box0 = Arrays.copyOf(array_box0, array_box0.length * 2);
+				array_box1 = Arrays.copyOf(array_box1, array_box1.length * 2);
+			}
+
+			int x = end[num_boxes];
+			System.arraycopy(array_box0, x, array_box0, x + 1, size - x);
+			System.arraycopy(array_box1, x, array_box1, x + 1, size - x);
+			array_box0[x] = box0;
+			array_box1[x] = box1;
+			size += 1;
+			for (int i = num_boxes; i < end.length; i++)
+				end[i] += 1;
+		}
+
+		public boolean matches(int agent, long box0, int num_boxes) {
 			for (int i = 0; i < end[num_boxes]; i++)
 				if ((box0 | array_box0[i]) == box0)
 					return true;
 			return false;
 		}
 
-		boolean matches(int agent, boolean[] box, int num_boxes) {
-			if (box.length <= 64) {
-				long box0 = Util.compress(box);
-				return matches64(agent, box0, num_boxes);
-			}
-
+		public boolean matches(int agent, long box0, long box1, int num_boxes) {
 			for (int i = 0; i < end[num_boxes]; i++)
-				if (isSubsetOf(array_box[i], box))
+				if ((box0 | array_box0[i]) == box0 && (box1 | array_box1[i]) == box1)
 					return true;
 			return false;
 		}
@@ -156,48 +195,63 @@ class Deadlock {
 		this.level = level;
 		visitor = new Visitor(level.cells);
 		pattern_index = new Patterns[4][level.alive];
-		int level_num_boxes = Util.count(level.start.box);
 		for (int d = 0; d < 4; d++)
 			for (int i = 0; i < level.alive; i++)
-				pattern_index[d][i] = new Patterns(level_num_boxes);
-		histogram = new int[Util.count(level.start.box) - 2 + 1];
+				pattern_index[d][i] = new Patterns(level.num_boxes, level.alive);
+		histogram = new int[level.num_boxes - 1];
 	}
 
-	private boolean matchesPattern(State s, int num_boxes) {
-		if (s.dir >= 0) {
-			int b = level.move(s.agent, s.dir);
-			if (b != -1 && s.box(b))
-				return matchesPattern(b, s.dir, s.agent, s.box, num_boxes);
+	private boolean matchesPattern(int agent, int dir, long box, int num_boxes) {
+		if (dir >= 0) {
+			int b = level.move(agent, dir);
+			// TODO: replace -1 with high positive value to avoid negative check
+			if (0 <= b && b < 64 && Bits.test(b, b))
+				return matchesPattern(b, dir, agent, box, num_boxes);
 		}
 		return false;
 	}
 
-	private boolean matchesPattern64(State s, long box, int num_boxes) {
-		if (s.dir >= 0) {
-			int b = level.move(s.agent, s.dir);
-			if (b != -1 && s.box(b))
-				return matchesPattern64(b, s.dir, s.agent, box, num_boxes);
+	private boolean matchesPattern(int agent, int dir, long box0, long box1, int num_boxes) {
+		if (dir >= 0) {
+			int b = level.move(agent, dir);
+			if (0 <= b && b < 128 && Bits.test(box0, box1, b))
+				return matchesPattern(b, dir, agent, box0, box1, num_boxes);
 		}
 		return false;
 	}
 
-	private boolean matchesPattern(int moved_box, int dir, int agent, boolean[] box, int num_boxes) {
+	private boolean matchesPattern(int moved_box, int dir, int agent, long box0, int num_boxes) {
 		try (Timer t = timerMatch.start()) {
 			assert 0 <= agent && agent < level.cells;
-			assert box.length == level.alive;
-			return pattern_index[dir][moved_box].matches(agent, box, num_boxes);
+			assert 0 <= moved_box && moved_box < level.alive : moved_box + " vs " + level.alive;
+			return pattern_index[dir][moved_box].matches(agent, box0, num_boxes);
 		}
 	}
 
-	private boolean matchesPattern64(int moved_box, int dir, int agent, long box0, int num_boxes) {
+	private boolean matchesPattern(int moved_box, int dir, int agent, long box0, long box1, int num_boxes) {
 		try (Timer t = timerMatch.start()) {
 			assert 0 <= agent && agent < level.cells;
-			return pattern_index[dir][moved_box].matches64(agent, box0, num_boxes);
+			assert 0 <= moved_box && moved_box < level.alive : moved_box + " vs " + level.alive;
+			return pattern_index[dir][moved_box].matches(agent, box0, box1, num_boxes);
 		}
+	}
+
+	private static void set(long[] box, int index) {
+		if (index < 64)
+			box[0] = Bits.set(box[0], index);
+		else
+			box[1] = Bits.set(box[1], index - 64);
+	}
+
+	private static void clear(long[] box, int index) {
+		if (index < 64)
+			box[0] = Bits.clear(box[0], index);
+		else
+			box[1] = Bits.clear(box[1], index - 64);
 	}
 
 	// Note: modifies input array!
-	private boolean containsFrozenBoxes(int agent, boolean[] box, int num_boxes) {
+	private boolean containsFrozenBoxes(int agent, long[] box, int num_boxes) {
 		try (Timer t = timerFrozen.start()) {
 			if (num_boxes < 2)
 				return false;
@@ -206,71 +260,7 @@ class Deadlock {
 				for (int b : level.moves[a]) {
 					if (visitor.visited(b))
 						continue;
-					if (b >= box.length || !box[b]) {
-						// agent moves to B
-						visitor.add(b);
-						continue;
-					}
-
-					int dir = level.delta[a][b];
-					int c = level.move(b, dir);
-					if (c == -1 || c >= box.length)
-						continue;
-					if (!box[c]) {
-						box[b] = false;
-						box[c] = true;
-						timerFrozen.stop();
-						boolean m = matchesPattern(c, dir, b, box, num_boxes);
-						timerFrozen.start();
-						if (m) {
-							box[b] = true;
-							box[c] = false;
-							continue;
-						}
-
-						// agent pushes box from B to C (and box disappears)
-						if (--num_boxes == 1)
-							return false;
-						pushed_boxes += 1;
-						box[c] = false;
-						visitor.init(b);
-						break;
-					}
-				}
-
-			if (!level.is_solved(box))
-				return true;
-
-			// remaining boxes are on goals => check that agent can reach all goals without boxes on them
-			// TODO make it stronger condition: check that all original boxes (that were removed) can be pushed to some goal (one by one)
-			int reachable_free_goals = 0;
-			for (int a = 0; a < level.alive; a++)
-				if (level.goal[a] && visitor.visited(a))
-					reachable_free_goals += 1;
-			if (reachable_free_goals < pushed_boxes)
-				return true;
-
-			return false;
-		}
-	}
-
-	private static long mask(int i) {
-		return 1l << i;
-	}
-
-	// returns: 0 if not frozen, else bitset of frozen boxes
-	private long containsFrozenBoxes64(int agent, long box, int num_boxes) {
-		try (Timer t = timerFrozen.start()) {
-			assert num_boxes == Long.bitCount(box);
-			if (num_boxes < 2)
-				return 0;
-			int pushed_boxes = 0;
-			//long original_boxes = box;
-			for (int a : visitor.init(agent))
-				for (int b : level.moves[a]) {
-					if (visitor.visited(b))
-						continue;
-					if (b >= level.alive || (box & mask(b)) == 0) {
+					if (b >= level.alive || !Bits.test(box[0], box[1], b)) {
 						// agent moves to B
 						visitor.add(b);
 						continue;
@@ -280,116 +270,187 @@ class Deadlock {
 					int c = level.move(b, dir);
 					if (c == -1 || c >= level.alive)
 						continue;
-					if ((box & mask(c)) == 0) {
-						box &= ~mask(b);
+					if (!Bits.test(box[0], box[1], c)) {
+						clear(box, b);
+
+						set(box, c);
 						timerFrozen.stop();
-						boolean m = matchesPattern64(c, dir, b, box | mask(c), num_boxes);
-						//boolean m2 = matchesGoalZonePattern(b, box | mask(c));
+						boolean m = matchesPattern(c, dir, b, box[0], box[1], num_boxes);
 						timerFrozen.start();
+						clear(box, c);
 						if (m) {
-							{
-								//level.print(i -> agent == i, i -> (original_boxes & mask(i)) != 0);
-							}
-							box |= mask(b);
+							set(box, b);
 							continue;
 						}
 
 						// agent pushes box from B to C (and box disappears)
 						if (--num_boxes == 1)
-							return 0;
+							return false;
 						pushed_boxes += 1;
 						visitor.init(b);
 						break;
 					}
 				}
 
-			if (!level.is_solved(box))
-				return box;
+			if (!level.is_solved(box[0], box[1]))
+				return true;
 
-			// remaining boxes are on goals => check that agent can reach all goals without boxes on them
+			// remaining boxes are on goals => check that agent can reach all
+			// goals without boxes on them
+			// TODO make it stronger condition: check that all original boxes
+			// (that were removed) can be pushed to some goal (one by one)
 			int reachable_free_goals = 0;
 			for (int a = 0; a < level.alive; a++)
-				if (level.goal[a])
+				if (level.goal(a) && visitor.visited(a))
+					reachable_free_goals += 1;
+			if (reachable_free_goals < pushed_boxes)
+				return true;
+
+			return false;
+		}
+	}
+
+	// returns: 0 if not frozen, else bitset of frozen boxes
+	private long containsFrozenBoxes64(int agent, long box, int num_boxes) {
+		try (Timer t = timerFrozen.start()) {
+			assert num_boxes == Long.bitCount(box);
+			if (num_boxes < 2)
+				return 0;
+			int pushed_boxes = 0;
+			long original_boxes = box;
+			for (int a : visitor.init(agent))
+				for (int b : level.moves[a]) {
+					if (visitor.visited(b))
+						continue;
+					if (b >= level.alive || !Bits.test(box, b)) {
+						// agent moves to B
+						visitor.add(b);
+						continue;
+					}
+
+					int dir = level.delta[a][b];
+					int c = level.move(b, dir);
+					if (c == -1 || c >= level.alive || Bits.test(box, c))
+						continue;
+
+					box = Bits.clear(box, b);
+					timerFrozen.stop();
+					boolean m = matchesPattern(c, dir, b, Bits.set(box, c), num_boxes);
+					// boolean m2 = matchesGoalZonePattern(b, box |
+					// mask(c));
+					timerFrozen.start();
+					if (m) {
+						{
+							// level.print(i -> agent == i, i ->
+							// (original_boxes & mask(i)) != 0);
+						}
+						box = Bits.set(box, b);
+						continue;
+					}
+
+					// agent pushes box from B to C (and box disappears)
+					if (--num_boxes == 1)
+						return 0;
+					pushed_boxes += 1;
+					visitor.init(b);
+					break;
+				}
+
+			if (!level.is_solved(box, 0))
+				return box;
+
+			// remaining boxes are on goals => check that agent can reach all
+			// goals without boxes on them
+			int reachable_free_goals = 0;
+			for (int a = 0; a < level.alive; a++)
+				if (level.goal(a))
 					if (visitor.visited(a))
 						reachable_free_goals += 1;
 			if (reachable_free_goals < pushed_boxes)
 				return box; // goal zone deadlock
 
 			// for every free goal there must be a box that can be pushed to it
-			/*for (int a = 0; a < level.alive; a++)
-				if (level.goal[a] && (box & mask(a)) == 0) {
-					boolean deadlock = true;
-					Visitor visitor = new Visitor(level.alive);
-					visitor.add(a);
-					for (int b : visitor) {
-						for (byte dir = 0; dir < 4; dir++) {
-							int c = level.move(b, dir);
-							if (c == -1 || c >= level.alive || visitor.visited(c) || (box & mask(c)) != 0)
-								continue;
-							int d = level.move(c, dir);
-							if (d == -1)
-								continue;
-							if ((original_boxes & mask(c)) != 0) {
-								visitor.init();
-								deadlock = false;
-								break;
+			if (goal_zone_deadlock_check) {
+				for (int a = 0; a < level.alive; a++)
+					if (level.goal(a) && !Bits.test(box, a)) {
+						boolean deadlock = true;
+						Visitor visitor = new Visitor(level.alive);
+						visitor.add(a);
+						for (int b : visitor) {
+							for (int c : level.moves[b]) {
+								if (c >= level.alive || visitor.visited(c) || Bits.test(box, c))
+									continue;
+								int d = level.move(c, level.delta[b][c]);
+								if (d == -1)
+									continue;
+								if (Bits.test(original_boxes, c)) {
+									visitor.init();
+									deadlock = false;
+									break;
+								}
+								visitor.add(c);
 							}
-							visitor.add(c);
 						}
+						if (deadlock)
+							return box; // goal zone deadlock
 					}
-					if (deadlock)
-						return box; // goal zone deadlock
-				}*/
+			}
 
 			return 0;
 		}
 	}
 
-	static boolean[] remove(boolean[] a, int i) {
-		a[i] = false;
+	final static boolean goal_zone_deadlock_check = false;
+
+	static long[] remove(long[] a, int i) {
+		if (i < 64)
+			a[0] = Bits.clear(a[0], i);
+		else
+			a[1] = Bits.clear(a[1], i - 64);
 		return a;
 	}
 
 	// Looks for boxes not on goal that can't be moved
 	// return true - means it is definitely a deadlock
 	// return false - not sure if it is a deadlock
-	private boolean checkInternal(State s, int num_boxes) {
-		if (level.is_solved(s.box))
+	private boolean checkInternal(State2 s, int num_boxes) {
+		if (level.is_solved(s.box0, s.box1))
 			return false;
-		if (matchesPattern(s, num_boxes))
+		if (matchesPattern(s.agent(), s.dir, s.box0, s.box1, num_boxes))
 			return true;
 		if (!enable_frozen_boxes)
 			return false;
 
-		boolean[] box = s.box.clone();
-		if (!containsFrozenBoxes(s.agent, box, num_boxes))
+		long[] box = new long[] { s.box0, s.box1 };
+		if (!containsFrozenBoxes(s.agent(), box, num_boxes))
 			return false;
 		// if we have boxes frozen on goals, we can't store that pattern
-		if (level.is_solved(box))
+		if (level.is_solved(box[0], box[1]))
 			return true;
 
-		num_boxes = Util.count(box);
+		num_boxes = Long.bitCount(box[0]) + Long.bitCount(box[1]);
 		boolean[] agent = visitor.visited().clone();
 
 		// try to removing boxes to generalize the pattern
-		for (int i = 0; i < box.length; i++)
-			if (box[i] && !level.is_solved(box))
-				if (containsFrozenBoxes(s.agent, remove(box.clone(), i), num_boxes - 1)) {
-					box[i] = false;
+		for (int i = 0; i < level.alive; i++)
+			if (Bits.test(box[0], box[1], i) && !level.is_solved(box[0], box[1]))
+				if (containsFrozenBoxes(s.agent(), remove(box.clone(), i), num_boxes - 1)) {
+					if (i < 64)
+						box[0] = Bits.clear(box[0], i);
+					else
+						box[1] = Bits.clear(box[1], i - 64);
 					num_boxes -= 1;
-					for (byte dir = 0; dir < 4; dir++) {
-						int z = level.move(i, dir);
-						if (z != -1 && agent[z])
+					for (int z : level.moves[i])
+						if (agent[z])
 							agent[i] = true;
-					}
 				}
 		// try moving agent to unreachable cells to generalize the pattern
 		for (int i = 0; i < level.cells; i++)
-			if (!agent[i] && (i >= level.alive || !box[i]) && containsFrozenBoxes(i, box.clone(), num_boxes))
+			if (!agent[i] && !Bits.test(box[0], box[1], i) && containsFrozenBoxes(i, box.clone(), num_boxes))
 				Util.updateOr(agent, visitor.visited());
 
 		// Save remaining state as a new deadlock pattern
-		addPattern(compress(box), box.length <= 64 ? Util.compress(box) : 0, agent, compress(box));
+		addPattern(box[0], box[1], agent, num_boxes);
 		return true;
 	}
 
@@ -403,12 +464,13 @@ class Deadlock {
 		boolean match(int agent, long box, Level level) {
 			long test_boxes_on_goals = level.goal0 & box;
 			if (this.agent[agent] && test_boxes_on_goals == boxes_frozen_on_goals) {
-				//level.print(i -> i == agent, i -> (box & mask(i)) != 0);
+				// level.print(i -> i == agent, i -> (box & mask(i)) != 0);
 				return true;
 			}
 			return false;
-			//return this.agent[agent] && (test_boxes_on_goals | boxes_frozen_on_goals) == test_boxes_on_goals
-			//		&& (test_boxes_on_goals & unreachable_goals) == 0;
+			// return this.agent[agent] && (test_boxes_on_goals |
+			// boxes_frozen_on_goals) == test_boxes_on_goals
+			// && (test_boxes_on_goals & unreachable_goals) == 0;
 		}
 	}
 
@@ -422,39 +484,32 @@ class Deadlock {
 	}
 
 	private boolean checkInternal64(State s, long box, int num_boxes) {
-		if (level.is_solved(box))
+		if (level.is_solved(box, 0))
 			return false;
-		if (matchesPattern64(s, box, num_boxes) || matchesGoalZonePattern(s.agent, box))
+		if (matchesPattern(s.agent(), s.dir, box, num_boxes) || matchesGoalZonePattern(s.agent(), box))
 			return true;
 		if (!enable_frozen_boxes)
 			return false;
 
-		box = containsFrozenBoxes64(s.agent, box, num_boxes);
+		box = containsFrozenBoxes64(s.agent(), box, num_boxes);
 		if (box == 0)
 			return false;
 		// if we have boxes frozen on goals, we can't store that pattern
-		if (level.is_solved(box)) {
+		if (level.is_solved(box, 0)) {
 			long unreachable_goals = 0;
 			for (int a = 0; a < level.alive; a++)
-				if (level.goal[a] && !visitor.visited(a)) {
-					unreachable_goals |= mask(a);
-				}
+				if (level.goal(a) && !visitor.visited(a))
+					unreachable_goals |= Bits.mask(a);
 			final GoalZonePattern z = new GoalZonePattern();
 			z.agent = visitor.visited().clone();
 			z.boxes_frozen_on_goals = box;
 			z.unreachable_goals = unreachable_goals & ~box;
-			/*level.io.print(i -> {
-				int e = 0;
-				if (!level.goal(i))
-					return ' ';
-				if ((z.boxes_frozen_on_goals & mask(i)) != 0)
-					e += 1;
-				if ((z.unreachable_goals & mask(i)) != 0)
-					e += 2;
-				if (e == 0)
-					return ' ';
-				return (char) ((int) '0' + e);
-			});*/
+			/*
+			 * level.io.print(i -> { int e = 0; if (!level.goal(i)) return ' ';
+			 * if ((z.boxes_frozen_on_goals & mask(i)) != 0) e += 1; if
+			 * ((z.unreachable_goals & mask(i)) != 0) e += 2; if (e == 0) return
+			 * ' '; return (char) ((int) '0' + e); });
+			 */
 			goal_zone_patterns.add(z);
 			return true;
 		}
@@ -462,84 +517,64 @@ class Deadlock {
 		num_boxes = Long.bitCount(box);
 		boolean[] agent = visitor.visited().clone();
 
-		// try to removing boxes to generalize the pattern
+		// try to remove boxes to generalize the pattern
 		for (int i = 0; i < level.alive; i++)
-			if ((box & mask(i)) != 0 && !level.is_solved(box & ~mask(i)))
-				if (containsFrozenBoxes64(s.agent, box & ~mask(i), num_boxes - 1) != 0) {
-					box &= ~mask(i);
+			if (Bits.test(box, i) && !level.is_solved(Bits.clear(box, i), 0))
+				if (containsFrozenBoxes64(s.agent(), Bits.clear(box, i), num_boxes - 1) != 0) {
+					box = Bits.clear(box, i);
 					num_boxes -= 1;
-					for (byte dir = 0; dir < 4; dir++) {
-						int z = level.move(i, dir);
-						if (z != -1 && agent[z])
+					for (int z : level.moves[i])
+						if (agent[z])
 							agent[i] = true;
-					}
 				}
 		// try moving agent to unreachable cells to generalize the pattern
 		for (int i = 0; i < level.cells; i++)
-			if (!agent[i] && (i >= level.alive || (box & mask(i)) == 0)
-					&& containsFrozenBoxes64(i, box, num_boxes) != 0)
+			if (!agent[i] && (i >= level.alive || !Bits.test(box, i)) && containsFrozenBoxes64(i, box, num_boxes) != 0)
 				Util.updateOr(agent, visitor.visited());
 
 		// Save remaining state as a new deadlock pattern
-		addPattern(null, box, agent, compress64(box, level.alive));
+		addPattern(box, 0, agent, num_boxes);
 		return true;
 	}
 
-	void addPattern(short[] box, long box0, boolean[] agent, short[] ebox) {
-		histogram[ebox.length - 2] += 1;
-		for (short b : ebox)
-			for (byte dir = 0; dir < 4; dir++) {
-				int a = level.move(b, Level.reverseDir(dir));
-				if (a != -1 && agent[a])
-					pattern_index[dir][b].add(box, box0, ebox.length);
-			}
+	void addPattern(long box0, long box1, boolean[] agent, int num_boxes) {
+		histogram[num_boxes - 2] += 1;
+		for (int b = 0; b < level.alive; b++)
+			if (Bits.test(box0, box1, b))
+				for (int a : level.moves[b])
+					if (agent[a]) {
+						Patterns p = pattern_index[level.delta[a][b]][b];
+						if (level.alive > 64)
+							p.add(box0, box1, num_boxes);
+						else
+							p.add(box0, num_boxes);
+					}
 		patterns += 1;
 	}
 
-	boolean check(State s) {
+	boolean check(StateBase s) {
 		try (Timer t = timer.start()) {
 			if (s.is_push && LevelUtil.is_reverseable_push(s, level)) {
 				reversable += 1;
 				return false;
 			}
 
-			int num_boxes = Util.count(s.box);
-			if (level.alive <= 64 ? checkInternal64(s, Util.compress(s.box), num_boxes) : checkInternal(s, num_boxes)) {
-				deadlocks += 1;
-				return true;
+			int num_boxes = level.num_boxes;
+			if (s instanceof State) {
+				State e = (State) s;
+				if (checkInternal64(e, e.box0, num_boxes)) {
+					deadlocks += 1;
+					return true;
+				}
+			} else {
+				State2 e = (State2) s;
+				if (checkInternal(e, num_boxes)) {
+					deadlocks += 1;
+					return true;
+				}
 			}
 			non_deadlocks += 1;
 			return false;
 		}
-	}
-
-	private static short[] compress(boolean[] box) {
-		int c = 0;
-		for (boolean e : box)
-			if (e)
-				c += 1;
-		short[] v = new short[c];
-		int w = 0;
-		for (short i = 0; i < box.length; i++)
-			if (box[i])
-				v[w++] = i;
-		return v;
-	}
-
-	private static short[] compress64(long box, int length) {
-		int c = Long.bitCount(box);
-		short[] v = new short[c];
-		int w = 0;
-		for (short i = 0; i < length; i++)
-			if ((box & mask(i)) != 0)
-				v[w++] = i;
-		return v;
-	}
-
-	private static boolean isSubsetOf(short[] a, boolean[] b) {
-		for (short e : a)
-			if (!b[e])
-				return false;
-		return true;
 	}
 }

@@ -14,7 +14,7 @@ public class Measurer {
 	private static final int MIN_SIZE = 16;
 
 	public static int sizeOf(Class<?> src) {
-		// Get the instance fields of src class
+		// Get the instance fields of class
 		List<Field> instanceFields = new LinkedList<Field>();
 		do {
 			if (src == Object.class)

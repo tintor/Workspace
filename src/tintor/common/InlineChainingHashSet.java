@@ -77,6 +77,7 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 			return false;
 		if (buckets[i].equals(s)) {
 			buckets[i] = buckets[i].next;
+			size -= 1;
 			return true;
 		}
 
@@ -85,6 +86,35 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		while (q != null) {
 			if (q.equals(s)) {
 				p.next = q.next;
+				size -= 1;
+				return true;
+			}
+			p = q;
+			q = q.next;
+		}
+		return false;
+	}
+
+	public boolean replaceWithEqual(Element a, Element b) {
+		assert a.equals(b);
+		assert b.next == null;
+
+		int i = index(a);
+		if (buckets[i] == null)
+			return false;
+		if (buckets[i].equals(a)) {
+			b.next = buckets[i].next;
+			buckets[i] = b;
+			return true;
+		}
+
+		Element p = buckets[i];
+		Element q = p.next;
+		while (q != null) {
+			if (q.equals(a)) {
+				p.next = q.next;
+				b.next = buckets[i].next;
+				buckets[i] = b;
 				return true;
 			}
 			p = q;

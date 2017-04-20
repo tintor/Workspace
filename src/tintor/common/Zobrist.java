@@ -37,7 +37,7 @@ public class Zobrist {
 		ensure(start + 64);
 		int h = 0;
 		for (int i = 0; i < 64; i++)
-			if ((b & (1l << i)) != 0)
+			if (Bits.test(b, i))
 				h ^= hash[start + i];
 		return h;
 	}

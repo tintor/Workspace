@@ -4,19 +4,17 @@ import org.junit.Assert;
 
 import tintor.common.Log;
 import tintor.common.Timer;
-import tintor.common.Util;
 
 public class Nightly {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) {
-		Log.info("Hello!");
 		for (Object[] params : SolverTest.data()) {
 			String filename = (String) params[0];
 			int expected = (int) params[1];
 
 			try {
-				Level level = new Level("data/" + filename);
+				Level level = new Level("data/sokoban/" + filename);
 				Model model = new MatchingModel();
 				model.init(level);
 				int h = model.evaluate(level.start, null);
@@ -26,7 +24,7 @@ public class Nightly {
 				Deadlock deadlock = new Deadlock(level);
 
 				timer.start();
-				State[] solution = Solver.solve_Astar(level, level.start, model, deadlock, new Solver.Context());
+				StateBase[] solution = Solver.solve_Astar(level, level.start, model, deadlock, new Solver.Context());
 				timer.stop();
 
 				Assert.assertTrue(solution != null);
@@ -34,15 +32,16 @@ public class Nightly {
 			} catch (Exception e) {
 				System.out.println(e);
 			}
-			Log.info("%s %s", filename, timer.human());
+			Log.info("%s %s", filename, timer.total / 1000000);
+			timer.total = 0;
 		}
 	}
 
 	public static void main2(String[] args) {
 		for (int n = 1; n <= 90; n++) {
-			Level level = new Level("data/original:" + n);
+			Level level = new Level("data/sokoban/original:" + n);
 			System.out.printf("%d cells:%d alive:%d boxes:%d state_space:%s\n", n, level.cells, level.alive,
-					Util.count(level.start.box), level.state_space());
+					level.num_boxes, level.state_space());
 		}
 	}
 }

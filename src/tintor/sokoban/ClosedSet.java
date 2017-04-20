@@ -5,13 +5,12 @@ import java.nio.ByteBuffer;
 import tintor.common.ExternalBTree;
 import tintor.common.InlineChainingHashSet;
 import tintor.common.Timer;
-import tintor.common.Util;
 import tintor.common.Zobrist;
 
 // External set of all States for which we found optimal path from the start
 class ClosedSet {
 	static class CompactStateBase extends InlineChainingHashSet.Element {
-		short agent;
+		byte agent;
 		byte dir;
 		short dist;
 		boolean is_push;
@@ -27,7 +26,7 @@ class ClosedSet {
 		}
 
 		public int hashCode() {
-			return Zobrist.hashBitset(box0, 0) ^ Zobrist.hash(agent + 64);
+			return Zobrist.hashBitset(box0, 0) ^ Zobrist.hash(((int) agent & 0xFF) + 64);
 		}
 	}
 
@@ -41,79 +40,53 @@ class ClosedSet {
 		}
 
 		public int hashCode() {
-			return Zobrist.hashBitset(box0, 0) ^ Zobrist.hashBitset(box1, 64) ^ Zobrist.hash(agent + 128);
-		}
-	}
-
-	final static class CompactState3 extends CompactStateBase {
-		long box0;
-		long box1;
-		long box2;
-
-		public boolean equals(Object o) {
-			CompactState3 c = (CompactState3) o;
-			return agent == c.agent && box0 == c.box0 && box1 == c.box1 && box2 == c.box2;
-		}
-
-		public int hashCode() {
-			return Zobrist.hashBitset(box0, 0) ^ Zobrist.hashBitset(box1, 64) ^ Zobrist.hashBitset(box2, 128)
-					^ Zobrist.hash(agent + 196);
+			return Zobrist.hashBitset(box0, 0) ^ Zobrist.hashBitset(box1, 64)
+					^ Zobrist.hash(((int) agent & 0xFF) + 128);
 		}
 	}
 
 	private final CompactState1 temp_compact1 = new CompactState1();
 	private final CompactState2 temp_compact2 = new CompactState2();
-	private final CompactState3 temp_compact3 = new CompactState3();
 
-	CompactStateBase compress(State s, boolean unique) {
+	CompactStateBase compress(StateBase s, boolean unique) {
 		CompactStateBase c;
-		if (s.box.length <= 64) {
+		if (box_length <= 64) {
 			CompactState1 e = unique ? new CompactState1() : temp_compact1;
-			e.box0 = Util.compress(s.box);
+			State f = (State) s;
+			e.box0 = f.box0;
 			c = e;
-		} else if (s.box.length <= 128) {
+		} else if (box_length <= 128) {
 			CompactState2 e = unique ? new CompactState2() : temp_compact2;
-			e.box0 = Util.compress(s.box, 0);
-			e.box1 = Util.compress(s.box, 1);
-			c = e;
-		} else if (s.box.length <= 196) {
-			CompactState3 e = unique ? new CompactState3() : temp_compact3;
-			e.box0 = Util.compress(s.box, 0);
-			e.box1 = Util.compress(s.box, 1);
-			e.box2 = Util.compress(s.box, 2);
+			State2 f = (State2) s;
+			e.box0 = f.box0;
+			e.box0 = f.box1;
 			c = e;
 		} else
 			throw new Error();
 
-		c.agent = (short) s.agent;
+		c.agent = (byte) s.agent();
 		c.dir = s.dir;
 		c.dist = s.dist;
 		c.is_push = s.is_push;
 		return c;
 	}
 
-	State decompress(CompactStateBase c) {
+	StateBase decompress(CompactStateBase c) {
 		if (c == null)
 			return null;
-		State s = new State(c.agent, new boolean[box_length]);
-		s.dir = c.dir;
-		s.dist = c.dist;
-		s.is_push = c.is_push;
+		long box0 = 0;
+		long box1 = 0;
 		if (c.getClass() == CompactState1.class) {
 			CompactState1 e = (CompactState1) c;
-			Util.decompress(e.box0, 0, s.box);
+			box0 = e.box0;
+			return new State((int) c.agent & 0xFF, box0, c.dist, c.dir, c.is_push);
 		} else if (c.getClass() == CompactState2.class) {
 			CompactState2 e = (CompactState2) c;
-			Util.decompress(e.box0, 0, s.box);
-			Util.decompress(e.box1, 1, s.box);
-		} else if (c.getClass() == CompactState3.class) {
-			CompactState3 e = (CompactState3) c;
-			Util.decompress(e.box0, 0, s.box);
-			Util.decompress(e.box1, 1, s.box);
-			Util.decompress(e.box2, 2, s.box);
+			box0 = e.box0;
+			box1 = e.box1;
+			return new State2((int) c.agent & 0xFF, box0, box1, c.dist, c.dir, c.is_push);
 		} else
 			throw new Error();
-		return s;
 	}
 
 	// set of CompactStateBase
@@ -144,7 +117,7 @@ class ClosedSet {
 		return size;
 	}
 
-	public boolean add(State s) {
+	public boolean add(StateBase s) {
 		try (Timer t = timer_add.start()) {
 			if (in_memory) {
 				if (set.add(compress(s, true))) {
@@ -153,7 +126,7 @@ class ClosedSet {
 				}
 				return false;
 			}
-			if (map.put(key(s.agent, s.box), value(s))) {
+			if (map.put(key(s), value(s))) {
 				size += 1;
 				return true;
 			}
@@ -161,50 +134,63 @@ class ClosedSet {
 		}
 	}
 
-	public boolean contains(State s) {
+	public boolean contains(StateBase s) {
 		try (Timer t = timer_contains.start()) {
 			if (in_memory)
 				return set.contains(compress(s, false));
-			return map.contains(key(s.agent, s.box));
+			return map.contains(key(s));
 		}
 	}
 
-	public State get(int agent, boolean[] box) {
+	public StateBase get(StateBase s) {
 		try (Timer t = timer_get.start()) {
 			if (in_memory)
-				return decompress((CompactStateBase) set.get(compress(new State(agent, box), false)));
+				return decompress((CompactStateBase) set.get(compress(s, false)));
 
-			byte[] value = map.get(key(agent, box));
+			byte[] value = map.get(key(s));
 			if (value == null)
 				return null;
-			State state = new State(agent, box);
+
 			ByteBuffer b = ByteBuffer.wrap(value, 0, value.length);
-			state.dist = b.getShort();
-			assert state.dist >= -1;
-			state.dir = b.get();
-			assert -1 <= state.dir && state.dir < 4 : state.dir;
-			state.is_push = getBoolean(b);
+			short dist = b.getShort();
+			byte dir = b.get();
+			boolean is_push = getBoolean(b);
 			assert b.remaining() == 0;
-			return state;
+
+			if (s instanceof State) {
+				State e = (State) s;
+				return new State(s.agent(), e.box0, dist, dir, is_push);
+			} else {
+				State2 e = (State2) s;
+				return new State2(s.agent(), e.box0, e.box1, dist, dir, is_push);
+			}
 		}
 	}
 
-	private byte[] value(State state) {
+	private byte[] value(StateBase state) {
 		ByteBuffer b = value_buffer;
 		b.position(0);
 		b.putShort(state.dist);
-		assert -1 <= state.dir && state.dir < 4 : state.dir;
 		b.put(state.dir);
 		put(b, state.is_push);
 		assert b.remaining() == 0;
 		return b.array();
 	}
 
-	private byte[] key(int agent, boolean[] box) {
+	private byte[] key(StateBase s) {
 		ByteBuffer b = key_buffer;
 		b.position(0);
-		b.putShort((short) agent);
-		put(b, box);
+		b.put((byte) s.agent());
+		if (s instanceof State) {
+			State e = (State) s;
+			// TODO optimize (use less space)
+			b.putLong(e.box0);
+		} else {
+			State2 e = (State2) s;
+			// TODO optimize (use less space)
+			b.putLong(e.box0);
+			b.putLong(e.box1);
+		}
 		assert b.remaining() == 0;
 		return b.array();
 	}
