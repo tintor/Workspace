@@ -15,12 +15,9 @@ public class Nightly {
 
 			try {
 				Level level = new Level("data/sokoban/" + filename);
-				Model model = new MatchingModel();
+				Heuristic model = new MatchingHeuristic();
 				model.init(level);
-				int h = model.evaluate(level.start, null);
-				if (h > Short.MAX_VALUE)
-					throw new Error();
-				level.start.total_dist = (short) h;
+				level.start.set_heuristic(model.evaluate(level.start, null));
 				Deadlock deadlock = new Deadlock(level);
 
 				timer.start();

@@ -3,19 +3,21 @@ package tintor.common;
 import java.util.Iterator;
 
 public final class InlineChainingHashSet implements Iterable<InlineChainingHashSet.Element> {
-	public static class Element {
+	public abstract static class Element {
 		private Element next;
+
+		// TODO will it be faster with findEqual here?
+
+		protected abstract int hashCode(Object context);
 	}
 
 	private Element[] buckets;
 	private int size;
+	private Object context;
 
-	public InlineChainingHashSet() {
-		this(16);
-	}
-
-	public InlineChainingHashSet(int capacity) {
-		buckets = new Element[Util.roundUpPowerOf2(capacity)];
+	public InlineChainingHashSet(int capacity, Object context) {
+		this.buckets = new Element[Util.roundUpPowerOf2(capacity)];
+		this.context = context;
 	}
 
 	public int size() {
@@ -37,15 +39,10 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		return null;
 	}
 
-	public void clear() {
-		for (int i = 0; i < buckets.length; i++)
-			if (buckets[i] != null)
-				buckets[i] = null;
-	}
-
 	public int index(Element s) {
-		int h = s.hashCode();
+		int h = s.hashCode(context);
 		assert h >= 0;
+		assert Util.roundUpPowerOf2(buckets.length) == buckets.length;
 		return h & (buckets.length - 1);
 	}
 

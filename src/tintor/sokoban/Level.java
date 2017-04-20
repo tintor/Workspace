@@ -8,6 +8,7 @@ import java.util.Deque;
 import tintor.common.Bits;
 import tintor.common.Util;
 import tintor.common.Visitor;
+import tintor.common.Zobrist;
 
 class Level {
 	final LevelIO io;
@@ -99,6 +100,7 @@ class Level {
 
 		// Re-compute
 		cells = Util.count(walkable);
+		Zobrist.ensure(128 + cells);
 		move = new int[4 * cells];
 		for (int i = 0; i < raw_cells; i++)
 			if (walkable[i])
@@ -324,6 +326,11 @@ class Level {
 
 	boolean is_solved(long box0, long box1) {
 		return (box0 | goal0) == goal0 && (box1 | goal1) == goal1;
+	}
+
+	boolean is_solved(long box0) {
+		assert alive <= 64;
+		return (box0 | goal0) == goal0;
 	}
 
 	boolean is_solved(StateBase s) {

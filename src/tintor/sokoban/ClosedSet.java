@@ -2,18 +2,24 @@ package tintor.sokoban;
 
 import java.nio.ByteBuffer;
 
+import org.junit.Assert;
+
 import tintor.common.ExternalBTree;
 import tintor.common.InlineChainingHashSet;
+import tintor.common.Measurer;
 import tintor.common.Timer;
-import tintor.common.Zobrist;
 
 // External set of all States for which we found optimal path from the start
 class ClosedSet {
-	static class CompactStateBase extends InlineChainingHashSet.Element {
+	static abstract class CompactStateBase extends InlineChainingHashSet.Element {
 		byte agent;
-		byte dir;
+		byte dir_and_is_push;
 		short dist;
-		boolean is_push;
+
+		static {
+			// real size is 20, but gets aligned to 24
+			Assert.assertEquals(24, Measurer.sizeOf(CompactStateBase.class));
+		}
 	}
 
 	// 32 bytes
@@ -22,11 +28,15 @@ class ClosedSet {
 
 		public boolean equals(Object o) {
 			CompactState1 c = (CompactState1) o;
-			return agent == c.agent && box0 == c.box0;
+			return box0 == c.box0 && agent == c.agent;
 		}
 
-		public int hashCode() {
-			return Zobrist.hashBitset(box0, 0) ^ Zobrist.hash(((int) agent & 0xFF) + 64);
+		public int hashCode(Object context) {
+			return StateBase.hashCode((int) agent & 0xFF, box0, (Integer) context);
+		}
+
+		static {
+			Assert.assertEquals(32, Measurer.sizeOf(CompactState1.class));
 		}
 	}
 
@@ -36,12 +46,15 @@ class ClosedSet {
 
 		public boolean equals(Object o) {
 			CompactState2 c = (CompactState2) o;
-			return agent == c.agent && box0 == c.box0 && box1 == c.box1;
+			return box0 == c.box0 && box1 == c.box1 && agent == c.agent;
 		}
 
-		public int hashCode() {
-			return Zobrist.hashBitset(box0, 0) ^ Zobrist.hashBitset(box1, 64)
-					^ Zobrist.hash(((int) agent & 0xFF) + 128);
+		public int hashCode(Object context) {
+			return StateBase.hashCode((int) agent & 0xFF, box0, box1, (Integer) context);
+		}
+
+		static {
+			Assert.assertEquals(40, Measurer.sizeOf(CompactState2.class));
 		}
 	}
 
@@ -50,24 +63,24 @@ class ClosedSet {
 
 	CompactStateBase compress(StateBase s, boolean unique) {
 		CompactStateBase c;
-		if (box_length <= 64) {
+		if (s instanceof State) {
 			CompactState1 e = unique ? new CompactState1() : temp_compact1;
 			State f = (State) s;
 			e.box0 = f.box0;
 			c = e;
-		} else if (box_length <= 128) {
+		} else if (s instanceof State2) {
 			CompactState2 e = unique ? new CompactState2() : temp_compact2;
 			State2 f = (State2) s;
 			e.box0 = f.box0;
-			e.box0 = f.box1;
+			e.box1 = f.box1;
 			c = e;
 		} else
 			throw new Error();
 
 		c.agent = (byte) s.agent();
-		c.dir = s.dir;
-		c.dist = s.dist;
-		c.is_push = s.is_push;
+		assert !s.is_push || (0 <= s.dir && s.dir < 4);
+		c.dir_and_is_push = (byte) (s.is_push ? s.dir + 4 : s.dir);
+		c.dist = (short) s.dist();
 		return c;
 	}
 
@@ -79,20 +92,22 @@ class ClosedSet {
 		if (c.getClass() == CompactState1.class) {
 			CompactState1 e = (CompactState1) c;
 			box0 = e.box0;
-			return new State((int) c.agent & 0xFF, box0, c.dist, c.dir, c.is_push);
+			int dir = c.dir_and_is_push >= 4 ? c.dir_and_is_push - 4 : c.dir_and_is_push;
+			return new State((int) c.agent & 0xFF, box0, c.dist, dir, c.dir_and_is_push >= 4);
 		} else if (c.getClass() == CompactState2.class) {
 			CompactState2 e = (CompactState2) c;
 			box0 = e.box0;
 			box1 = e.box1;
-			return new State2((int) c.agent & 0xFF, box0, box1, c.dist, c.dir, c.is_push);
+			int dir = c.dir_and_is_push >= 4 ? c.dir_and_is_push - 4 : c.dir_and_is_push;
+			return new State2((int) c.agent & 0xFF, box0, box1, c.dist, dir, c.dir_and_is_push >= 4);
 		} else
 			throw new Error();
 	}
 
 	// set of CompactStateBase
-	private final InlineChainingHashSet set = new InlineChainingHashSet();
+	private final InlineChainingHashSet set;
 	private final ExternalBTree map;
-	private final int key_size, value_size = 4, box_length;
+	private final int key_size, value_size = 4;
 	private final ByteBuffer key_buffer;
 	private final ByteBuffer value_buffer;
 	private int size = 0;
@@ -102,7 +117,7 @@ class ClosedSet {
 	final Timer timer_get = new Timer();
 
 	public ClosedSet(int box_length) {
-		this.box_length = box_length;
+		set = new InlineChainingHashSet(16, box_length);
 		key_size = 2 + (box_length + 7) / 8;
 		map = new ExternalBTree(512, key_size, value_size);
 		key_buffer = ByteBuffer.allocate(key_size);
@@ -170,7 +185,7 @@ class ClosedSet {
 	private byte[] value(StateBase state) {
 		ByteBuffer b = value_buffer;
 		b.position(0);
-		b.putShort(state.dist);
+		b.putShort((short) state.dist());
 		b.put(state.dir);
 		put(b, state.is_push);
 		assert b.remaining() == 0;

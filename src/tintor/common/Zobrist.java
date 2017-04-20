@@ -24,13 +24,12 @@ public class Zobrist {
 		}
 	}
 
-	static {
-		ensure(64);
+	public static int hash(int i) {
+		return hash[i];
 	}
 
-	public static int hash(int i) {
-		ensure(i + 1);
-		return hash[i];
+	static {
+		ensure(64);
 	}
 
 	public static int hashBitset(long b, int start) {

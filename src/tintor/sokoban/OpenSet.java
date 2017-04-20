@@ -8,13 +8,17 @@ import tintor.common.Util;
 // Set of all States for which we found some path from the start (not sure if optimal yet)
 final class OpenSet {
 	private final BinaryHeap<StateBase> heap = new BinaryHeap<StateBase>();
-	private final InlineChainingHashSet set = new InlineChainingHashSet();
+	private final InlineChainingHashSet set;
 	long garbage;
 
 	private final Timer timer_get = new Timer();
 	private final Timer timer_update = new Timer();
 	private final Timer timer_addUnsafe = new Timer();
 	private final Timer timer_removeMin = new Timer();
+
+	OpenSet(int alive) {
+		set = new InlineChainingHashSet(16, alive);
+	}
 
 	long report(int cycles) {
 		timer_get.total /= cycles;

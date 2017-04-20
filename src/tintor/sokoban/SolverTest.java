@@ -187,16 +187,13 @@ public class SolverTest {
 
 	@Test
 	public void solve() {
-		solve(new MatchingModel());
+		solve(new MatchingHeuristic());
 	}
 
-	void solve(Model model) {
+	void solve(Heuristic model) {
 		Level level = new Level("data/sokoban/" + filename);
 		model.init(level);
-		int h = model.evaluate(level.start, null);
-		if (h > Short.MAX_VALUE)
-			throw new Error();
-		level.start.total_dist = (short) h;
+		level.start.set_heuristic(model.evaluate(level.start, null));
 		Deadlock deadlock = new Deadlock(level);
 
 		StateBase[] solution = Solver.solve_Astar(level, level.start, model, deadlock, new Solver.Context());

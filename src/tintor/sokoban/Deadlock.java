@@ -9,6 +9,7 @@ import tintor.common.Util;
 import tintor.common.Visitor;
 
 class LevelUtil {
+	// TODO be more strict: try to go around box, push it back and return to original agent position
 	static boolean is_reverseable_push(StateBase s, Level level) {
 		assert s.is_push;
 		int c = level.move(level.move(s.agent(), s.dir), s.dir);
@@ -205,7 +206,7 @@ class Deadlock {
 		if (dir >= 0) {
 			int b = level.move(agent, dir);
 			// TODO: replace -1 with high positive value to avoid negative check
-			if (0 <= b && b < 64 && Bits.test(b, b))
+			if (0 <= b && b < 64 && Bits.test(box, b))
 				return matchesPattern(b, dir, agent, box, num_boxes);
 		}
 		return false;
@@ -356,7 +357,7 @@ class Deadlock {
 					break;
 				}
 
-			if (!level.is_solved(box, 0))
+			if (!level.is_solved(box))
 				return box;
 
 			// remaining boxes are on goals => check that agent can reach all
@@ -483,7 +484,7 @@ class Deadlock {
 		return false;
 	}
 
-	private boolean checkInternal64(State s, long box, int num_boxes) {
+	private boolean checkInternal64(StateBase s, long box, int num_boxes) {
 		if (level.is_solved(box, 0))
 			return false;
 		if (matchesPattern(s.agent(), s.dir, box, num_boxes) || matchesGoalZonePattern(s.agent(), box))
@@ -568,7 +569,7 @@ class Deadlock {
 				}
 			} else {
 				State2 e = (State2) s;
-				if (checkInternal(e, num_boxes)) {
+				if (level.alive <= 64 ? checkInternal64(e, e.box0, num_boxes) : checkInternal(e, num_boxes)) {
 					deadlocks += 1;
 					return true;
 				}

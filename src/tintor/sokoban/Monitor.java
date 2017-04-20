@@ -42,7 +42,7 @@ class Monitor {
 				closed.timer_add.clear(), closed.timer_contains.clear());
 		timer.total -= open.report(closes);
 		timer.total -= deadlock.report(closes);
-		System.out.printf("dist:%d total_dist:%d dead:%s live:%s [%s]\n", a.dist, a.total_dist,
+		System.out.printf("dist:%d total_dist:%d dead:%s live:%s [%s]\n", a.dist(), a.total_dist(),
 				Util.human(model_deadlocks), Util.human(model_non_deadlocks), model_timer.clear());
 
 		System.out.printf("speed:%s [%s] ", Util.human((int) speed), timer.clear());

@@ -20,10 +20,11 @@ public class Log {
 
 		String cn = frame.getClassName();
 		int i = cn.lastIndexOf('.');
-		if (i != -1) cn = cn.substring(i + 1, cn.length());
-	
-		System.out.printf("%d.%03d %s:%d %s %s\n", millis / 1000, millis % 1000, cn,
-				frame.getLineNumber(), level.name().charAt(0), String.format(format, args));
+		if (i != -1)
+			cn = cn.substring(i + 1, cn.length());
+
+		System.out.printf("%d.%03d %s:%d %s %s\n", millis / 1000, millis % 1000, cn, frame.getLineNumber(),
+				level.name().charAt(0), String.format(format, args));
 	}
 
 	private static StackTraceElement callerFrame() {

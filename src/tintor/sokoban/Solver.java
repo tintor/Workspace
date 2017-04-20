@@ -37,6 +37,7 @@ import tintor.common.Util;
 // TODO: Split level into sub-levels that can be solved independently
 
 // Memory:
+// TODO: use SparseHashSet for ClosedSet
 // TODO: store States in OpenSet as compacted (works well with removal of binary heap)
 // TODO: compact States to byte[] in ClosedSet
 // TODO: use int[] instead of boolean[] for boxes everywhere! (easier to transition to and more compact than boolean[])
@@ -62,7 +63,9 @@ import tintor.common.Util;
 // TODO: use minimal push distance in Heuristics
 
 // Other:
+// TODO: assert garbage can't be negative
 // TODO: IDA*
+// TODO: Parallelize hash table grow! as there are no conflicts
 // TODO: How can search be parallelized?
 //       - more exhaustive deadlock check per State
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
@@ -100,10 +103,10 @@ public class Solver {
 			path.addFirst(end);
 			end = closed.get(end.prev(level));
 		}
-		return path.toArray(new State[path.size()]);
+		return path.toArray(new StateBase[path.size()]);
 	}
 
-	static State[] solve_IDAstar(Level level, State start, Model model, Deadlock deadlock, Context context) {
+	static State[] solve_IDAstar(Level level, State start, Heuristic model, Deadlock deadlock, Context context) {
 		if (deadlock != null && deadlock.check(start))
 			return null;
 		if (level.is_solved(start))
@@ -124,13 +127,11 @@ public class Solver {
 						break;
 					// TODO cut move if possible
 
-					int total_dist = b.dist + model.evaluate(b, a);
-					if (total_dist > total_dist_max) {
-						total_dist_cutoff_min = Math.min(total_dist_cutoff_min, total_dist);
+					b.set_heuristic(model.evaluate(b, a));
+					if (b.total_dist() > total_dist_max) {
+						total_dist_cutoff_min = Math.min(total_dist_cutoff_min, b.total_dist());
 						continue;
 					}
-					assert total_dist <= Short.MAX_VALUE;
-					b.total_dist = (short) total_dist;
 					stack.push(b);
 				}
 				// TODO reorder moves
@@ -142,7 +143,7 @@ public class Solver {
 		return null;
 	}
 
-	static StateBase[] solve_Astar(Level level, StateBase start, Model model, Deadlock deadlock, Context context) {
+	static StateBase[] solve_Astar(Level level, StateBase start, Heuristic model, Deadlock deadlock, Context context) {
 		if (deadlock != null && deadlock.check(start))
 			return null;
 		if (level.is_solved(start))
@@ -150,7 +151,7 @@ public class Solver {
 
 		// Generate initial deadlock patterns
 		if (context.enable_populate) {
-			InlineChainingHashSet set = new InlineChainingHashSet(1 << 20);
+			InlineChainingHashSet set = new InlineChainingHashSet(1 << 20, level);
 			ArrayDeque<StateBase> queue = new ArrayDeque<StateBase>();
 			queue.add(start);
 			while (!queue.isEmpty() && set.size() < (1 << 20) - 3) {
@@ -171,7 +172,7 @@ public class Solver {
 		}
 
 		final ClosedSet closed = new ClosedSet(level.alive);
-		final OpenSet open = new OpenSet();
+		final OpenSet open = new OpenSet(level.alive);
 		open.addUnsafe(start);
 
 		final Monitor monitor = new Monitor();
@@ -208,8 +209,8 @@ public class Solver {
 				if (v == null && b.is_push && deadlock.check(b))
 					continue;
 
-				if (context.enable_greedy)
-					b.greedy_score = b.is_push ? (byte) greedy_score(b, level) : a.greedy_score;
+				/*if (context.enable_greedy)
+					b.greedy_score = b.is_push ? (byte) greedy_score(b, level) : a.greedy_score;*/
 				monitor.model_timer.start();
 				int h = model.evaluate(b, a);
 				monitor.model_timer.stop();
@@ -218,17 +219,14 @@ public class Solver {
 					continue;
 				} else
 					monitor.model_non_deadlocks += 1;
-
-				if (b.dist + h > Short.MAX_VALUE)
-					throw new Error();
-				b.total_dist = (short) (b.dist + h);
+				b.set_heuristic(h);
 
 				if (v == null) {
 					open.addUnsafe(b);
 					monitor.branches += 1;
 					continue;
 				}
-				if (b.total_dist >= v.total_dist)
+				if (b.total_dist() >= v.total_dist())
 					continue;
 
 				// B is better than V
@@ -258,20 +256,17 @@ public class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
-		Level level = new Level("data/sokoban/original:1");
+		Level level = new Level("data/sokoban/microban:139");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
-		Model model = new MatchingModel();
+		Heuristic model = new MatchingHeuristic();
 		model.init(level);
 		Context context = new Context();
 		context.trace = 1;
 		context.enable_populate = false;
 		context.enable_greedy = false;
-		int h = model.evaluate(level.start, null);
-		if (h > Short.MAX_VALUE)
-			throw new Error();
-		level.start.total_dist = (short) h;
+		level.start.set_heuristic(model.evaluate(level.start, null));
 
 		Deadlock deadlock = new Deadlock(level);
 		timer.start();

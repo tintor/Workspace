@@ -5,7 +5,7 @@ import java.util.Arrays;
 import tintor.common.HungarianAlgorithm;
 import tintor.common.Visitor;
 
-abstract class Model {
+abstract class Heuristic {
 	protected Level level;
 
 	protected void init(Level level) {
@@ -15,80 +15,9 @@ abstract class Model {
 	abstract int evaluate(StateBase s, StateBase prev);
 }
 
-final class ZeroModel extends Model {
-	public int evaluate(StateBase s, StateBase prev) {
-		return 0;
-	}
-}
-
-final class OneModel extends Model {
-	public int evaluate(StateBase s, StateBase prev) {
-		if (prev != null && !s.is_push)
-			return prev.total_dist - prev.dist;
-
-		if (s instanceof State) {
-			State e = (State) s;
-			return Long.bitCount(e.box0 & ~level.goal0);
-		} else {
-			State2 e = (State2) s;
-			return Long.bitCount(e.box0 & ~level.goal0) + Long.bitCount(e.box1 & ~level.goal1);
-		}
-	}
-}
-
 // TODO instead of using simple distance over live cells, solve level with
 // single box and using number of pushes
-final class SimpleModel extends Model {
-	int[] goal_distance;
-
-	protected void init(Level level) {
-		this.level = level;
-
-		goal_distance = new int[level.alive];
-		Arrays.fill(goal_distance, -1);
-
-		Visitor visitor = level.visitor.init();
-		for (int i = 0; i < level.alive; i++)
-			if (level.goal(i)) {
-				goal_distance[i] = 0;
-				visitor.add(i);
-			}
-		for (int a : visitor)
-			for (int b : level.moves[a])
-				if (!visitor.visited(b) && b < level.alive && !level.goal(b)) {
-					goal_distance[b] = goal_distance[a] + 1;
-					visitor.add(b);
-				}
-	}
-
-	public int evaluate(StateBase s, StateBase prev) {
-		if (prev != null && !s.is_push)
-			return prev.total_dist - prev.dist;
-
-		int q = 0;
-		if (s instanceof State) {
-			State e = (State) s;
-			for (int i = 0; i < level.cells; i++)
-				if (e.box(i)) {
-					if (goal_distance[i] == -1)
-						return Integer.MAX_VALUE;
-					q += goal_distance[i];
-				}
-		} else {
-			State2 e = (State2) s;
-			for (int i = 0; i < level.cells; i++)
-				if (e.box(i)) {
-					if (goal_distance[i] == -1)
-						return Integer.MAX_VALUE;
-					q += goal_distance[i];
-				}
-		}
-		return q;
-	}
-}
-
-// Better model: assign goal to each box and find minimal such matching
-final class MatchingModel extends Model {
+final class MatchingHeuristic extends Heuristic {
 	int[] boxes;
 	int[][] distance_box;
 	HungarianAlgorithm hungarian;
@@ -127,7 +56,8 @@ final class MatchingModel extends Model {
 
 	public int evaluate(StateBase s, StateBase prev) {
 		if (prev != null && !s.is_push)
-			return prev.total_dist - prev.dist - agent_to_nearest_box_distance(prev) + agent_to_nearest_box_distance(s);
+			return prev.total_dist() - prev.dist() - agent_to_nearest_box_distance(prev)
+					+ agent_to_nearest_box_distance(s);
 
 		int w = 0;
 		if (s instanceof State) {
