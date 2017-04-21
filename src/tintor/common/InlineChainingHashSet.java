@@ -1,6 +1,10 @@
 package tintor.common;
 
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public final class InlineChainingHashSet implements Iterable<InlineChainingHashSet.Element> {
 	public abstract static class Element {
@@ -125,12 +129,14 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		return false;
 	}
 
+	private static ExecutorService executor = Executors.newFixedThreadPool(8);
+
 	private void grow() {
 		int capacity = buckets.length * 2;
 		if (capacity <= buckets.length)
 			return;
 
-		Element[] old_buckets = buckets;
+		final Element[] old_buckets = buckets;
 		try {
 			buckets = new Element[capacity];
 			shift -= 1;
@@ -139,8 +145,45 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 			return;
 		}
 
-		int max = 0;
-		for (int j = 0; j < old_buckets.length; j++) {
+		int[] histogram = null;
+		int min_chunk_size = 1 << 14;
+		if (old_buckets.length > min_chunk_size) {
+			int tasks = Math.max(8, old_buckets.length / min_chunk_size);
+			final int chunk_size = old_buckets.length / tasks;
+			Future<int[]>[] future = new Future[tasks];
+			for (int k = 0; k < tasks; k++) {
+				final int kk = k;
+				future[k] = executor.submit(() -> resize_range(old_buckets, chunk_size * kk, chunk_size * (kk + 1)));
+			}
+			for (int k = 0; k < tasks; k++)
+				histogram = merge(histogram, get(future[k]));
+		} else {
+			histogram = resize_range(old_buckets, 0, old_buckets.length);
+		}
+		if (capacity >= 1 << 14)
+			Log.fine("hash table resize %s -> %s: %s", Util.human(old_buckets.length), Util.human(buckets.length),
+					Arrays.toString(histogram));
+	}
+
+	private static int[] merge(int[] a, int[] b) {
+		if (a == null)
+			return b;
+		for (int i = 0; i < a.length; i++)
+			a[i] += b[i];
+		return a;
+	}
+
+	private static <T> T get(Future<T> future) {
+		try {
+			return future.get();
+		} catch (Exception e) {
+			throw new Error(e);
+		}
+	}
+
+	private int[] resize_range(Element[] old_buckets, int start, int end) {
+		int[] histogram = new int[10];
+		for (int j = start; j < end; j++) {
 			Element a = old_buckets[j];
 			Element high = null;
 			Element low = null;
@@ -165,13 +208,10 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 				// writes to buckets[] will be in sequential order
 				buckets[j * 2] = low;
 				buckets[j * 2 + 1] = high;
-				if (count > max)
-					max = count;
+				histogram[Math.min(histogram.length - 1, count - 1)] += 1;
 			}
 		}
-
-		if (max >= 10 && capacity >= 8192)
-			Log.fine("longest hash bucket %d elements pre-resize (%d -> %d)", max, old_buckets.length, buckets.length);
+		return histogram;
 	}
 
 	private class IteratorT implements Iterator<Element> {
