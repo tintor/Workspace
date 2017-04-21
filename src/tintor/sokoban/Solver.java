@@ -12,7 +12,7 @@ import tintor.common.Util;
 // Deadlock:
 // TODO: Take every 2 and 3 box subset from start position and initialize deadlock DB
 //       with all REACHABLE deadlock patterns of size 2 and 3. This way ContainsFrozenBoxes can stop when it reaches 2 or 3 boxes.
-// TODO: ExaustiveDeadlockTest with only boxes on goals
+// TODO: ExaustiveDeadlockTest with all boxes on goal + one box not on goal
 // TODO: ExaustiveDeadlockTest: with every subset of X boxes, is it solvable with a simple BFS solver?
 // TODO: deadlock patterns for goal cells (must keep track of which goals are empty and which are occupied by frozen boxes)
 // TODO: regenerate level (recompute alive cells) once a box becomes frozen on goal.

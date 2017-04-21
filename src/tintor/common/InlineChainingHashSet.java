@@ -6,17 +6,16 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 	public abstract static class Element {
 		private Element next;
 
-		// TODO will it be faster with findEqual here?
-
 		protected abstract int hashCode(Object context);
 	}
 
 	private Element[] buckets;
-	private int size;
+	private int size, shift;
 	private Object context;
 
 	public InlineChainingHashSet(int capacity, Object context) {
 		this.buckets = new Element[Util.roundUpPowerOf2(capacity)];
+		this.shift = 31 - Integer.bitCount(buckets.length - 1);
 		this.context = context;
 	}
 
@@ -49,8 +48,7 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 	public int index(Element s) {
 		int h = s.hashCode(context);
 		assert h >= 0;
-		assert Util.roundUpPowerOf2(buckets.length) == buckets.length;
-		return h & (buckets.length - 1);
+		return h >> shift;
 	}
 
 	public void addUnsafe(Element s) {
@@ -128,31 +126,50 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 	}
 
 	private void grow() {
-		if (buckets.length * 2 > buckets.length)
-			resize(buckets.length * 2);
-	}
+		int capacity = buckets.length * 2;
+		if (capacity <= buckets.length)
+			return;
 
-	private void resize(int capacity) {
 		Element[] old_buckets = buckets;
 		try {
 			buckets = new Element[capacity];
+			shift -= 1;
 		} catch (OutOfMemoryError e) {
 			Log.warning("unable to grow hash bucket array to %d: out of memory", capacity);
 			return;
 		}
+
 		int max = 0;
-		for (Element a : old_buckets) {
-			int count = 0;
-			while (a != null) {
-				Element b = a.next;
-				int i = index(a);
-				a.next = buckets[i];
-				buckets[i] = a;
-				a = b;
-				count += 1;
+		for (int j = 0; j < old_buckets.length; j++) {
+			Element a = old_buckets[j];
+			Element high = null;
+			Element low = null;
+			if (a != null) {
+				int count = 1;
+				while (true) {
+					Element b = a.next;
+					int i = index(a);
+					assert 2 * j <= i && i <= 2 * j + 1;
+					if (i % 2 == 0) {
+						a.next = low;
+						low = a;
+					} else {
+						a.next = high;
+						high = a;
+					}
+					a = b;
+					if (a == null)
+						break;
+					count += 1;
+				}
+				// writes to buckets[] will be in sequential order
+				buckets[j * 2] = low;
+				buckets[j * 2 + 1] = high;
+				if (count > max)
+					max = count;
 			}
-			max = Math.max(max, count);
 		}
+
 		if (max >= 10 && capacity >= 8192)
 			Log.fine("longest hash bucket %d elements pre-resize (%d -> %d)", max, old_buckets.length, buckets.length);
 	}
