@@ -160,7 +160,7 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		} else {
 			histogram = resize_range(old_buckets, 0, old_buckets.length);
 		}
-		if (capacity >= 1 << 14)
+		if (capacity >= 1 << 18 && histogram != null)
 			Log.fine("hash table resize %s -> %s: %s", Util.human(old_buckets.length), Util.human(buckets.length),
 					Arrays.toString(histogram));
 	}
@@ -211,7 +211,7 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 				histogram[Math.min(histogram.length - 1, count - 1)] += 1;
 			}
 		}
-		return histogram;
+		return null;
 	}
 
 	private class IteratorT implements Iterator<Element> {
