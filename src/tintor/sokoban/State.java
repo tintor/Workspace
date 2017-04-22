@@ -5,6 +5,7 @@ import org.junit.Assert;
 import tintor.common.Bits;
 import tintor.common.InlineChainingHashSet;
 import tintor.common.Measurer;
+import tintor.common.Visitor;
 import tintor.common.Zobrist;
 
 // State without boxes
@@ -89,6 +90,7 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 
 	// Transient fields for OpenSet
 	private short total_dist; // = distance from start + heuristic to goal
+	byte greedy;
 }
 
 final class State extends StateBase implements Comparable<State> {
@@ -109,6 +111,8 @@ final class State extends StateBase implements Comparable<State> {
 	}
 
 	public int compareTo(State a) {
+		if (greedy != a.greedy)
+			return ((int) a.greedy & 0xFF) - ((int) greedy & 0xFF);
 		return total_dist() - a.total_dist();
 	}
 
@@ -175,7 +179,7 @@ final class State extends StateBase implements Comparable<State> {
 		return new State(level.rmove(b, dir), nbox0, nbox1, dist() - pushes(), -1, 0);
 	}
 
-	State move(int dir, Level level) {
+	State move(int dir, Level level, boolean optimal) {
 		assert 0 <= dir && dir < 4;
 		int a = level.move(agent(), dir);
 		if (a == -1)
@@ -216,8 +220,7 @@ final class State extends StateBase implements Comparable<State> {
 			int pushes = 1;
 
 			// keep pushing box until the end of tunnel
-			//  level.tunnel(a) && level.bottleneck[b]
-			while (!level.goal(b) && level.tunnel(a) && level.tunnel(b)) {
+			while (can_force_push(a, b, level, optimal)) {
 				// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
 				int c = level.move(b, dir);
 				if (c == -1 || c >= level.alive || box(c))
@@ -239,6 +242,48 @@ final class State extends StateBase implements Comparable<State> {
 			return new State(a, nbox0, nbox1, dist() + pushes, dir, pushes);
 		}
 		return null;
+	}
+
+	private boolean more_goals_than_boxes_in_room(int a, int door, Level level) {
+		assert level.degree(door) == 2 && level.bottleneck[door];
+		Visitor visitor = new Visitor(level.cells);
+		visitor.visited()[door] = true;
+		visitor.add(a);
+		int result = 0;
+		for (int b : visitor) {
+			if (level.goal(b))
+				result += 1;
+			if (box(b))
+				result -= 1;
+			for (int c : level.moves[b])
+				if (!visitor.visited(c))
+					visitor.add(c);
+		}
+		return result > 0;
+	}
+
+	private boolean can_force_push(int a, int b, Level level, boolean optimal) {
+		int dir = level.delta[a][b];
+
+		if (level.goal(b))
+			return level.degree(b) == 2 && level.bottleneck[b] && !box(level.move(b, dir))
+					&& more_goals_than_boxes_in_room(level.move(b, dir), b, level);
+
+		// push through non-bottleneck tunnel
+		if (level.degree(a) == 2 && level.degree(b) == 2)
+			return true;
+
+		// push through bottleneck tunnel (until agent can reach the other side)
+		if (level.degree(a) == 2 && level.bottleneck[a] && level.bottleneck[b])
+			return true;
+
+		if (!optimal && level.bottleneck[b] && level.degree(b) == 3 && level.move(b, dir) != Level.Bad)
+			return true;
+
+		if (!optimal && level.bottleneck[b] && level.degree(b) == 2)
+			return true;
+
+		return false;
 	}
 
 	static {

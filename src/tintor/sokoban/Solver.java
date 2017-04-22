@@ -72,12 +72,8 @@ public class Solver {
 	static int greedy_score(State s, Level level) {
 		int score = 0;
 		for (int a = 0; a < level.alive; a++)
-			if (level.goal(a) && s.box(a)) {
-				score += 5;
-				for (byte dir = 0; dir < 4; dir++)
-					if (level.move(a, dir) == Level.Bad)
-						score += 1;
-			}
+			if (level.goal(a) && s.box(a))
+				score += 1;
 		return score;
 	}
 
@@ -106,7 +102,7 @@ public class Solver {
 			while (!stack.isEmpty()) {
 				State a = stack.pop();
 				for (int dir : level.dirs[a.agent()]) {
-					State b = a.move(dir, level);
+					State b = a.move(dir, level, context.optimal_macro_moves);
 					if (b == null)
 						break;
 					// TODO cut move if possible
@@ -152,7 +148,7 @@ public class Solver {
 			while (!queue.isEmpty() && set.size() < (1 << 20) - 3) {
 				State a = queue.removeFirst();
 				for (byte dir = 0; dir < 4; dir++) {
-					State b = a.move(dir, level);
+					State b = a.move(dir, level, context.optimal_macro_moves);
 					if (b == null || set.contains(b))
 						continue;
 					if (b.is_push() && deadlock.check(b))
@@ -195,7 +191,7 @@ public class Solver {
 			for (int dir : level.dirs[a.agent()]) {
 				if (dir == reverse_dir)
 					continue;
-				State b = a.move(dir, level);
+				State b = a.move(dir, level, context.optimal_macro_moves);
 				if (b == null || closed.contains(b))
 					continue;
 
@@ -203,11 +199,11 @@ public class Solver {
 				if (v == null && b.is_push() && deadlock.check(b))
 					continue;
 
-				/*if (context.enable_greedy)
-					b.greedy_score = b.is_push ? (byte) greedy_score(b, level) : a.greedy_score;*/
 				h = heuristic.evaluate(b, a);
 				if (h == Integer.MAX_VALUE)
 					continue;
+				if (context.greedy_score)
+					b.greedy = (byte) greedy_score(b, level);
 				b.set_heuristic(h);
 
 				if (v == null) {
@@ -244,8 +240,7 @@ public class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
-		//Level level = new Level("microban1:139");
-		Level level = new Level("original:1");
+		Level level = new Level("test:2");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
@@ -253,7 +248,8 @@ public class Solver {
 		context.trace = 1;
 		context.enable_parallel_hashtable_resize = true;
 		context.enable_populate = false;
-		context.enable_greedy = false;
+		context.optimal_macro_moves = true;
+		context.greedy_score = true;
 
 		Deadlock deadlock = new Deadlock(level);
 		timer.start();
@@ -272,7 +268,8 @@ public class Solver {
 	static class Context {
 		boolean enable_parallel_hashtable_resize;
 		boolean enable_populate;
-		boolean enable_greedy;
+		boolean optimal_macro_moves = true;
+		boolean greedy_score;
 		int trace; // 0 to turn off any tracing
 		int open_set_size;
 		int closed_set_size;

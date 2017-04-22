@@ -82,6 +82,7 @@ class Level {
 			if (low.box(i))
 				box[old_to_new[i]] = true;
 
+		// TODO: Level should not depend on State. Have constructor of State that takes Level as parameter.
 		start = new State(old_to_new[low.agent()], Util.compress(box, 0), Util.compress(box, 1), low.dist, -1, 0);
 		goal0 = Util.compress(goal, 0);
 		goal1 = Util.compress(goal, 1);
@@ -234,6 +235,10 @@ class Level {
 
 	boolean is_solved(State s) {
 		return (s.box0 | goal0) == goal0 && (s.box1 | goal1) == goal1;
+	}
+
+	int degree(int pos) {
+		return moves[pos].length;
 	}
 
 	boolean tunnel(int pos) {
