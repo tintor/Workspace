@@ -2,8 +2,6 @@ package tintor.common;
 
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 public final class InlineChainingHashSet implements Iterable<InlineChainingHashSet.Element> {
@@ -16,11 +14,13 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 	private Element[] buckets;
 	private int size, shift;
 	private Object context;
+	private final boolean enable_parallel_resize;
 
-	public InlineChainingHashSet(int capacity, Object context) {
+	public InlineChainingHashSet(int capacity, Object context, boolean enable_parallel_resize) {
 		this.buckets = new Element[Util.roundUpPowerOf2(capacity)];
 		this.shift = 31 - Integer.bitCount(buckets.length - 1);
 		this.context = context;
+		this.enable_parallel_resize = enable_parallel_resize;
 	}
 
 	public int size() {
@@ -43,9 +43,12 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 	}
 
 	public Element get(Element s) {
-		for (Element p = buckets[index(s)]; p != null; p = p.next)
+		int c = 0;
+		for (Element p = buckets[index(s)]; p != null; p = p.next) {
 			if (p.equals(s))
 				return p;
+			assert c++ < 1000;
+		}
 		return null;
 	}
 
@@ -129,8 +132,6 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		return false;
 	}
 
-	private static ExecutorService executor = Executors.newFixedThreadPool(8);
-
 	private void grow() {
 		int capacity = buckets.length * 2;
 		if (capacity <= buckets.length)
@@ -146,15 +147,16 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		}
 
 		int[] histogram = null;
-		int min_chunk_size = 1 << 14;
-		if (old_buckets.length > min_chunk_size) {
+		final int min_chunk_size = 1 << 14;
+		if (enable_parallel_resize && old_buckets.length > min_chunk_size) {
 			int tasks = Math.max(8, old_buckets.length / min_chunk_size);
 			final int chunk_size = old_buckets.length / tasks;
 			@SuppressWarnings("unchecked")
 			Future<int[]>[] future = new Future[tasks];
 			for (int k = 0; k < tasks; k++) {
 				final int kk = k;
-				future[k] = executor.submit(() -> resize_range(old_buckets, chunk_size * kk, chunk_size * (kk + 1)));
+				future[k] = ThreadPool.executor
+						.submit(() -> resize_range(old_buckets, chunk_size * kk, chunk_size * (kk + 1)));
 			}
 			for (int k = 0; k < tasks; k++)
 				histogram = merge(histogram, get(future[k]));

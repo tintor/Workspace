@@ -9,9 +9,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 
-import tintor.common.ParallelParametrized;
+import tintor.common.ParallelParameterized;
 
-@RunWith(ParallelParametrized.class)
+@RunWith(ParallelParameterized.class)
 public class SolverTest {
 	static ArrayList<Object[]> tests = new ArrayList<Object[]>();
 
@@ -24,6 +24,8 @@ public class SolverTest {
 
 	@Parameters(name = "{0}")
 	public static Collection<Object[]> data() {
+		test("microban:98", 269);
+		test("microban:117", 178);
 		test("microban:1", 33);
 		test("microban:2", 16);
 		test("microban:3", 41);
@@ -121,8 +123,7 @@ public class SolverTest {
 		test("microban:95", 25);
 		test("microban:96", 92);
 		test("microban:97", 164);
-		test("microban:98", 269);
-		test("microban:99", 349);
+		test("microban:99", -349);
 		test("microban:100", 155);
 		test("microban:101", 79);
 		test("microban:102", 149);
@@ -139,7 +140,6 @@ public class SolverTest {
 		test("microban:114", -227);
 		test("microban:115", -110);
 		test("microban:116", 63);
-		test("microban:117", 178);
 		test("microban:118", 172);
 		test("microban:119", 131);
 		test("microban:120", 183);
@@ -186,7 +186,7 @@ public class SolverTest {
 	@Parameter(1)
 	public int expected;
 
-	@Test
+	@Test(timeout = 9000)
 	public void solve() {
 		Level level = new Level(filename);
 		level.print(level.start);

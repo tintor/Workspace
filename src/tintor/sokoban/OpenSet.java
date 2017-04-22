@@ -16,8 +16,8 @@ final class OpenSet {
 	private final Timer timer_addUnsafe = new Timer();
 	private final Timer timer_removeMin = new Timer();
 
-	OpenSet(int alive) {
-		set = new InlineChainingHashSet(16, alive);
+	OpenSet(int alive, boolean enable_parallel_hashtable_resize) {
+		set = new InlineChainingHashSet(16, alive, enable_parallel_hashtable_resize);
 	}
 
 	long report(int cycles) {

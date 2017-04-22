@@ -9,7 +9,7 @@ import tintor.common.Zobrist;
 
 // State without boxes
 abstract class StateBase extends InlineChainingHashSet.Element {
-	StateBase(int agent, int dist, int dir, boolean is_push) {
+	StateBase(int agent, int dist, int dir, int pushes) {
 		assert 0 <= agent && agent < 256;
 		this.agent = (byte) agent;
 
@@ -19,8 +19,8 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 		assert -1 <= dir && dir < 4;
 		this.dir = (byte) dir;
 
-		assert dir != -1 || !is_push;
-		this.is_push = is_push;
+		assert pushes == 0 || dir != -1;
+		this.pushes = (byte) pushes;
 	}
 
 	public int agent() {
@@ -35,21 +35,18 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 		return (int) total_dist & 0xFFFF;
 	}
 
+	public boolean is_push() {
+		return pushes != 0;
+	}
+
+	public int pushes() {
+		return (int) pushes & 0xFF;
+	}
+
 	public void set_heuristic(int heuristic) {
 		assert heuristic >= 0 && heuristic < 65536 - dist() : heuristic;
 		this.total_dist = (short) (dist() + heuristic);
 	}
-
-	// Identity (primary key)
-	private final byte agent;
-
-	// Properties of State
-	final byte dir; // direction of move from previous state
-	private final short dist;
-	final boolean is_push;
-
-	// Transient fields for OpenSet
-	private short total_dist; // = distance from start + heuristic to goal
 
 	static {
 		Assert.assertEquals(24, Measurer.sizeOf(StateBase.class));
@@ -81,11 +78,23 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 		}
 		return hash;
 	}
+
+	// Identity (primary key)
+	private final byte agent;
+
+	// Properties of State
+	final byte dir; // direction of move from previous state
+	private final short dist;
+	private final byte pushes; // number of box pushes from single call to State.move()
+
+	// Transient fields for OpenSet
+	private short total_dist; // = distance from start + heuristic to goal
 }
 
 final class State extends StateBase implements Comparable<State> {
-	State(int agent, long box0, long box1, int dist, int dir, boolean is_push) {
-		super(agent, dist, dir, is_push);
+	State(int agent, long box0, long box1, int dist, int dir, int pushes) {
+		super(agent, dist, dir, pushes);
+		assert agent >= 128 || !Bits.test(box0, box1, agent);
 		this.box0 = box0;
 		this.box1 = box1;
 	}
@@ -116,33 +125,41 @@ final class State extends StateBase implements Comparable<State> {
 		return StateBase.hashCode(agent(), box0, box1, (Integer) context);
 	}
 
-	private static boolean EnableMoveMacros = false;
-	private static boolean EnablePushMacros = false;
-
 	State prev(Level level) {
 		int a = level.rmove(agent(), dir);
 		assert 0 <= a && a < level.cells;
-		if (!is_push) {
+		if (pushes() == 0) {
 			int dist = dist() - 1;
 			int prev = agent();
-			// keep moving until the end of tunnel
-			while (EnableMoveMacros && level.moves[a].length == 2 && dist > 0) {
+			// forced move: keep moving until the end of tunnel
+			while (level.moves[a].length == 2 && dist > level.low.dist) {
 				assert level.moves[a][0] == prev || level.moves[a][1] == prev;
 				int next = prev ^ level.moves[a][0] ^ level.moves[a][1];
+				assert next != a;
 				if (box(next))
 					break;
 				prev = a;
 				a = next;
 				dist -= 1;
 			}
-			return new State(a, box0, box1, dist, -1, false);
+			assert a != agent();
+			assert dist >= level.low.dist;
+			return new State(a, box0, box1, dist, -1, 0);
 		}
 
 		assert 0 <= dir && dir < 4;
-		int c = level.move(agent(), dir);
-		assert box(c);
 		int b = agent();
 		assert 0 <= b && b < level.alive;
+		assert !box(b);
+		for (int i = 0; i < pushes() - 1; i++) {
+			b = level.rmove(b, dir);
+			assert 0 <= b && b < level.alive;
+			assert !box(b);
+		}
+
+		int c = level.move(agent(), dir);
+		assert 0 <= c && c < level.alive;
+		assert box(c);
 
 		long nbox0 = box0;
 		long nbox1 = box1;
@@ -154,26 +171,8 @@ final class State extends StateBase implements Comparable<State> {
 			nbox0 = Bits.set(nbox0, b);
 		else
 			nbox1 = Bits.set(nbox1, b - 64);
-		int dist = dist() - 1;
 
-		// keep pulling box until the end of tunnel
-		while (EnablePushMacros && level.moves[a].length == 2 && level.moves[b].length == 2 && !level.goal(b)
-				&& level.rmove(a, dir) != -1 && !box(level.rmove(a, dir)) && dist > 0) {
-			c = b;
-			b = a;
-			a = level.rmove(a, dir);
-			assert b < level.alive;
-			if (c < 64)
-				nbox0 = Bits.clear(nbox0, c);
-			else
-				nbox1 = Bits.clear(nbox1, c - 64);
-			if (b < 64)
-				nbox0 = Bits.set(nbox0, b);
-			else
-				nbox1 = Bits.set(nbox1, b - 64);
-			dist -= 1;
-		}
-		return new State(a, nbox0, nbox1, dist, -1, false);
+		return new State(level.rmove(b, dir), nbox0, nbox1, dist() - pushes(), -1, 0);
 	}
 
 	State move(int dir, Level level) {
@@ -184,10 +183,11 @@ final class State extends StateBase implements Comparable<State> {
 		if (!box(a)) {
 			int dist = dist() + 1;
 			int prev = agent();
-			// keep moving until the end of tunnel
-			while (EnableMoveMacros && level.moves[a].length == 2) {
+			// forced move: keep moving until the end of tunnel
+			while (level.moves[a].length == 2) {
 				assert level.moves[a][0] == prev || level.moves[a][1] == prev;
 				int next = prev ^ level.moves[a][0] ^ level.moves[a][1];
+				assert next != a;
 				if (box(next))
 					break;
 				dir = level.delta[a][next];
@@ -195,7 +195,7 @@ final class State extends StateBase implements Comparable<State> {
 				a = next;
 				dist += 1;
 			}
-			return new State(a, box0, box1, dist, dir, false);
+			return new State(a, box0, box1, dist, dir, 0);
 		}
 
 		int b = level.move(a, dir);
@@ -212,19 +212,17 @@ final class State extends StateBase implements Comparable<State> {
 				nbox0 = Bits.set(nbox0, b);
 			else
 				nbox1 = Bits.set(nbox1, b - 64);
-			int dist = dist() + 1;
-
-			// TODO If box is on (non-goal) bottleneck push it again (note, it might require going around the box)
-			//      This macro should go in the main solver.
+			int pushes = 1;
 
 			// keep pushing box until the end of tunnel
-			while (EnablePushMacros && level.moves[a].length == 2 && level.moves[b].length == 2 && !level.goal(b)) {
+			//  level.tunnel(a) && level.bottleneck[b]
+			while (!level.goal(b) && level.tunnel(a) && level.tunnel(b)) {
 				// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
-				if (box(level.move(b, dir)))
-					return null;
+				int c = level.move(b, dir);
+				if (c == -1 || c >= level.alive || box(c))
+					break; //return null;
 				a = b;
-				b = level.move(b, dir);
-				assert b != -1 && b < level.alive;
+				b = c;
 				assert dir == level.delta[a][b];
 				if (a < 64)
 					nbox0 = Bits.clear(nbox0, a);
@@ -234,17 +232,18 @@ final class State extends StateBase implements Comparable<State> {
 					nbox0 = Bits.set(nbox0, b);
 				else
 					nbox1 = Bits.set(nbox1, b - 64);
-				dist += 1;
+				pushes += 1;
 			}
-			return new State(a, nbox0, nbox1, dist, dir, true);
+
+			return new State(a, nbox0, nbox1, dist() + pushes, dir, pushes);
 		}
 		return null;
 	}
 
-	final long box0;
-	final long box1;
-
 	static {
 		Assert.assertEquals(40, Measurer.sizeOf(State.class));
 	}
+
+	final long box0;
+	final long box1;
 }

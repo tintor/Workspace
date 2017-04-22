@@ -71,7 +71,31 @@ class LowLevel {
 			throw new IllegalArgumentException("no boxes");
 		if (boxes != goals)
 			throw new IllegalArgumentException("count(box) != count(goal) " + boxes + " vs. " + goals);
-		agent();
+
+		// try to move agent and remove walkable dead cells
+		int a = agent();
+		int d = 0;
+		while (degree(a) == 1) {
+			int b = moves(a, 0);
+			if (buffer[b] != Space)
+				break;
+			buffer[a] = Wall;
+			buffer[b] = Agent;
+			a = b;
+			d += 1;
+		}
+		dist = d;
+		System.out.println(buffer);
+
+		// remove dead end cells
+		for (int p = 0; p < cells; p++) {
+			a = p;
+			while (degree(a) == 1 && buffer[a] == Space) {
+				int b = moves(a, 0);
+				buffer[a] = Wall;
+				a = b;
+			}
+		}
 	}
 
 	public static interface IndexToChar {
@@ -131,6 +155,13 @@ class LowLevel {
 			if (move(pos, dir) != Level.Bad)
 				count += 1;
 		return count;
+	}
+
+	int moves(int pos, int i) {
+		for (int dir = 0; dir < 4; dir += 1)
+			if (move(pos, dir) != Level.Bad && i-- == 0)
+				return move(pos, dir);
+		return Level.Bad;
 	}
 
 	int end_of_half_tunnel(int pos, boolean[] alive) {
@@ -210,6 +241,7 @@ class LowLevel {
 				set[a][b] = true;
 			}
 
+			// TODO make it faster (heuristic)
 			while (!queue.isEmpty()) {
 				final Triple s = queue.pollFirst();
 				for (int dir = 0; dir < 4; dir++) {
@@ -267,6 +299,7 @@ class LowLevel {
 	final static char Space = ' ';
 
 	final int width, cells;
+	final int dist; // initial distance of agent
 	final char[] buffer;
 	protected int[] new_to_old;
 }

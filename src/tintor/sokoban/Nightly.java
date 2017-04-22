@@ -11,10 +11,10 @@ public class Nightly {
 
 	public static void main(String[] args) {
 		int solved = 0;
-		for (int i = 1; i <= 90; i++) {
+		for (int i = 1; i <= 155; i++) {
 			try {
-				Level level = new Level("original:" + i);
-				Log.info("original:%d cells:%d alive:%d boxes:%d state_space:%s", i, level.cells, level.alive,
+				Level level = new Level("microban:" + i);
+				Log.info("microban:%d cells:%d alive:%d boxes:%d state_space:%s", i, level.cells, level.alive,
 						level.num_boxes, level.state_space());
 				Deadlock deadlock = new Deadlock(level);
 				Solver.Context context = new Solver.Context();
@@ -34,6 +34,7 @@ public class Nightly {
 			} catch (Exception e) {
 				Log.info("exception after %s", timer.human());
 				System.out.println(e);
+				e.printStackTrace();
 			}
 			timer.total = 0;
 		}

@@ -46,7 +46,6 @@ class Monitor {
 		System.out.printf("speed:%s [%s] ", Util.human((int) speed), timer.clear());
 		System.out.printf("branch:%.2f ", (double) branches / closes);
 		System.out.printf("memory:%s\n", Util.human(Runtime.getRuntime().freeMemory()));
-
 		branches = closes = 0;
 
 		level.print(a);

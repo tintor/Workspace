@@ -31,10 +31,6 @@ import tintor.common.Util;
 //       State.equals and State.hashCode to treat symmetrical states as equal (also deadlock patterns)
 //       Compute all symmetry transforms: int->int for use in equals and hashCode.
 // TODO: search from end backwards and from start forwards and meet in the middle?
-// TODO: How to optimize alive tunnels?
-//       1) compress them as they can contain at most one box (if no goals) -> reduces number of alive cells
-//       2) or push box all the way then it enters tunnel
-// TODO: compress agent-only tunnels -> reduces total number of cells
 // TODO: How to optimize goal room with single entrance? Two entrances?
 // TODO: What states can we cut without eliminating: all solutions / optimal solution? (tunnels for example)
 // TODO: Split level into sub-levels that can be solved independently
@@ -43,8 +39,6 @@ import tintor.common.Util;
 // TODO: use SparseHashSet for ClosedSet
 // TODO: store States in OpenSet as compacted (works well with removal of binary heap)
 // TODO: compact States to byte[] in ClosedSet
-// TODO: use int[] instead of boolean[] for boxes everywhere! (easier to transition to and more compact than boolean[])
-// TODO: use 2xlong instead of boolean[] for boxes everywhere! (how to handle >128 alive cells? find all levels which need >128)
 // TODO: in OpenSet use array of hash sets (one for each total_dist). This way we can remove total_dist fields and binary heap array!
 //       It also prevents use of secondary priority.
 // TODO: How to remove states from ClosedSet and OpenSet that were later found to be deadlocks?
@@ -151,7 +145,8 @@ public class Solver {
 
 		// Generate initial deadlock patterns
 		if (context.enable_populate) {
-			InlineChainingHashSet set = new InlineChainingHashSet(1 << 20, level);
+			InlineChainingHashSet set = new InlineChainingHashSet(1 << 20, level,
+					context.enable_parallel_hashtable_resize);
 			ArrayDeque<State> queue = new ArrayDeque<State>();
 			queue.add(start);
 			while (!queue.isEmpty() && set.size() < (1 << 20) - 3) {
@@ -160,7 +155,7 @@ public class Solver {
 					State b = a.move(dir, level);
 					if (b == null || set.contains(b))
 						continue;
-					if (b.is_push && deadlock.check(b))
+					if (b.is_push() && deadlock.check(b))
 						continue;
 					queue.addLast(b);
 					set.addUnsafe(b);
@@ -171,8 +166,8 @@ public class Solver {
 			}
 		}
 
-		final ClosedSet closed = new ClosedSet(level.alive);
-		final OpenSet open = new OpenSet(level.alive);
+		final ClosedSet closed = new ClosedSet(level.alive, context.enable_parallel_hashtable_resize);
+		final OpenSet open = new OpenSet(level.alive, context.enable_parallel_hashtable_resize);
 		open.addUnsafe(start);
 
 		final Monitor monitor = new Monitor();
@@ -180,6 +175,7 @@ public class Solver {
 		monitor.open = open;
 		monitor.deadlock = deadlock;
 		monitor.level = level;
+		monitor.heuristic = heuristic;
 		monitor.timer.start();
 
 		while (open.size() > 0) {
@@ -194,7 +190,7 @@ public class Solver {
 			}
 
 			int reverse_dir = -1;
-			if (!a.is_push && a.dir != -1)
+			if (!a.is_push() && a.dir != -1)
 				reverse_dir = Level.reverseDir(a.dir);
 			for (int dir : level.dirs[a.agent()]) {
 				if (dir == reverse_dir)
@@ -204,7 +200,7 @@ public class Solver {
 					continue;
 
 				State v = open.get(b);
-				if (v == null && b.is_push && deadlock.check(b))
+				if (v == null && b.is_push() && deadlock.check(b))
 					continue;
 
 				/*if (context.enable_greedy)
@@ -235,7 +231,7 @@ public class Solver {
 	static void printSolution(Level level, State[] solution) {
 		ArrayList<State> pushes = new ArrayList<State>();
 		for (State s : solution)
-			if (s.is_push)
+			if (s.is_push())
 				pushes.add(s);
 		for (int i = 0; i < pushes.size(); i++) {
 			State s = pushes.get(i);
@@ -248,7 +244,7 @@ public class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
-		Level level = new Level("microban:139");
+		Level level = new Level("original:1");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
@@ -265,13 +261,14 @@ public class Solver {
 			Log.info("no solution! %s", timer.human());
 		} else {
 			printSolution(level, solution);
-			Log.info("solved in %d steps! %s", solution.length, timer.human());
+			Log.info("solved in %d steps! %s", solution[solution.length - 1].dist(), timer.human());
 		}
 		Log.info("closed:%s open:%s patterns:%s", context.closed_set_size, context.open_set_size,
 				Util.human(deadlock.patterns));
 	}
 
 	static class Context {
+		boolean enable_parallel_hashtable_resize;
 		boolean enable_populate;
 		boolean enable_greedy;
 		int trace; // 0 to turn off any tracing

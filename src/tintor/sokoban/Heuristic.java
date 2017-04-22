@@ -51,7 +51,7 @@ final class Heuristic {
 
 	public int evaluate(State s, State prev) {
 		try (Timer t = timer.start()) {
-			int h = (prev != null && !s.is_push) ? evaluate_delta(s, prev) : evaluate_internal(s);
+			int h = (prev != null && !s.is_push()) ? evaluate_delta(s, prev) : evaluate_internal(s);
 			assert h >= 0;
 			if (h == Integer.MAX_VALUE) {
 				deadlocks += 1;

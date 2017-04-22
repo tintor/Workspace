@@ -13,11 +13,12 @@ import tintor.common.Timer;
 class ClosedSet {
 	static abstract class CompactStateBase extends InlineChainingHashSet.Element {
 		byte agent;
-		byte dir_and_is_push;
+		byte dir;
 		short dist;
+		byte pushes;
 
 		static {
-			// real size is 20, but gets aligned to 24
+			// real size is 21, and gets aligned to 24
 			Assert.assertEquals(24, Measurer.sizeOf(CompactStateBase.class));
 		}
 	}
@@ -75,8 +76,9 @@ class ClosedSet {
 			c = e;
 		}
 		c.agent = (byte) s.agent();
-		assert !s.is_push || (0 <= s.dir && s.dir < 4);
-		c.dir_and_is_push = (byte) (s.is_push ? s.dir + 4 : s.dir);
+		assert !s.is_push() || (0 <= s.dir && s.dir < 4);
+		c.dir = (byte) s.dir;
+		c.pushes = (byte) s.pushes();
 		c.dist = (short) s.dist();
 		return c;
 	}
@@ -87,13 +89,11 @@ class ClosedSet {
 
 		if (c instanceof CompactState1) {
 			CompactState1 e = (CompactState1) c;
-			int dir = c.dir_and_is_push >= 4 ? c.dir_and_is_push - 4 : c.dir_and_is_push;
-			return new State((int) c.agent & 0xFF, e.box0, 0, c.dist, dir, c.dir_and_is_push >= 4);
+			return new State((int) c.agent & 0xFF, e.box0, 0, c.dist, c.dir, c.pushes);
 		}
 
 		CompactState2 e = (CompactState2) c;
-		int dir = c.dir_and_is_push >= 4 ? c.dir_and_is_push - 4 : c.dir_and_is_push;
-		return new State((int) c.agent & 0xFF, e.box0, e.box1, c.dist, dir, c.dir_and_is_push >= 4);
+		return new State((int) c.agent & 0xFF, e.box0, e.box1, c.dist, c.dir, c.pushes);
 	}
 
 	// set of CompactState2
@@ -108,8 +108,8 @@ class ClosedSet {
 	final Timer timer_contains = new Timer();
 	final Timer timer_get = new Timer();
 
-	public ClosedSet(int box_length) {
-		set = new InlineChainingHashSet(16, box_length);
+	public ClosedSet(int box_length, boolean enable_parallel_hashtable_resize) {
+		set = new InlineChainingHashSet(16, box_length, enable_parallel_hashtable_resize);
 		this.box_length = box_length;
 		key_size = 2 + (box_length + 7) / 8;
 		map = new ExternalBTree(512, key_size, value_size);
@@ -160,12 +160,12 @@ class ClosedSet {
 				return null;
 
 			ByteBuffer b = ByteBuffer.wrap(value, 0, value.length);
-			short dist = b.getShort();
+			int dist = ((int) b.getShort()) & 0xFFFF;
 			byte dir = b.get();
-			boolean is_push = getBoolean(b);
+			int pushes = ((int) b.get()) & 0xFF;
 			assert b.remaining() == 0;
 
-			return new State(s.agent(), s.box0, s.box1, dist, dir, is_push);
+			return new State(s.agent(), s.box0, s.box1, dist, dir, pushes);
 		}
 	}
 
@@ -174,7 +174,7 @@ class ClosedSet {
 		b.position(0);
 		b.putShort((short) state.dist());
 		b.put(state.dir);
-		put(b, state.is_push);
+		b.put((byte) state.pushes());
 		assert b.remaining() == 0;
 		return b.array();
 	}

@@ -76,7 +76,7 @@ class Level {
 			if (low.box(i))
 				box[old_to_new[i]] = true;
 
-		start = new State(old_to_new[low.agent()], Util.compress(box, 0), Util.compress(box, 1), 0, -1, false);
+		start = new State(old_to_new[low.agent()], Util.compress(box, 0), Util.compress(box, 1), low.dist, -1, 0);
 		goal0 = Util.compress(goal, 0);
 		goal1 = Util.compress(goal, 1);
 		num_boxes = Util.count(box);
@@ -228,6 +228,12 @@ class Level {
 
 	boolean is_solved(State s) {
 		return (s.box0 | goal0) == goal0 && (s.box1 | goal1) == goal1;
+	}
+
+	boolean tunnel(int pos) {
+		if (moves[pos].length != 2)
+			return false;
+		return (move(pos, Left) == -1 && move(pos, Right) == -1) || (move(pos, Up) == -1 && move(pos, Down) == -1);
 	}
 
 	public static final ThreadLocal<Level> current = new ThreadLocal<Level>();

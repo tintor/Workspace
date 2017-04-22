@@ -11,7 +11,7 @@ import tintor.common.Visitor;
 class LevelUtil {
 	// TODO be more strict: try to go around box, push it back and return to original agent position
 	static boolean is_reverseable_push(State s, Level level) {
-		assert s.is_push;
+		assert s.is_push();
 		int c = level.move(level.move(s.agent(), s.dir), s.dir);
 		if (c == -1 || s.box(c))
 			return false;
@@ -532,7 +532,7 @@ class Deadlock {
 
 	boolean check(State s) {
 		try (Timer t = timer.start()) {
-			if (s.is_push && LevelUtil.is_reverseable_push(s, level)) {
+			if (s.is_push() && LevelUtil.is_reverseable_push(s, level)) {
 				reversable += 1;
 				return false;
 			}
