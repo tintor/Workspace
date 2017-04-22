@@ -7,7 +7,6 @@ public class StateTest {
 	@Test
 	public void move_macro() {
 		Level level = new Level("test:8");
-		level.print(level.start);
 		int a = level.start.agent();
 		State s = level.start.move(Level.Down, level);
 		// TODO
@@ -24,7 +23,6 @@ public class StateTest {
 	@Test
 	public void push_macro_simple() {
 		Level level = new Level("test:9");
-		level.print(level.start);
 		int a = level.start.agent();
 		State s = level.start.move(Level.Right, level);
 		// TODO

@@ -13,6 +13,10 @@ class Level {
 		private static final long serialVersionUID = 1L;
 	}
 
+	static class MoreThan256CellsError extends Error {
+		private static final long serialVersionUID = 1L;
+	}
+
 	final LowLevel low;
 
 	// direction
@@ -35,6 +39,8 @@ class Level {
 		final boolean[] walkable = low.compute_walkable();
 		cells = Util.count(walkable);
 		Zobrist.ensure(128 + cells);
+		if (cells > 256)
+			throw new MoreThan256CellsError();
 
 		final boolean[] is_alive = low.compute_alive(walkable);
 		alive = Util.count(is_alive);

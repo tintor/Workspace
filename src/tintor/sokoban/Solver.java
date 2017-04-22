@@ -244,12 +244,14 @@ public class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
+		//Level level = new Level("microban1:139");
 		Level level = new Level("original:1");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
 		Context context = new Context();
 		context.trace = 1;
+		context.enable_parallel_hashtable_resize = true;
 		context.enable_populate = false;
 		context.enable_greedy = false;
 

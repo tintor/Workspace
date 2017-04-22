@@ -10,7 +10,7 @@ import tintor.common.Zobrist;
 // State without boxes
 abstract class StateBase extends InlineChainingHashSet.Element {
 	StateBase(int agent, int dist, int dir, int pushes) {
-		assert 0 <= agent && agent < 256;
+		assert 0 <= agent && agent < 256 : agent;
 		this.agent = (byte) agent;
 
 		assert 0 <= dist && dist <= Short.MAX_VALUE : dist;
@@ -188,6 +188,7 @@ final class State extends StateBase implements Comparable<State> {
 				assert level.moves[a][0] == prev || level.moves[a][1] == prev;
 				int next = prev ^ level.moves[a][0] ^ level.moves[a][1];
 				assert next != a;
+				// TODO try to push the box OR return null
 				if (box(next))
 					break;
 				dir = level.delta[a][next];
@@ -220,7 +221,7 @@ final class State extends StateBase implements Comparable<State> {
 				// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
 				int c = level.move(b, dir);
 				if (c == -1 || c >= level.alive || box(c))
-					break; //return null;
+					return null;
 				a = b;
 				b = c;
 				assert dir == level.delta[a][b];
