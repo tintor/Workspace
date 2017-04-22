@@ -150,6 +150,7 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		if (old_buckets.length > min_chunk_size) {
 			int tasks = Math.max(8, old_buckets.length / min_chunk_size);
 			final int chunk_size = old_buckets.length / tasks;
+			@SuppressWarnings("unchecked")
 			Future<int[]>[] future = new Future[tasks];
 			for (int k = 0; k < tasks; k++) {
 				final int kk = k;

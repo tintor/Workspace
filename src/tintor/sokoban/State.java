@@ -13,7 +13,7 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 		assert 0 <= agent && agent < 256;
 		this.agent = (byte) agent;
 
-		assert 0 <= dist && dist <= Short.MAX_VALUE;
+		assert 0 <= dist && dist <= Short.MAX_VALUE : dist;
 		this.dist = (short) dist;
 
 		assert -1 <= dir && dir < 4;
@@ -36,7 +36,7 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 	}
 
 	public void set_heuristic(int heuristic) {
-		assert heuristic >= 0 && heuristic < 65536 - dist();
+		assert heuristic >= 0 && heuristic < 65536 - dist() : heuristic;
 		this.total_dist = (short) (dist() + heuristic);
 	}
 
@@ -116,27 +116,64 @@ final class State extends StateBase implements Comparable<State> {
 		return StateBase.hashCode(agent(), box0, box1, (Integer) context);
 	}
 
+	private static boolean EnableMoveMacros = false;
+	private static boolean EnablePushMacros = false;
+
 	State prev(Level level) {
-		int a = level.move(agent(), Level.reverseDir(dir));
+		int a = level.rmove(agent(), dir);
 		assert 0 <= a && a < level.cells;
-		if (!is_push)
-			return new State(a, box0, box1, dist() - 1, -1, false);
+		if (!is_push) {
+			int dist = dist() - 1;
+			int prev = agent();
+			// keep moving until the end of tunnel
+			while (EnableMoveMacros && level.moves[a].length == 2 && dist > 0) {
+				assert level.moves[a][0] == prev || level.moves[a][1] == prev;
+				int next = prev ^ level.moves[a][0] ^ level.moves[a][1];
+				if (box(next))
+					break;
+				prev = a;
+				a = next;
+				dist -= 1;
+			}
+			return new State(a, box0, box1, dist, -1, false);
+		}
 
 		assert 0 <= dir && dir < 4;
-		int b = level.move(agent(), dir);
+		int c = level.move(agent(), dir);
+		assert box(c);
+		int b = agent();
 		assert 0 <= b && b < level.alive;
 
 		long nbox0 = box0;
 		long nbox1 = box1;
+		if (c < 64)
+			nbox0 = Bits.clear(nbox0, c);
+		else
+			nbox1 = Bits.clear(nbox1, c - 64);
 		if (b < 64)
-			nbox0 = Bits.clear(nbox0, b);
+			nbox0 = Bits.set(nbox0, b);
 		else
-			nbox1 = Bits.clear(nbox1, b - 64);
-		if (agent() < 64)
-			nbox0 = Bits.set(nbox0, agent());
-		else
-			nbox1 = Bits.set(nbox1, agent() - 64);
-		return new State(a, nbox0, nbox1, dist() - 1, -1, false);
+			nbox1 = Bits.set(nbox1, b - 64);
+		int dist = dist() - 1;
+
+		// keep pulling box until the end of tunnel
+		while (EnablePushMacros && level.moves[a].length == 2 && level.moves[b].length == 2 && !level.goal(b)
+				&& level.rmove(a, dir) != -1 && !box(level.rmove(a, dir)) && dist > 0) {
+			c = b;
+			b = a;
+			a = level.rmove(a, dir);
+			assert b < level.alive;
+			if (c < 64)
+				nbox0 = Bits.clear(nbox0, c);
+			else
+				nbox1 = Bits.clear(nbox1, c - 64);
+			if (b < 64)
+				nbox0 = Bits.set(nbox0, b);
+			else
+				nbox1 = Bits.set(nbox1, b - 64);
+			dist -= 1;
+		}
+		return new State(a, nbox0, nbox1, dist, -1, false);
 	}
 
 	State move(int dir, Level level) {
@@ -144,8 +181,22 @@ final class State extends StateBase implements Comparable<State> {
 		int a = level.move(agent(), dir);
 		if (a == -1)
 			return null;
-		if (!box(a))
-			return new State(a, box0, box1, dist() + 1, dir, false);
+		if (!box(a)) {
+			int dist = dist() + 1;
+			int prev = agent();
+			// keep moving until the end of tunnel
+			while (EnableMoveMacros && level.moves[a].length == 2) {
+				assert level.moves[a][0] == prev || level.moves[a][1] == prev;
+				int next = prev ^ level.moves[a][0] ^ level.moves[a][1];
+				if (box(next))
+					break;
+				dir = level.delta[a][next];
+				prev = a;
+				a = next;
+				dist += 1;
+			}
+			return new State(a, box0, box1, dist, dir, false);
+		}
 
 		int b = level.move(a, dir);
 		if (b == -1 || b >= level.alive)
@@ -161,7 +212,31 @@ final class State extends StateBase implements Comparable<State> {
 				nbox0 = Bits.set(nbox0, b);
 			else
 				nbox1 = Bits.set(nbox1, b - 64);
-			return new State(a, nbox0, nbox1, dist() + 1, dir, true);
+			int dist = dist() + 1;
+
+			// TODO If box is on (non-goal) bottleneck push it again (note, it might require going around the box)
+			//      This macro should go in the main solver.
+
+			// keep pushing box until the end of tunnel
+			while (EnablePushMacros && level.moves[a].length == 2 && level.moves[b].length == 2 && !level.goal(b)) {
+				// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
+				if (box(level.move(b, dir)))
+					return null;
+				a = b;
+				b = level.move(b, dir);
+				assert b != -1 && b < level.alive;
+				assert dir == level.delta[a][b];
+				if (a < 64)
+					nbox0 = Bits.clear(nbox0, a);
+				else
+					nbox1 = Bits.clear(nbox1, a - 64);
+				if (b < 64)
+					nbox0 = Bits.set(nbox0, b);
+				else
+					nbox1 = Bits.set(nbox1, b - 64);
+				dist += 1;
+			}
+			return new State(a, nbox0, nbox1, dist, dir, true);
 		}
 		return null;
 	}

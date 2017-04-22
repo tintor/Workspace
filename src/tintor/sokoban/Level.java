@@ -9,6 +9,10 @@ import tintor.common.Visitor;
 import tintor.common.Zobrist;
 
 class Level {
+	static class MoreThan128AliveCellsError extends Error {
+		private static final long serialVersionUID = 1L;
+	}
+
 	final LowLevel low;
 
 	// direction
@@ -27,29 +31,29 @@ class Level {
 
 	Level(String filename) {
 		low = new LowLevel(filename);
-		final int[] min_dist_to_solve = low.compute_min_dist_to_solve();
+
 		final boolean[] walkable = low.compute_walkable();
 		cells = Util.count(walkable);
 		Zobrist.ensure(128 + cells);
 
-		// Compress level (find non-dead cells and agent only cells)
-		alive = Util.count(low.cells, i -> min_dist_to_solve[i] != Integer.MAX_VALUE);
+		final boolean[] is_alive = low.compute_alive(walkable);
+		alive = Util.count(is_alive);
 		if (alive > 128)
-			throw new IllegalArgumentException("more than 128 alive cells");
+			throw new MoreThan128AliveCellsError();
 
 		int b = 0;
 		int[] old_to_new = new int[low.cells];
 		low.new_to_old = new int[cells];
 		Arrays.fill(old_to_new, -1);
 		for (int a = 0; a < low.cells; a++)
-			if (min_dist_to_solve[a] != Integer.MAX_VALUE) {
+			if (is_alive[a]) {
 				old_to_new[a] = b;
 				low.new_to_old[b] = a;
 				b += 1;
 			}
 		assert b == alive;
 		for (int a = 0; a < low.cells; a++)
-			if (walkable[a] && min_dist_to_solve[a] == Integer.MAX_VALUE) {
+			if (walkable[a] && !is_alive[a]) {
 				assert old_to_new[a] == -1;
 				old_to_new[a] = b;
 				low.new_to_old[b] = a;
@@ -72,7 +76,7 @@ class Level {
 			if (low.box(i))
 				box[old_to_new[i]] = true;
 
-		start = new State(old_to_new[low.agent], Util.compress(box, 0), Util.compress(box, 1), 0, -1, false);
+		start = new State(old_to_new[low.agent()], Util.compress(box, 0), Util.compress(box, 1), 0, -1, false);
 		goal0 = Util.compress(goal, 0);
 		goal1 = Util.compress(goal, 1);
 		num_boxes = Util.count(box);
@@ -83,12 +87,37 @@ class Level {
 		dirs = new int[cells][];
 		delta = new int[cells][cells];
 		agent_distance = new int[cells][cells];
+		bottleneck = new boolean[cells];
 
 		compute_moves_and_dirs();
 		compute_delta();
 		compute_agent_distance();
+		compute_bottlenecks();
 
 		current.set(this);
+	}
+
+	private int find_bottlenecks(int a, int[] discovery, int parent, int[] time) {
+		int children = 0;
+		int low_a = discovery[a] = ++time[0];
+		for (int b : moves[a])
+			if (discovery[b] == 0) {
+				children += 1;
+				int low_b = find_bottlenecks(b, discovery, a, time);
+				low_a = Math.min(low_a, low_b);
+				if (parent != -1 && low_b >= discovery[a])
+					bottleneck[a] = true;
+			} else if (b != parent)
+				low_a = Math.min(low_a, discovery[b]);
+		if (parent == -1 && children > 1)
+			bottleneck[a] = true;
+		return low_a;
+	}
+
+	void compute_bottlenecks() {
+		int[] discovery = new int[cells];
+		int[] time = new int[1];
+		find_bottlenecks(0, discovery, -1, time);
 	}
 
 	private void compute_moves_and_dirs() {
@@ -163,6 +192,10 @@ class Level {
 		print(p -> s.agent() == p, p -> s.box(p));
 	}
 
+	void print_alive(State s) {
+		low.print(p -> p < alive ? '.' : ' ');
+	}
+
 	int move(int src, int dir) {
 		assert 0 <= src && src < cells : src + " vs " + cells;
 		assert 0 <= dir && dir < 4 : dir;
@@ -170,6 +203,10 @@ class Level {
 		assert dest == Bad || (0 <= dest && dest < cells);
 		assert dest != src;
 		return dest;
+	}
+
+	int rmove(int src, int dir) {
+		return move(src, reverseDir(dir));
 	}
 
 	boolean goal(int i) {
@@ -199,6 +236,7 @@ class Level {
 	final int[][] dirs;
 	final int[][] delta;
 	final int[][] agent_distance;
+	final boolean[] bottleneck;
 	final Visitor visitor;
 
 	final int alive; // number of cells that can contain boxes

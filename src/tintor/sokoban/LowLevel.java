@@ -11,35 +11,39 @@ import tintor.common.Util;
 import tintor.common.Visitor;
 
 class LowLevel {
+	private static String preprocess(String line) {
+		if (line.startsWith("'") || line.startsWith(";") || line.trim().isEmpty() || Regex.matches(line, "^Level\\s+"))
+			return "";
+		return line;
+	}
+
 	static ArrayList<String> loadLevelLines(String filename) {
-		int levelNo = -1;
+		int desiredLevelNo = 1;
 		if (Regex.matches(filename, "^(.*):(\\d+)$")) {
 			filename = Regex.group(1);
-			levelNo = Integer.parseInt(Regex.group(2));
+			desiredLevelNo = Integer.parseInt(Regex.group(2));
 		}
 
 		ArrayList<String> lines = new ArrayList<String>();
-		boolean inside = levelNo == -1;
+		int currentLevelNo = 0;
+		boolean inside = false;
 		Scanner sc = Util.scanFile(filename);
 		while (sc.hasNextLine()) {
-			String s = sc.nextLine();
-			if (s.startsWith("'") || s.startsWith(";"))
-				continue;
-			if (inside) {
-				if (s.trim().isEmpty())
-					break;
-				lines.add(s);
-				continue;
-			}
-			if (Regex.matches(s, "^Level (\\d+)$") && Integer.parseInt(Regex.group(1)) == levelNo) {
+			String s = preprocess(sc.nextLine());
+			if (!inside && !s.isEmpty()) {
+				currentLevelNo += 1;
 				inside = true;
-			}
+			} else if (s.isEmpty())
+				inside = false;
+
+			if (inside && currentLevelNo == desiredLevelNo)
+				lines.add(s);
 		}
 		return lines;
 	}
 
 	LowLevel(String filename) {
-		final ArrayList<String> lines = loadLevelLines(filename);
+		final ArrayList<String> lines = loadLevelLines("data/sokoban/" + filename);
 
 		int w = 0;
 		for (String s : lines)
@@ -67,7 +71,7 @@ class LowLevel {
 			throw new IllegalArgumentException("no boxes");
 		if (boxes != goals)
 			throw new IllegalArgumentException("count(box) != count(goal) " + boxes + " vs. " + goals);
-		agent = agent();
+		agent();
 	}
 
 	public static interface IndexToChar {
@@ -107,6 +111,8 @@ class LowLevel {
 	}
 
 	int move(int pos, int dir) {
+		if (wall(pos))
+			return Level.Bad;
 		int m = Level.Bad;
 		if (dir == Level.Left && (pos % width) > 0)
 			m = pos - 1;
@@ -119,15 +125,57 @@ class LowLevel {
 		return (m != Level.Bad && !wall(m)) ? m : Level.Bad;
 	}
 
+	int degree(int pos) {
+		int count = 0;
+		for (int dir = 0; dir < 4; dir += 1)
+			if (move(pos, dir) != Level.Bad)
+				count += 1;
+		return count;
+	}
+
+	int end_of_half_tunnel(int pos, boolean[] alive) {
+		if (!alive[pos] || degree(pos) > 2)
+			return Level.Bad;
+		int count = 0;
+		int b = -1;
+		for (int dir = 0; dir < 4; dir += 1)
+			if (move(pos, dir) != Level.Bad && alive[move(pos, dir)]) {
+				count += 1;
+				b = move(pos, dir);
+			}
+		if (count != 1 || degree(b) != 2)
+			return Level.Bad;
+		count = 0;
+		for (int dir = 0; dir < 4; dir += 1)
+			if (move(b, dir) != Level.Bad && alive[move(b, dir)])
+				count += 1;
+		if (count != 2)
+			return Level.Bad;
+		return b;
+	}
+
 	boolean[] compute_walkable() {
 		Visitor visitor = new Visitor(cells);
-		for (int a : visitor.init(agent))
+		for (int a : visitor.init(agent()))
 			for (byte dir = 0; dir < 4; dir++) {
 				int b = move(a, dir);
 				if (b != Level.Bad && !visitor.visited(b))
 					visitor.add(b);
 			}
+		// remove cells that are far from walkable cells
+		for (int i = 0; i < buffer.length; i++)
+			if (buffer[i] != '\n' && !is_close_to_walkable(i, visitor.visited()))
+				buffer[i] = Space;
 		return visitor.visited();
+	}
+
+	private boolean is_close_to_walkable(int pos, boolean[] walkable) {
+		int x = pos % width, y = pos / width;
+		for (int ax = Math.max(0, x - 1); ax <= Math.min(x + 1, width - 2); ax++)
+			for (int ay = Math.max(0, y - 1); ay <= Math.min(y + 1, buffer.length / width - 1); ay++)
+				if (walkable[ay * width + ax])
+					return true;
+		return false;
 	}
 
 	private static class Triple {
@@ -140,31 +188,28 @@ class LowLevel {
 		}
 	}
 
-	int[] compute_min_dist_to_solve() {
-		int[] result = new int[cells];
+	boolean[] compute_alive(boolean[] walkable) {
+		boolean[] alive = new boolean[cells];
 		Deque<Triple> queue = new ArrayDeque<Triple>();
 		final boolean[][] set = new boolean[cells][cells];
 
 		for (int b = 0; b < cells; b++) {
-			if (wall(b)) {
-				result[b] = Integer.MAX_VALUE;
+			if (!walkable[b])
 				continue;
-			}
 			if (goal(b)) {
-				result[b] = 0;
+				alive[b] = true;
 				continue;
 			}
 
 			queue.clear();
 			for (int a = 0; a < cells; a++) {
 				Arrays.fill(set[a], false);
-				if (wall(a) || !is_next_to(a, b, width))
+				if (wall(a) || !is_next_to(a, b))
 					continue;
 				queue.push(new Triple(a, b, 0));
 				set[a][b] = true;
 			}
 
-			int min_dist = Integer.MAX_VALUE;
 			while (!queue.isEmpty()) {
 				final Triple s = queue.pollFirst();
 				for (int dir = 0; dir < 4; dir++) {
@@ -182,7 +227,7 @@ class LowLevel {
 					if (bp == Level.Bad)
 						continue;
 					if (goal(bp)) {
-						min_dist = s.dist + 1;
+						alive[b] = true;
 						queue.clear();
 						break;
 					}
@@ -192,15 +237,25 @@ class LowLevel {
 					}
 				}
 			}
-			result[b] = min_dist;
 		}
-		return result;
+
+		// Remove useless alive cells (no goal dead-ends of alive cells)
+		for (int i = 0; i < cells; i++) {
+			int a = i;
+			while (true) {
+				int b = end_of_half_tunnel(a, alive);
+				if (b == -1 || box(a) || goal(a))
+					break;
+				alive[a] = false;
+				a = b;
+			}
+		}
+		return alive;
 	}
 
-	private static boolean is_next_to(int a, int b, int width) {
-		int ax = a % width, ay = a / width;
-		int bx = b % width, by = b / width;
-		return Math.abs(ax - bx) + Math.abs(ay - by) == 1;
+	private boolean is_next_to(int a, int b) {
+		return move(a, Level.Up) == b || move(a, Level.Down) == b || move(a, Level.Left) == b
+				|| move(a, Level.Right) == b;
 	}
 
 	final static char Box = '$';
@@ -211,7 +266,7 @@ class LowLevel {
 	final static char Agent = '@';
 	final static char Space = ' ';
 
-	final int width, cells, agent;
+	final int width, cells;
 	final char[] buffer;
 	protected int[] new_to_old;
 }

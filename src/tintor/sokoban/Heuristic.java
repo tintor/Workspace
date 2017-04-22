@@ -3,26 +3,21 @@ package tintor.sokoban;
 import java.util.Arrays;
 
 import tintor.common.HungarianAlgorithm;
+import tintor.common.Timer;
 import tintor.common.Visitor;
-
-abstract class Heuristic {
-	protected Level level;
-
-	protected void init(Level level) {
-		this.level = level;
-	}
-
-	abstract int evaluate(State s, State prev);
-}
 
 // TODO instead of using simple distance over live cells, solve level with
 // single box and using number of pushes
-final class MatchingHeuristic extends Heuristic {
-	int[] boxes;
-	int[][] distance_box;
-	HungarianAlgorithm hungarian;
+final class Heuristic {
+	final Level level;
+	final int[] boxes;
+	final int[][] distance_box;
+	final HungarianAlgorithm hungarian;
+	final Timer timer = new Timer();
+	int deadlocks;
+	int non_deadlocks;
 
-	protected void init(Level level) {
+	Heuristic(Level level) {
 		this.level = level;
 		int num_goals = level.num_boxes;
 		int num_boxes = level.num_boxes;
@@ -55,10 +50,25 @@ final class MatchingHeuristic extends Heuristic {
 	}
 
 	public int evaluate(State s, State prev) {
-		if (prev != null && !s.is_push)
-			return prev.total_dist() - prev.dist() - agent_to_nearest_box_distance(prev)
-					+ agent_to_nearest_box_distance(s);
+		try (Timer t = timer.start()) {
+			int h = (prev != null && !s.is_push) ? evaluate_delta(s, prev) : evaluate_internal(s);
+			assert h >= 0;
+			if (h == Integer.MAX_VALUE) {
+				deadlocks += 1;
+			} else {
+				non_deadlocks += 1;
+			}
+			return h;
+		}
+	}
 
+	private int evaluate_delta(State s, State prev) {
+		int a = prev.total_dist() - prev.dist() - agent_to_nearest_box_distance(prev);
+		assert a >= 0;
+		return a + agent_to_nearest_box_distance(s);
+	}
+
+	private int evaluate_internal(State s) {
 		int w = 0;
 		for (int i = 0; i < level.alive; i++)
 			if (s.box(i))
@@ -77,17 +87,21 @@ final class MatchingHeuristic extends Heuristic {
 				return Integer.MAX_VALUE;
 
 		int sum = 0;
-		for (int i = 0; i < boxes.length; i++)
-			sum += distance_box[boxes[i]][goal[i]];
+		for (int i = 0; i < boxes.length; i++) {
+			int d = distance_box[boxes[i]][goal[i]];
+			assert d >= 0;
+			sum += d;
+		}
 
 		return sum + agent_to_nearest_box_distance(s);
 	}
 
-	int agent_to_nearest_box_distance(State s) {
+	private int agent_to_nearest_box_distance(State s) {
 		int dist = Integer.MAX_VALUE;
 		for (int i = 0; i < level.alive; i++)
 			if (s.box(i))
 				dist = Math.min(level.agent_distance[s.agent()][i], dist);
+		assert dist > 0;
 		return dist - 1;
 	}
 }

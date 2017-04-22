@@ -9,19 +9,22 @@ import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
 
+// TODO: IF you push box into tunnel cell (goal or not) and on the other side of bottleneck there are more goals
+//       than boxes THEN push the box again.
+
 // Deadlock:
 // TODO: Take every 2 and 3 box subset from start position and initialize deadlock DB
 //       with all REACHABLE deadlock patterns of size 2 and 3. This way ContainsFrozenBoxes can stop when it reaches 2 or 3 boxes.
 // TODO: ExaustiveDeadlockTest with all boxes on goal + one box not on goal
 // TODO: ExaustiveDeadlockTest: with every subset of X boxes, is it solvable with a simple BFS solver?
 // TODO: deadlock patterns for goal cells (must keep track of which goals are empty and which are occupied by frozen boxes)
-// TODO: regenerate level (recompute alive cells) once a box becomes frozen on goal.
+// TODO: regenerate level (recompute alive / walkable / bottleneck cells) once a box becomes frozen on goal.
 //       Will reduce number of live cells and make deadlock checking and heuristic faster and more accurate.
-// TODO: microban:144 contains 4 frozen boxes on goals, we should change these to wall at start
 // TODO: save deadlock patterns to text file!
 // TODO: can avoid calling matchesPattern() inside containsFrozenBoxes() if box push can be reversed
 //       (can do a very cheap check here, just try to go around the box)
 // TODO: store deadlock patterns from deadlocks found by Heuristic
+// TODO: scan open and closed sets for deadlocks (once more patterns have been discovered) and remove deadlock states
 
 // Search space reduction:
 // TODO: Take advantage of symmetry
@@ -130,8 +133,18 @@ public class Solver {
 		return null;
 	}
 
-	static State[] solve_Astar(Level level, State start, Heuristic model, Deadlock deadlock, Context context) {
-		if (deadlock != null && deadlock.check(start))
+	static State[] solve_Astar(Level level, boolean trace) {
+		Context context = new Context();
+		context.trace = trace ? 1 : 0;
+		return solve_Astar(level, level.start, new Heuristic(level), new Deadlock(level), context);
+	}
+
+	static State[] solve_Astar(Level level, State start, Heuristic heuristic, Deadlock deadlock, Context context) {
+		int h = heuristic.evaluate(start, null);
+		if (h == Integer.MAX_VALUE)
+			return null;
+		start.set_heuristic(h);
+		if (deadlock.check(start))
 			return null;
 		if (level.is_solved(start))
 			return new State[] {};
@@ -196,14 +209,9 @@ public class Solver {
 
 				/*if (context.enable_greedy)
 					b.greedy_score = b.is_push ? (byte) greedy_score(b, level) : a.greedy_score;*/
-				monitor.model_timer.start();
-				int h = model.evaluate(b, a);
-				monitor.model_timer.stop();
-				if (h == Integer.MAX_VALUE) {
-					monitor.model_deadlocks += 1;
+				h = heuristic.evaluate(b, a);
+				if (h == Integer.MAX_VALUE)
 					continue;
-				} else
-					monitor.model_non_deadlocks += 1;
 				b.set_heuristic(h);
 
 				if (v == null) {
@@ -240,21 +248,18 @@ public class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
-		Level level = new Level("data/sokoban/microban:139");
+		Level level = new Level("microban:139");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
-		Heuristic model = new MatchingHeuristic();
-		model.init(level);
 		Context context = new Context();
 		context.trace = 1;
 		context.enable_populate = false;
 		context.enable_greedy = false;
-		level.start.set_heuristic(model.evaluate(level.start, null));
 
 		Deadlock deadlock = new Deadlock(level);
 		timer.start();
-		State[] solution = solve_Astar(level, level.start, model, deadlock, context);
+		State[] solution = solve_Astar(level, level.start, new Heuristic(level), deadlock, context);
 		timer.stop();
 		if (solution == null) {
 			Log.info("no solution! %s", timer.human());

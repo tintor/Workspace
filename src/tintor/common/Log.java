@@ -10,10 +10,16 @@ public class Log {
 
 	private static long start_millis = System.currentTimeMillis();
 	public static Level level = Level.ALL;
+	public static boolean raw = false;
 
 	private static void log(Level level, String format, Object... args) {
 		if (Log.level.ordinal() > level.ordinal())
 			return;
+
+		if (raw) {
+			System.out.printf(format + "\n", args);
+			return;
+		}
 
 		StackTraceElement frame = callerFrame();
 		long millis = System.currentTimeMillis() - start_millis;
