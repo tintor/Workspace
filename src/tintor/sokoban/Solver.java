@@ -9,9 +9,6 @@ import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
 
-// TODO: IF you push box into tunnel cell (goal or not) and on the other side of bottleneck there are more goals
-//       than boxes THEN push the box again.
-
 // Deadlock:
 // TODO: Take every 2 and 3 box subset from start position and initialize deadlock DB
 //       with all REACHABLE deadlock patterns of size 2 and 3. This way ContainsFrozenBoxes can stop when it reaches 2 or 3 boxes.
@@ -61,11 +58,9 @@ import tintor.common.Util;
 
 // Other:
 // TODO: IDA*
-// TODO: Parallelize hash table grow! as there are no conflicts
 // TODO: How can search be parallelized?
 //       - more exhaustive deadlock check per State
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
-// TODO: Start using git!
 // TODO: Look at the sokoban PhD for more ideas.
 
 public class Solver {
