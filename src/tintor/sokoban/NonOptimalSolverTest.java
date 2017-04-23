@@ -11,7 +11,7 @@ public class NonOptimalSolverTest {
 		solve("test:1", 550);
 	}
 
-	@Test(timeout = 1500)
+	@Test(timeout = 3000)
 	public void solve_original_2() {
 		solve("original:2", 492);
 	}

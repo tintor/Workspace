@@ -186,7 +186,7 @@ public class SolverTest {
 	@Parameter(1)
 	public int expected;
 
-	@Test(timeout = 9000)
+	@Test(timeout = 12000)
 	public void solve() {
 		Level level = Level.load(filename);
 		State[] solution = Solver.solve_Astar(level, false);

@@ -66,12 +66,10 @@ class LowLevel {
 		width = w + 1;
 		cells = buffer.length;
 
-		check_boxes_and_goals();
-
 		// try to move agent and remove walkable dead cells
 		int a = agent();
 		int d = 0;
-		while (degree(a) == 1) {
+		while (!goal(a) && degree(a) == 1) {
 			int b = moves(a, 0);
 			if (buffer[b] != Space)
 				break;
