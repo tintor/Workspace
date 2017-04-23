@@ -1,11 +1,10 @@
 package tintor.sokoban;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Deque;
 import java.util.Scanner;
 
+import tintor.common.ArrayDequeInt;
+import tintor.common.BitMatrix;
 import tintor.common.Regex;
 import tintor.common.Util;
 import tintor.common.Visitor;
@@ -42,16 +41,15 @@ class LowLevel {
 		return lines;
 	}
 
-	LowLevel(String filename) {
+	static LowLevel load(String filename) {
 		final ArrayList<String> lines = loadLevelLines("data/sokoban/" + filename);
 
 		int w = 0;
 		for (String s : lines)
 			w = Math.max(w, s.length());
-		width = w + 1;
 
-		cells = lines.size() * (w + 1);
-		buffer = new char[cells];
+		int cells = lines.size() * (w + 1);
+		char[] buffer = new char[cells];
 		for (int row = 0; row < lines.size(); row++) {
 			String s = lines.get(row);
 			for (int col = 0; col < w; col++)
@@ -59,18 +57,16 @@ class LowLevel {
 			buffer[row * (w + 1) + w] = '\n';
 		}
 
-		int boxes = 0, goals = 0;
-		for (int i = 0; i < cells; i++) {
-			if (box(i))
-				boxes += 1;
-			if (goal(i))
-				goals += 1;
-		}
+		return new LowLevel(w, buffer);
+	}
 
-		if (boxes == 0)
-			throw new IllegalArgumentException("no boxes");
-		if (boxes != goals)
-			throw new IllegalArgumentException("count(box) != count(goal) " + boxes + " vs. " + goals);
+	private LowLevel(int w, char[] buffer) {
+		assert buffer.length % (w + 1) == 0;
+		this.buffer = buffer;
+		width = w + 1;
+		cells = buffer.length;
+
+		check_boxes_and_goals();
 
 		// try to move agent and remove walkable dead cells
 		int a = agent();
@@ -85,7 +81,6 @@ class LowLevel {
 			d += 1;
 		}
 		dist = d;
-		System.out.println(buffer);
 
 		// remove dead end cells
 		for (int p = 0; p < cells; p++) {
@@ -98,8 +93,41 @@ class LowLevel {
 		}
 	}
 
+	void check_boxes_and_goals() {
+		int boxes = 0, goals = 0;
+		for (int i = 0; i < cells; i++) {
+			if (box(i))
+				boxes += 1;
+			if (goal(i))
+				goals += 1;
+		}
+
+		if (boxes == 0)
+			throw new IllegalArgumentException("no boxes");
+		if (boxes != goals)
+			throw new IllegalArgumentException("count(box) != count(goal) " + boxes + " vs. " + goals);
+	}
+
+	boolean check_boxes_and_goals_silent() {
+		int boxes = 0, goals = 0;
+		for (int i = 0; i < cells; i++) {
+			if (box(i))
+				boxes += 1;
+			if (goal(i))
+				goals += 1;
+		}
+		return boxes == goals;
+	}
+
 	public static interface IndexToChar {
 		char fn(int index);
+	}
+
+	LowLevel clone(IndexToChar ch) {
+		char[] copy = buffer.clone();
+		for (int i = 0; i < new_to_old.length; i++)
+			copy[new_to_old[i]] = ch.fn(i);
+		return new LowLevel(width - 1, copy);
 	}
 
 	void print(IndexToChar ch) {
@@ -185,7 +213,7 @@ class LowLevel {
 		return b;
 	}
 
-	boolean[] compute_walkable() {
+	boolean[] compute_walkable(boolean add_walls) {
 		Visitor visitor = new Visitor(cells);
 		for (int a : visitor.init(agent()))
 			for (byte dir = 0; dir < 4; dir++) {
@@ -195,35 +223,78 @@ class LowLevel {
 			}
 		// remove cells that are far from walkable cells
 		for (int i = 0; i < buffer.length; i++)
-			if (buffer[i] != '\n' && !is_close_to_walkable(i, visitor.visited()))
+			if (!visitor.visited()[i] && buffer[i] != '\n' && !is_close_to_walkable(i, visitor.visited(), false)) {
+				if (buffer[i] == Box || buffer[i] == Goal)
+					return null;
 				buffer[i] = Space;
+			}
+		if (add_walls)
+			for (int i = 0; i < buffer.length; i++)
+				if (!visitor.visited()[i] && buffer[i] != '\n' && is_close_to_walkable(i, visitor.visited(), true))
+					buffer[i] = Wall;
 		return visitor.visited();
 	}
 
-	private boolean is_close_to_walkable(int pos, boolean[] walkable) {
+	private boolean is_close_to_walkable(int pos, boolean[] walkable, boolean diagonal) {
 		int x = pos % width, y = pos / width;
 		for (int ax = Math.max(0, x - 1); ax <= Math.min(x + 1, width - 2); ax++)
 			for (int ay = Math.max(0, y - 1); ay <= Math.min(y + 1, buffer.length / width - 1); ay++)
-				if (walkable[ay * width + ax])
+				if ((diagonal || ax == x || ay == y) && walkable[ay * width + ax])
 					return true;
 		return false;
 	}
 
-	private static class Triple {
-		final int agent, box, dist;
-
-		Triple(int agent, int box, int dist) {
-			this.agent = agent;
-			this.box = box;
-			this.dist = dist;
-		}
+	private static int make_pair(int a, int b) {
+		assert 0 <= a && a < 65536;
+		assert 0 <= b && b < 65536;
+		return (a << 16) | b;
 	}
 
-	boolean[] compute_alive(boolean[] walkable) {
-		boolean[] alive = new boolean[cells];
-		Deque<Triple> queue = new ArrayDeque<Triple>();
-		final boolean[][] set = new boolean[cells][cells];
+	// is every goal reachable by some box
+	boolean are_all_goals_reachable(ArrayDequeInt deque, BitMatrix visited) {
+		int goals = 0;
+		final int agent = agent();
+		for (int i = 0; i < cells; i++) {
+			if (box(i))
+				deque.addLast(make_pair(agent, i));
+			if (goal(i))
+				goals += 1;
+		}
+		if (goals == 0)
+			return true;
 
+		final boolean[] reached = new boolean[cells];
+		while (!deque.isEmpty()) {
+			final int s = deque.removeFirst(); // TODO also try removeLast if faster overall
+			final int s_agent = (s >> 16) & 0xFFFF;
+			final int s_box = s & 0xFFFF;
+
+			if (goal(s_box) && !reached[s_box]) {
+				reached[s_box] = true;
+				if (--goals == 0)
+					return true;
+			}
+
+			for (int dir = 0; dir < 4; dir++) {
+				final int ap = move(s_agent, dir);
+				if (ap == Level.Bad)
+					continue;
+				if (ap != s_box) {
+					if (visited.try_set(ap, s_box))
+						deque.addLast(make_pair(ap, s_box));
+					continue;
+				}
+				final int bp = move(ap, dir);
+				if (bp != Level.Bad && visited.try_set(ap, bp))
+					deque.addLast(make_pair(ap, bp));
+			}
+		}
+		return false;
+	}
+
+	// TODO instead of searching forward N times => search backward once from every goal
+	boolean[] compute_alive(ArrayDequeInt deque, BitMatrix visited, boolean[] walkable) {
+		boolean[] alive = new boolean[cells];
 		for (int b = 0; b < cells; b++) {
 			if (!walkable[b])
 				continue;
@@ -232,27 +303,28 @@ class LowLevel {
 				continue;
 			}
 
-			queue.clear();
-			for (int a = 0; a < cells; a++) {
-				Arrays.fill(set[a], false);
-				if (wall(a) || !is_next_to(a, b))
-					continue;
-				queue.push(new Triple(a, b, 0));
-				set[a][b] = true;
+			deque.clear();
+			visited.clear();
+			for (int dir = 0; dir < 4; dir++) {
+				int a = move(b, dir);
+				if (a != Level.Bad) {
+					deque.addLast(make_pair(a, b));
+					visited.set(a, b);
+				}
 			}
 
-			// TODO make it faster (heuristic)
-			while (!queue.isEmpty()) {
-				final Triple s = queue.pollFirst();
+			while (!deque.isEmpty()) {
+				final int s = deque.removeFirst();
+				final int s_agent = (s >> 16) & 0xFFFF;
+				final int s_box = s & 0xFFFF;
+
 				for (int dir = 0; dir < 4; dir++) {
-					final int ap = move(s.agent, dir);
+					final int ap = move(s_agent, dir);
 					if (ap == Level.Bad)
 						continue;
-					if (ap != s.box) {
-						if (!set[ap][s.box]) {
-							set[ap][s.box] = true;
-							queue.push(new Triple(ap, s.box, s.dist + 1));
-						}
+					if (ap != s_box) {
+						if (visited.try_set(ap, s_box))
+							deque.addLast(make_pair(ap, s_box));
 						continue;
 					}
 					final int bp = move(ap, dir);
@@ -260,13 +332,11 @@ class LowLevel {
 						continue;
 					if (goal(bp)) {
 						alive[b] = true;
-						queue.clear();
+						deque.clear();
 						break;
 					}
-					if (!set[ap][bp]) {
-						set[ap][bp] = true;
-						queue.push(new Triple(ap, bp, s.dist + 1));
-					}
+					if (visited.try_set(ap, bp))
+						deque.addLast(make_pair(ap, bp));
 				}
 			}
 		}
@@ -283,11 +353,6 @@ class LowLevel {
 			}
 		}
 		return alive;
-	}
-
-	private boolean is_next_to(int a, int b) {
-		return move(a, Level.Up) == b || move(a, Level.Down) == b || move(a, Level.Left) == b
-				|| move(a, Level.Right) == b;
 	}
 
 	final static char Box = '$';

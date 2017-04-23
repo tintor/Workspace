@@ -188,7 +188,7 @@ public class SolverTest {
 
 	@Test(timeout = 9000)
 	public void solve() {
-		Level level = new Level(filename);
+		Level level = Level.load(filename);
 		State[] solution = Solver.solve_Astar(level, false);
 		Assert.assertTrue(solution != null);
 		Assert.assertEquals(expected, solution[solution.length - 1].dist());

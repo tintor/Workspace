@@ -21,7 +21,7 @@ public class StateTest {
 
 	@Test
 	public void push_macro_box_on_goal_bottleneck_tunnel() {
-		assert new Level("test:11").bottleneck[1];
+		assert Level.load("test:11").bottleneck[1];
 		assertMove(Level.Right, 3, "test:11");
 	}
 
@@ -30,7 +30,7 @@ public class StateTest {
 	}
 
 	void assertMove(int dir, int steps, String filename, int exitDir) {
-		Level level = new Level(filename);
+		Level level = Level.load(filename);
 
 		State s = level.start.move(dir, level, false);
 		Assert.assertEquals(steps, s.dist());

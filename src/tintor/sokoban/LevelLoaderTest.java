@@ -38,10 +38,10 @@ public class LevelLoaderTest {
 	@Parameter
 	public String filename;
 
-	@Test(timeout = 900)
+	@Test(timeout = 800)
 	public void solve() {
 		try {
-			new Level(filename);
+			Level.load(filename);
 		} catch (Level.MoreThan128AliveCellsError e) {
 		} catch (Level.MoreThan256CellsError e) {
 		}

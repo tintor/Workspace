@@ -240,7 +240,7 @@ public class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
-		Level level = new Level("original:3");
+		Level level = Level.load("original:3");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);

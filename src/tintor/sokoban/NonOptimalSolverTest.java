@@ -17,7 +17,7 @@ public class NonOptimalSolverTest {
 	}
 
 	private void solve(String filename, int expected) {
-		Level level = new Level(filename);
+		Level level = Level.load(filename);
 		Context context = new Context();
 		context.optimal_macro_moves = false;
 		context.greedy_score = true;

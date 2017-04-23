@@ -13,7 +13,7 @@ public class Nightly {
 		int solved = 0;
 		for (int i = 1; i <= 155; i++) {
 			try {
-				Level level = new Level("microban:" + i);
+				Level level = Level.load("microban:" + i);
 				Log.info("microban:%d cells:%d alive:%d boxes:%d state_space:%s", i, level.cells, level.alive,
 						level.num_boxes, level.state_space());
 				Deadlock deadlock = new Deadlock(level);
@@ -47,7 +47,7 @@ public class Nightly {
 			int expected = (int) params[1];
 
 			try {
-				Level level = new Level(filename);
+				Level level = Level.load(filename);
 				timer.start();
 				State[] solution = Solver.solve_Astar(level, false);
 				timer.stop();
@@ -63,7 +63,7 @@ public class Nightly {
 
 	public static void main2(String[] args) {
 		for (int n = 1; n <= 90; n++) {
-			Level level = new Level("original:" + n);
+			Level level = Level.load("original:" + n);
 			Log.info("%d cells:%d alive:%d boxes:%d state_space:%s\n", n, level.cells, level.alive, level.num_boxes,
 					level.state_space());
 		}

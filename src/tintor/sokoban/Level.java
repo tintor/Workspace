@@ -3,10 +3,13 @@ package tintor.sokoban;
 import java.math.BigInteger;
 import java.util.Arrays;
 
+import tintor.common.ArrayDequeInt;
+import tintor.common.BitMatrix;
 import tintor.common.Bits;
 import tintor.common.Util;
 import tintor.common.Visitor;
 import tintor.common.Zobrist;
+import tintor.sokoban.LowLevel.IndexToChar;
 
 class Level {
 	static class MoreThan128AliveCellsError extends Error {
@@ -33,16 +36,29 @@ class Level {
 		return dir ^ 2;
 	}
 
-	Level(String filename) {
-		low = new LowLevel(filename);
+	static Level load(String filename) {
+		LowLevel low = LowLevel.load(filename);
+		final boolean[] walkable = low.compute_walkable(true);
+		if (walkable == null)
+			throw new IllegalArgumentException("level contains unreachable boxes or goals");
+		if (Util.count(walkable) > 256)
+			throw new MoreThan256CellsError(); // just to avoid calling compute_alive() for huge levels
+		ArrayDequeInt deque = new ArrayDequeInt(low.cells);
+		BitMatrix visited = new BitMatrix(low.cells); // TODO this is huge, as cells is raw buffer size
+		if (!low.are_all_goals_reachable(deque, visited))
+			throw new IllegalArgumentException("level contains unreachable goal");
+		final boolean[] is_alive = low.compute_alive(deque, visited, walkable);
+		return new Level(low, walkable, is_alive);
+	}
 
-		final boolean[] walkable = low.compute_walkable();
+	private Level(LowLevel low, boolean[] walkable, boolean[] is_alive) {
+		this.low = low;
+		low.check_boxes_and_goals();
+
 		cells = Util.count(walkable);
 		Zobrist.ensure(128 + cells);
 		if (cells > 256)
 			throw new MoreThan256CellsError();
-
-		final boolean[] is_alive = low.compute_alive(walkable);
 		alive = Util.count(is_alive);
 		if (alive > 128)
 			throw new MoreThan128AliveCellsError();
@@ -197,6 +213,17 @@ class Level {
 
 	void print(State s) {
 		print(p -> s.agent() == p, p -> s.box(p));
+	}
+
+	boolean is_valid_level(IndexToChar op) {
+		LowLevel low_clone = low.clone(op);
+		if (low_clone.compute_walkable(false) == null)
+			return false;
+		if (!low_clone.check_boxes_and_goals_silent())
+			return false;
+		ArrayDequeInt deque = new ArrayDequeInt(low_clone.cells);
+		BitMatrix visited = new BitMatrix(low_clone.cells); // TODO this is huge, as cells is raw buffer size
+		return low_clone.are_all_goals_reachable(deque, visited);
 	}
 
 	void print_alive(State s) {

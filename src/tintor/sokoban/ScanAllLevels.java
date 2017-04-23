@@ -17,7 +17,7 @@ public class ScanAllLevels {
 			String name = s[s.length - 1];
 			try {
 				timer.start();
-				Level level = new Level(prefix + i);
+				Level level = Level.load(prefix + i);
 				timer.stop();
 				cells += level.cells;
 				alive += level.alive;

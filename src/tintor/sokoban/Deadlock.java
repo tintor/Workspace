@@ -289,13 +289,13 @@ class Deadlock {
 	}
 
 	// returns: 0 if not frozen, else bitset of frozen boxes
-	private long containsFrozenBoxes64(int agent, long box, int num_boxes) {
+	private long containsFrozenBoxes64(final int agent, long box, int num_boxes) {
 		try (Timer t = timerFrozen.start()) {
 			assert num_boxes == Long.bitCount(box);
 			if (num_boxes < 2)
 				return 0;
 			int pushed_boxes = 0;
-			long original_boxes = box;
+			final long original_boxes = box;
 			for (int a : visitor.init(agent))
 				for (int b : level.moves[a]) {
 					if (visitor.visited(b))
@@ -341,44 +341,14 @@ class Deadlock {
 			// goals without boxes on them
 			int reachable_free_goals = 0;
 			for (int a = 0; a < level.alive; a++)
-				if (level.goal(a))
-					if (visitor.visited(a))
-						reachable_free_goals += 1;
+				if (level.goal(a) && visitor.visited(a))
+					reachable_free_goals += 1;
 			if (reachable_free_goals < pushed_boxes)
 				return box; // goal zone deadlock
-
-			// for every free goal there must be a box that can be pushed to it
-			if (goal_zone_deadlock_check) {
-				for (int a = 0; a < level.alive; a++)
-					if (level.goal(a) && !Bits.test(box, a)) {
-						boolean deadlock = true;
-						Visitor visitor = new Visitor(level.alive);
-						visitor.add(a);
-						for (int b : visitor) {
-							for (int c : level.moves[b]) {
-								if (c >= level.alive || visitor.visited(c) || Bits.test(box, c))
-									continue;
-								int d = level.move(c, level.delta[b][c]);
-								if (d == -1)
-									continue;
-								if (Bits.test(original_boxes, c)) {
-									visitor.init();
-									deadlock = false;
-									break;
-								}
-								visitor.add(c);
-							}
-						}
-						if (deadlock)
-							return box; // goal zone deadlock
-					}
-			}
 
 			return 0;
 		}
 	}
-
-	final static boolean goal_zone_deadlock_check = false;
 
 	static long[] remove(long[] a, int i) {
 		if (i < 64)
@@ -461,6 +431,8 @@ class Deadlock {
 		return false;
 	}
 
+	private final static boolean goal_zone_crap = false;
+
 	private boolean checkInternal64(State s, long box, int num_boxes) {
 		if (level.is_solved(box, 0))
 			return false;
@@ -469,27 +441,42 @@ class Deadlock {
 		if (!enable_frozen_boxes)
 			return false;
 
+		final long original_boxes = box;
 		box = containsFrozenBoxes64(s.agent(), box, num_boxes);
 		if (box == 0)
 			return false;
 		// if we have boxes frozen on goals, we can't store that pattern
 		if (level.is_solved(box, 0)) {
-			long unreachable_goals = 0;
-			for (int a = 0; a < level.alive; a++)
-				if (level.goal(a) && !visitor.visited(a))
-					unreachable_goals |= Bits.mask(a);
-			final GoalZonePattern z = new GoalZonePattern();
-			z.agent = visitor.visited().clone();
-			z.boxes_frozen_on_goals = box;
-			z.unreachable_goals = unreachable_goals & ~box;
-			/*
-			 * level.io.print(i -> { int e = 0; if (!level.goal(i)) return ' ';
-			 * if ((z.boxes_frozen_on_goals & mask(i)) != 0) e += 1; if
-			 * ((z.unreachable_goals & mask(i)) != 0) e += 2; if (e == 0) return
-			 * ' '; return (char) ((int) '0' + e); });
-			 */
-			goal_zone_patterns.add(z);
-			return true;
+			final long frozen_boxes = box;
+			if (false && !level.is_valid_level(p -> {
+				if (p == s.agent())
+					return level.goal(p) ? LowLevel.AgentGoal : LowLevel.Agent;
+				if (p < level.alive && Bits.test(frozen_boxes, p))
+					return LowLevel.Wall;
+				if (p < level.alive && Bits.test(original_boxes, p))
+					return level.goal(p) ? LowLevel.BoxGoal : LowLevel.Box;
+				return level.goal(p) ? LowLevel.Goal : LowLevel.Space;
+			}))
+				return true;
+
+			if (goal_zone_crap) {
+				long unreachable_goals = 0;
+				for (int a = 0; a < level.alive; a++)
+					if (level.goal(a) && !visitor.visited(a))
+						unreachable_goals |= Bits.mask(a);
+				final GoalZonePattern z = new GoalZonePattern();
+				z.agent = visitor.visited().clone();
+				z.boxes_frozen_on_goals = box;
+				z.unreachable_goals = unreachable_goals & ~box;
+				/*
+				 * level.io.print(i -> { int e = 0; if (!level.goal(i)) return ' ';
+				 * if ((z.boxes_frozen_on_goals & mask(i)) != 0) e += 1; if
+				 * ((z.unreachable_goals & mask(i)) != 0) e += 2; if (e == 0) return
+				 * ' '; return (char) ((int) '0' + e); });
+				 */
+				goal_zone_patterns.add(z);
+			}
+			return false;
 		}
 
 		num_boxes = Long.bitCount(box);
