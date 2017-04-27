@@ -1,17 +1,16 @@
 package tintor.sokoban;
 
 import org.junit.Assert;
-import org.junit.Test;
 
 import tintor.sokoban.Solver.Context;
 
 public class NonOptimalSolverTest {
-	@Test(timeout = 1500)
+	//@Test(timeout = 3000)
 	public void solve_test_1() {
 		solve("test:1", 550);
 	}
 
-	@Test(timeout = 3000)
+	//@Test(timeout = 6000)
 	public void solve_original_2() {
 		solve("original:2", 492);
 	}
@@ -20,7 +19,6 @@ public class NonOptimalSolverTest {
 		Level level = Level.load(filename);
 		Context context = new Context();
 		context.optimal_macro_moves = false;
-		context.greedy_score = true;
 		State[] solution = Solver.solve_Astar(level, level.start, new Heuristic(level), new Deadlock(level), context);
 		Assert.assertTrue(solution != null);
 		Assert.assertEquals(expected, solution[solution.length - 1].dist());

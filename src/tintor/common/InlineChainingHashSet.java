@@ -247,4 +247,20 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 	public Iterator<Element> iterator() {
 		return new IteratorT();
 	}
+
+	public class Scanner {
+		private int index;
+
+		public Element remove() {
+			if (size == 0)
+				return null;
+			while (buckets[index] == null)
+				index = (index + 1) & (buckets.length - 1);
+			Element e = buckets[index];
+			buckets[index] = e.next;
+			e.next = null;
+			size -= 1;
+			return e;
+		}
+	}
 }

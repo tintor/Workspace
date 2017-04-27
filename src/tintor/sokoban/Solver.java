@@ -24,6 +24,8 @@ import tintor.common.Util;
 // TODO: scan open and closed sets for deadlocks (once more patterns have been discovered) and remove deadlock states
 
 // Search space reduction:
+// TODO: only "store" push States (heuristic will not have to worry about distance of agent to box)
+// TODO: Always do even number of steps (only store States with distance % 2 == 0)
 // TODO: Take advantage of symmetry
 //       State.equals and State.hashCode to treat symmetrical states as equal (also deadlock patterns)
 //       Compute all symmetry transforms: int->int for use in equals and hashCode.
@@ -53,6 +55,7 @@ import tintor.common.Util;
 // TODO: shorten last iteration: once B is found solved, we can return it as soon as all shorter States are removed from Queue
 
 // Heuristic:
+//
 // TODO: tell MatchingModel which solved boxes are frozen (so that it could potentially find a new deadlock)
 // TODO: use minimal push distance in Heuristics
 
@@ -64,14 +67,6 @@ import tintor.common.Util;
 // TODO: Look at the sokoban PhD for more ideas.
 
 public class Solver {
-	static int greedy_score(State s, Level level) {
-		int score = 0;
-		for (int a = 0; a < level.alive; a++)
-			if (level.goal(a) && s.box(a))
-				score += 1;
-		return score;
-	}
-
 	static State[] extractPath(Level level, State start, State end, ClosedSet closed) {
 		ArrayDeque<State> path = new ArrayDeque<State>();
 		while (!end.equals(start)) {
@@ -197,8 +192,6 @@ public class Solver {
 				h = heuristic.evaluate(b, a);
 				if (h == Integer.MAX_VALUE)
 					continue;
-				if (context.greedy_score)
-					b.greedy = (byte) greedy_score(b, level);
 				b.set_heuristic(h);
 
 				if (v == null) {
@@ -235,7 +228,7 @@ public class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load("original:3");
+		Level level = Level.load("microban1:5");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
@@ -243,8 +236,7 @@ public class Solver {
 		context.trace = 1;
 		context.enable_parallel_hashtable_resize = true;
 		context.enable_populate = false;
-		context.optimal_macro_moves = true;
-		context.greedy_score = true;
+		context.optimal_macro_moves = false;
 
 		Deadlock deadlock = new Deadlock(level);
 		timer.start();
@@ -263,8 +255,7 @@ public class Solver {
 	static class Context {
 		boolean enable_parallel_hashtable_resize;
 		boolean enable_populate;
-		boolean optimal_macro_moves = true;
-		boolean greedy_score;
+		boolean optimal_macro_moves = false;
 		int trace; // 0 to turn off any tracing
 		int open_set_size;
 		int closed_set_size;

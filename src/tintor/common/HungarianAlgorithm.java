@@ -125,7 +125,8 @@ public class HungarianAlgorithm {
 		int w = fetchUnmatchedWorker();
 		while (w < dim) {
 			initializePhase(w);
-			executePhase();
+			if (!executePhase())
+				break;
 			w = fetchUnmatchedWorker();
 		}
 		for (w = 0; w < rows; w++)
@@ -154,7 +155,7 @@ public class HungarianAlgorithm {
 	 * maintaining the minimum slack values among non-committed jobs. When a phase
 	 * completes, the matching will have increased in size.
 	 */
-	protected void executePhase() {
+	protected boolean executePhase() {
 		while (true) {
 			int minSlackWorker = -1, minSlackJob = -1;
 			double minSlackValue = Double.POSITIVE_INFINITY;
@@ -167,6 +168,11 @@ public class HungarianAlgorithm {
 					}
 			if (minSlackValue > 0)
 				updateLabeling(minSlackValue);
+			if (minSlackJob == -1) {
+				for (int w = 0; w < rows; w++)
+					matchJobByWorker[w] = -1;
+				return false;
+			}
 			parentWorkerByCommittedJob[minSlackJob] = minSlackWorker;
 			if (matchWorkerByJob[minSlackJob] == -1) {
 				/*
@@ -182,7 +188,7 @@ public class HungarianAlgorithm {
 						break;
 					parentWorker = parentWorkerByCommittedJob[committedJob];
 				}
-				return;
+				return true;
 			} else {
 				/*
 				 * Update slack values since we increased the size of the committed

@@ -16,6 +16,21 @@ class LowLevel {
 		return line;
 	}
 
+	static int numberOfLevels(String filename) {
+		int currentLevelNo = 0;
+		boolean inside = false;
+		Scanner sc = Util.scanFile("data/sokoban/" + filename);
+		while (sc.hasNextLine()) {
+			String s = preprocess(sc.nextLine());
+			if (!inside && !s.isEmpty()) {
+				currentLevelNo += 1;
+				inside = true;
+			} else if (s.isEmpty())
+				inside = false;
+		}
+		return currentLevelNo;
+	}
+
 	static ArrayList<String> loadLevelLines(String filename) {
 		int desiredLevelNo = 1;
 		if (Regex.matches(filename, "^(.*):(\\d+)$")) {
@@ -26,7 +41,7 @@ class LowLevel {
 		ArrayList<String> lines = new ArrayList<String>();
 		int currentLevelNo = 0;
 		boolean inside = false;
-		Scanner sc = Util.scanFile(filename);
+		Scanner sc = Util.scanFile("data/sokoban/" + filename);
 		while (sc.hasNextLine()) {
 			String s = preprocess(sc.nextLine());
 			if (!inside && !s.isEmpty()) {
@@ -42,7 +57,7 @@ class LowLevel {
 	}
 
 	static LowLevel load(String filename) {
-		final ArrayList<String> lines = loadLevelLines("data/sokoban/" + filename);
+		final ArrayList<String> lines = loadLevelLines(filename);
 
 		int w = 0;
 		for (String s : lines)
@@ -57,10 +72,11 @@ class LowLevel {
 			buffer[row * (w + 1) + w] = '\n';
 		}
 
-		return new LowLevel(w, buffer);
+		return new LowLevel(w, buffer, filename);
 	}
 
-	private LowLevel(int w, char[] buffer) {
+	private LowLevel(int w, char[] buffer, String name) {
+		this.name = name;
 		assert buffer.length % (w + 1) == 0;
 		this.buffer = buffer;
 		width = w + 1;
@@ -125,7 +141,7 @@ class LowLevel {
 		char[] copy = buffer.clone();
 		for (int i = 0; i < new_to_old.length; i++)
 			copy[new_to_old[i]] = ch.fn(i);
-		return new LowLevel(width - 1, copy);
+		return new LowLevel(width - 1, copy, null);
 	}
 
 	void print(IndexToChar ch) {
@@ -365,4 +381,5 @@ class LowLevel {
 	final int dist; // initial distance of agent
 	final char[] buffer;
 	protected int[] new_to_old;
+	final String name;
 }

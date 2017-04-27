@@ -2,21 +2,22 @@ package tintor.common;
 
 import java.util.Arrays;
 
-public class BitMatrix {
+public class BitArray {
 	private final int[] bits;
-	private final int width;
 
-	public BitMatrix(int width, int height) {
-		bits = new int[(width * height + 31) / 32];
-		this.width = width;
+	public BitArray(int length) {
+		bits = new int[(length + 31) / 32];
 	}
 
 	public void clear() {
 		Arrays.fill(bits, 0);
 	}
 
-	public boolean try_set(int x, int y) {
-		int i = y * width + x;
+	public int size() {
+		return bits.length * 32;
+	}
+
+	public boolean try_set(int i) {
 		int m = 1 << i;
 		if ((bits[i / 32] & m) != 0)
 			return false;
@@ -24,14 +25,12 @@ public class BitMatrix {
 		return true;
 	}
 
-	public boolean get(int x, int y) {
-		int i = y * width + x;
+	public boolean get(int i) {
 		int m = 1 << i;
 		return (bits[i / 32] & m) != 0;
 	}
 
-	public void set(int x, int y) {
-		int i = y * width + x;
+	public void set(int i) {
 		int m = 1 << i;
 		bits[i / 32] |= m;
 	}

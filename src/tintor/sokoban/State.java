@@ -90,7 +90,6 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 
 	// Transient fields for OpenSet
 	private short total_dist; // = distance from start + heuristic to goal
-	byte greedy;
 }
 
 final class State extends StateBase implements Comparable<State> {
@@ -111,8 +110,6 @@ final class State extends StateBase implements Comparable<State> {
 	}
 
 	public int compareTo(State a) {
-		if (greedy != a.greedy)
-			return ((int) a.greedy & 0xFF) - ((int) greedy & 0xFF);
 		return total_dist() - a.total_dist();
 	}
 

@@ -1,6 +1,7 @@
 package tintor.sokoban;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import tintor.common.ArrayDequeInt;
@@ -36,6 +37,18 @@ class Level {
 		return dir ^ 2;
 	}
 
+	static ArrayList<Level> loadAll(String filename) {
+		int count = LowLevel.numberOfLevels(filename);
+		ArrayList<Level> levels = new ArrayList<Level>();
+		for (int i = 1; i <= count; i++)
+			try {
+				levels.add(load(filename + ":" + i));
+			} catch (MoreThan128AliveCellsError e) {
+			} catch (MoreThan256CellsError e) {
+			}
+		return levels;
+	}
+
 	static Level load(String filename) {
 		LowLevel low = LowLevel.load(filename);
 		final boolean[] walkable = low.compute_walkable(true);
@@ -44,7 +57,7 @@ class Level {
 		if (Util.count(walkable) > 256)
 			throw new MoreThan256CellsError(); // just to avoid calling compute_alive() for huge levels
 		ArrayDequeInt deque = new ArrayDequeInt(low.cells);
-		BitMatrix visited = new BitMatrix(low.cells); // TODO this is huge, as cells is raw buffer size
+		BitMatrix visited = new BitMatrix(low.cells, low.cells); // TODO this is huge, as cells is raw buffer size
 		if (!low.are_all_goals_reachable(deque, visited))
 			throw new IllegalArgumentException("level contains unreachable goal");
 		final boolean[] is_alive = low.compute_alive(deque, visited, walkable);
@@ -222,7 +235,7 @@ class Level {
 		if (!low_clone.check_boxes_and_goals_silent())
 			return false;
 		ArrayDequeInt deque = new ArrayDequeInt(low_clone.cells);
-		BitMatrix visited = new BitMatrix(low_clone.cells); // TODO this is huge, as cells is raw buffer size
+		BitMatrix visited = new BitMatrix(low_clone.cells, low_clone.cells); // TODO this is huge, as cells is raw buffer size
 		return low_clone.are_all_goals_reachable(deque, visited);
 	}
 
