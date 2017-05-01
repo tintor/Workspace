@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import tintor.common.Bits;
+import tintor.common.InstrumentationAgent;
 import tintor.common.Timer;
 import tintor.common.Util;
 import tintor.common.Visitor;
@@ -152,10 +153,11 @@ class Deadlock {
 		timerFrozen.total /= cycles;
 		timerMatch.total /= cycles;
 
-		timer.total -= timerFrozen.total + timerMatch.total;
-		System.out.printf("dead:%s live:%s rev:%s db:%s db2:%s [frozen:%s match:%s other:%s]\n", Util.human(deadlocks),
-				Util.human(non_deadlocks), Util.human(reversable), Util.human(patterns),
-				Util.human(goal_zone_patterns.size()), timerFrozen.clear(), timerMatch.clear(), timer.total);
+		long other = timer.total - timerFrozen.total - timerMatch.total;
+		System.out.printf("dead:%s live:%s rev:%s db:%s db2:%s memory:%s\n[frozen:%s match:%s other:%s]\n",
+				Util.human(deadlocks), Util.human(non_deadlocks), Util.human(reversable), Util.human(patterns),
+				Util.human(goal_zone_patterns.size()), Util.human(InstrumentationAgent.deepSizeOf(pattern_index)),
+				timerFrozen.clear(), timerMatch.clear(), other);
 		return timer.clear();
 	}
 
@@ -178,11 +180,9 @@ class Deadlock {
 	}
 
 	private boolean matchesPattern(int agent, int dir, long box0, long box1, int num_boxes) {
-		if (dir >= 0) {
-			int b = level.move(agent, dir);
-			if (0 <= b && b < 128 && Bits.test(box0, box1, b))
-				return matchesPattern(b, dir, agent, box0, box1, num_boxes);
-		}
+		int b = level.move(agent, dir);
+		if (0 <= b && b < 128 && Bits.test(box0, box1, b))
+			return matchesPattern(b, dir, agent, box0, box1, num_boxes);
 		return false;
 	}
 
