@@ -73,7 +73,7 @@ public final class Solver {
 	static State[] solve_IDAstar(Level level, State start, Heuristic model, Deadlock deadlock, Context context) {
 		if (deadlock != null && deadlock.check(start))
 			return null;
-		if (level.is_solved(start))
+		if (level.is_solved_fast(start.box))
 			return new State[] {};
 
 		ArrayDeque<State> stack = new ArrayDeque<State>();
@@ -120,7 +120,7 @@ public final class Solver {
 		start.set_heuristic(h);
 		if (deadlock.check(start))
 			return null;
-		if (level.is_solved(start))
+		if (level.is_solved_fast(start.box))
 			return new State[] {};
 
 		// Generate initial deadlock patterns
@@ -163,7 +163,7 @@ public final class Solver {
 			assert a.total_dist() != 0;
 			closed.add(a);
 
-			if (level.is_solved(a)) {
+			if (level.is_solved_fast(a.box)) {
 				context.open_set_size = open.size();
 				context.closed_set_size = closed.size();
 				return extractPath(level, start, a, closed);

@@ -1,9 +1,8 @@
 package tintor.sokoban;
 
-import org.junit.Assert;
+import java.util.Arrays;
 
 import tintor.common.Bits;
-import tintor.common.Measurer;
 import tintor.common.Visitor;
 
 class StateKey {
@@ -67,10 +66,6 @@ class StateBase {
 		this.total_dist = (short) (dist() + heuristic);
 	}
 
-	static {
-		Assert.assertEquals(24, Measurer.sizeOf(StateBase.class));
-	}
-
 	// Identity (primary key)
 	private final byte agent;
 
@@ -86,24 +81,19 @@ class StateBase {
 }
 
 final class State extends StateBase {
-	State(int agent, long box0, long box1, int dist, int dir, int pushes, int prev_agent) {
+	State(int agent, int[] box, int dist, int dir, int pushes, int prev_agent) {
 		super(agent, dist, dir, pushes, prev_agent);
-		assert agent >= 128 || !Bits.test(box0, box1, agent);
-		this.box0 = box0;
-		this.box1 = box1;
+		assert agent >= box.length * 32 || !Bits.test(box, agent);
+		this.box = box;
 	}
 
 	boolean box(int i) {
 		assert i >= 0;
-		if (i < 64)
-			return Bits.test(box0, i);
-		if (i < 128)
-			return Bits.test(box1, i - 64);
-		return false;
+		return i < box.length * 32 && Bits.test(box, i);
 	}
 
 	boolean equals(State s) {
-		return box0 == s.box0 && agent() == s.agent() && box1 == s.box1;
+		return agent() == s.agent() && Arrays.equals(box, s.box);
 	}
 
 	@Override
@@ -133,7 +123,7 @@ final class State extends StateBase {
 			}
 			assert a != agent();
 			assert dist >= level.low.dist;
-			return new State(a, box0, box1, dist, -1, 0, 0);
+			return new State(a, box, dist, -1, 0, 0);
 		}
 
 		assert 0 <= dir && dir < 4;
@@ -150,18 +140,10 @@ final class State extends StateBase {
 		assert 0 <= c && c < level.alive;
 		assert box(c);
 
-		long nbox0 = box0;
-		long nbox1 = box1;
-		if (c < 64)
-			nbox0 = Bits.clear(nbox0, c);
-		else
-			nbox1 = Bits.clear(nbox1, c - 64);
-		if (b < 64)
-			nbox0 = Bits.set(nbox0, b);
-		else
-			nbox1 = Bits.set(nbox1, b - 64);
-
-		return new State(level.rmove(b, dir), nbox0, nbox1, dist() - pushes(), -1, 0, 0);
+		int[] nbox = box.clone();
+		Bits.clear(nbox, c);
+		Bits.set(nbox, b);
+		return new State(level.rmove(b, dir), nbox, dist() - pushes(), -1, 0, 0);
 	}
 
 	State move(int dir, Level level, boolean optimal) {
@@ -185,49 +167,36 @@ final class State extends StateBase {
 				a = next;
 				dist += 1;
 			}
-			return new State(a, box0, box1, dist, dir, 0, 0);
+			return new State(a, box, dist, dir, 0, 0);
 		}
 		return push(a, dir, level, optimal);
 	}
 
-	State push(int box, int dir, Level level, boolean optimal) {
-		int b = level.move(box, dir);
+	State push(int a, int dir, Level level, boolean optimal) {
+		int b = level.move(a, dir);
 		if (b == -1 || b >= level.alive || box(b))
 			return null;
 
-		long nbox0 = box0;
-		long nbox1 = box1;
-		if (box < 64)
-			nbox0 = Bits.clear(nbox0, box);
-		else
-			nbox1 = Bits.clear(nbox1, box - 64);
-		if (b < 64)
-			nbox0 = Bits.set(nbox0, b);
-		else
-			nbox1 = Bits.set(nbox1, b - 64);
+		int[] nbox = box.clone();
+		Bits.clear(nbox, a);
+		Bits.set(nbox, b);
 		int pushes = 1;
 
 		// keep pushing box until the end of tunnel
-		while (can_force_push(box, b, level, optimal)) {
+		while (can_force_push(a, b, level, optimal)) {
 			// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
 			int c = level.move(b, dir);
 			if (c == -1 || c >= level.alive || box(c))
 				return null;
-			box = b;
+			a = b;
 			b = c;
-			assert dir == level.delta[box][b];
-			if (box < 64)
-				nbox0 = Bits.clear(nbox0, box);
-			else
-				nbox1 = Bits.clear(nbox1, box - 64);
-			if (b < 64)
-				nbox0 = Bits.set(nbox0, b);
-			else
-				nbox1 = Bits.set(nbox1, b - 64);
+			assert dir == level.delta[a][b];
+			Bits.clear(nbox, a);
+			Bits.set(nbox, b);
 			pushes += 1;
 		}
 
-		return new State(box, nbox0, nbox1, dist() + pushes, dir, pushes, 0);
+		return new State(a, nbox, dist() + pushes, dir, pushes, 0);
 	}
 
 	private boolean more_goals_than_boxes_in_room(int a, int door, Level level) {
@@ -272,10 +241,5 @@ final class State extends StateBase {
 		return false;
 	}
 
-	static {
-		Assert.assertEquals(40, Measurer.sizeOf(State.class));
-	}
-
-	final long box0;
-	final long box1;
+	final int[] box;
 }

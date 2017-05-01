@@ -20,26 +20,15 @@ final class StateArray {
 		return size;
 	}
 
-	void push(State s, int[] boxes) {
-		int N = boxes.length;
+	void push(State s) {
+		int N = s.box.length;
 		if (size >= agent_array.length) {
 			agent_array = Arrays.copyOf(agent_array, Math.max(4, agent_array.length / 2 * 3));
 			boxes_array = Arrays.copyOf(boxes_array, Math.max(4 * N, boxes_array.length / 2 * 3));
 		}
 
-		switch (boxes.length) {
-		case 4:
-			boxes[3] = (int) (s.box1 >>> 32);
-		case 3:
-			boxes[2] = (int) s.box1;
-		case 2:
-			boxes[1] = (int) (s.box0 >>> 32);
-		case 1:
-			boxes[0] = (int) s.box0;
-		}
-
 		for (int i = 0; i < N; i++)
-			boxes_array[size * N + i] = boxes[i];
+			boxes_array[size * N + i] = s.box[i];
 		agent_array[size] = (byte) s.agent();
 		size += 1;
 	}

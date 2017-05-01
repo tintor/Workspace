@@ -1,6 +1,10 @@
 package tintor.common;
 
 public class Bits {
+	public static int power32(int a) {
+		return 1 << a;
+	}
+
 	public static long power(int a) {
 		return 1l << a;
 	}
@@ -10,6 +14,15 @@ public class Bits {
 	}
 
 	// ---------
+	public static int set(int bits, int index) {
+		assert 0 <= index && index < 32;
+		return bits | power32(index);
+	}
+
+	public static void set(int[] bits, int index) {
+		assert 0 <= index && index < bits.length * 32;
+		bits[index / 32] = set(bits[index / 32], index % 32);
+	}
 
 	public static long set(long bits, int index) {
 		assert 0 <= index && index < 64;
@@ -22,6 +35,16 @@ public class Bits {
 	}
 
 	// ---------
+
+	public static int clear(int bits, int index) {
+		assert 0 <= index && index < 32;
+		return bits & ~power32(index);
+	}
+
+	public static void clear(int[] bits, int index) {
+		assert 0 <= index && index < bits.length * 32;
+		bits[index / 32] = clear(bits[index / 32], index % 32);
+	}
 
 	public static long clear(long bits, int index) {
 		assert 0 <= index && index < 64;
@@ -38,6 +61,11 @@ public class Bits {
 	public static boolean test(long bits, int index) {
 		assert 0 <= index && index < 64;
 		return (bits & power(index)) != 0;
+	}
+
+	public static boolean test(int[] bits, int index) {
+		assert 0 <= index && index < bits.length * 32;
+		return test(bits[index / 32], index % 32);
 	}
 
 	public static boolean test(long[] bits, int index) {

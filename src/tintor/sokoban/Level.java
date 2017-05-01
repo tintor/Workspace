@@ -102,21 +102,20 @@ class Level {
 				for (int dir = 0; dir < 4; dir++)
 					move[old_to_new[i] * 4 + dir] = (low.move(i, dir) != Bad) ? old_to_new[low.move(i, dir)] : Bad;
 
-		boolean[] goal = new boolean[alive];
+		boolean[] goalb = new boolean[alive];
 		for (int i = 0; i < low.cells; i++)
 			if (low.goal(i))
-				goal[old_to_new[i]] = true;
+				goalb[old_to_new[i]] = true;
 		boolean[] box = new boolean[alive];
 		for (int i = 0; i < low.cells; i++)
 			if (low.box(i))
 				box[old_to_new[i]] = true;
 
 		// TODO: Level should not depend on State. Have constructor of State that takes Level as parameter.
-		start = new State(old_to_new[low.agent()], Util.compress(box, 0), Util.compress(box, 1), low.dist, 0, 0, 0);
-		goal0 = Util.compress(goal, 0);
-		goal1 = Util.compress(goal, 1);
+		start = new State(old_to_new[low.agent()], Util.compressToIntArray(box), low.dist, 0, 0, 0);
+		goal = Util.compressToIntArray(goalb);
 		num_boxes = Util.count(box);
-		assert num_boxes == Util.count(goal) : num_boxes + " vs " + Util.count(goal);
+		assert num_boxes == Util.count(goalb);
 
 		visitor = new Visitor(cells);
 		moves = new int[cells][];
@@ -257,24 +256,18 @@ class Level {
 	}
 
 	boolean goal(int i) {
-		if (i < 64)
-			return Bits.test(goal0, i);
-		if (i < 128)
-			return Bits.test(goal1, i - 64);
-		return false;
+		return i < alive && Bits.test(goal, i);
 	}
 
-	boolean is_solved(long box0, long box1) {
-		return (box0 | goal0) == goal0 && (box1 | goal1) == goal1;
+	boolean is_solved(int[] box) {
+		for (int i = 0; i < box.length; i++)
+			if ((box[i] | goal[i]) != goal[i])
+				return false;
+		return true;
 	}
 
-	boolean is_solved(long box0) {
-		assert alive <= 64;
-		return (box0 | goal0) == goal0;
-	}
-
-	boolean is_solved(State s) {
-		return (s.box0 | goal0) == goal0 && (s.box1 | goal1) == goal1;
+	boolean is_solved_fast(int[] box) {
+		return Arrays.equals(box, goal);
 	}
 
 	int degree(int pos) {
@@ -300,8 +293,7 @@ class Level {
 	final int cells; // number of cells agent can walk on
 	final int num_boxes;
 	final State start;
-	final long goal0;
-	final long goal1;
+	final int[] goal;
 
 	// index, direction => index * 4 + direction
 	// returns index to move to, or -1 if invalid (or wall)

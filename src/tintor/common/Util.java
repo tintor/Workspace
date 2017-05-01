@@ -18,6 +18,14 @@ public class Util {
 		return String.format("%dM", (a + 500000) / 1000000);
 	}
 
+	public static int[] compressToIntArray(boolean[] b) {
+		int[] a = new int[(b.length + 31) / 32];
+		for (int i = 0; i < b.length; i++)
+			if (b[i])
+				Bits.set(a, i);
+		return a;
+	}
+
 	public static long compress(boolean[] b) {
 		if (b.length > 64)
 			throw new Error();

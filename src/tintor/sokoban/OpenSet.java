@@ -72,7 +72,7 @@ class OpenSet {
 			map.update(v_total_dist, b);
 			if (b.total_dist() < min)
 				min = b.total_dist();
-			queue[b.total_dist()].push(b, key);
+			queue[b.total_dist()].push(b);
 		}
 	}
 
@@ -82,7 +82,7 @@ class OpenSet {
 			map.insert(s);
 			if (s.total_dist() < min)
 				min = s.total_dist();
-			queue[s.total_dist()].push(s, key);
+			queue[s.total_dist()].push(s);
 		}
 	}
 
