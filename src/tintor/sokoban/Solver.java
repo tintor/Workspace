@@ -2,9 +2,7 @@ package tintor.sokoban;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import tintor.common.InlineChainingHashSet;
 import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
@@ -127,7 +125,7 @@ public final class Solver {
 
 		// Generate initial deadlock patterns
 		if (context.enable_populate) {
-			InlineChainingHashSet set = new InlineChainingHashSet(1 << 20, level, true);
+			/*InlineChainingHashSet set = new InlineChainingHashSet(1 << 20, level, true);
 			ArrayDeque<State> queue = new ArrayDeque<State>();
 			queue.add(start);
 			while (!queue.isEmpty() && set.size() < (1 << 20) - 3) {
@@ -144,7 +142,7 @@ public final class Solver {
 						Log.info("found %d patterns (set %s) %s", deadlock.patterns, Util.human(set.size()),
 								Arrays.toString(deadlock.histogram));
 				}
-			}
+			}*/
 		}
 
 		final ClosedSet closed = new ClosedSet(level.alive, level.cells);

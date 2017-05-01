@@ -3,13 +3,24 @@ package tintor.sokoban;
 import org.junit.Assert;
 
 import tintor.common.Bits;
-import tintor.common.InlineChainingHashSet;
 import tintor.common.Measurer;
 import tintor.common.Visitor;
-import tintor.common.Zobrist;
+
+class StateKey {
+	int agent;
+	int[] boxes;
+}
+
+class State_ extends StateKey {
+	int dir; // direction of move from previous state
+	int dist;
+	int pushes; // number of box pushes from single call to State.move()
+	int total_dist; // = distance from start + heuristic to goal
+	int prev_agent;
+}
 
 // State without boxes
-abstract class StateBase extends InlineChainingHashSet.Element {
+class StateBase {
 	StateBase(int agent, int dist, int dir, int pushes, int prev_agent) {
 		assert 0 <= agent && agent < 256 : agent;
 		this.agent = (byte) agent;
@@ -60,33 +71,6 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 		Assert.assertEquals(24, Measurer.sizeOf(StateBase.class));
 	}
 
-	static int hashCode(int agent, long box0, int alive) {
-		int hash = Zobrist.hash(agent + alive);
-		assert alive <= 64;
-		for (int i = 0; i < alive; i++)
-			if (Bits.test(box0, i))
-				hash ^= Zobrist.hash(i);
-		return hash;
-	}
-
-	static int hashCode(int agent, long box0, long box1, int alive) {
-		int hash = Zobrist.hash(agent + alive);
-		if (alive < 64) {
-			for (int i = 0; i < alive; i++)
-				if (Bits.test(box0, i))
-					hash ^= Zobrist.hash(i);
-		} else {
-			assert alive <= 128;
-			for (int i = 0; i < 64; i++)
-				if (Bits.test(box0, i))
-					hash ^= Zobrist.hash(i);
-			for (int i = 64; i < alive; i++)
-				if (Bits.test(box1, i - 64))
-					hash ^= Zobrist.hash(i);
-		}
-		return hash;
-	}
-
 	// Identity (primary key)
 	private final byte agent;
 
@@ -101,7 +85,7 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 	private final byte prev_agent;
 }
 
-final class State extends StateBase implements Comparable<State> {
+final class State extends StateBase {
 	State(int agent, long box0, long box1, int dist, int dir, int pushes, int prev_agent) {
 		super(agent, dist, dir, pushes, prev_agent);
 		assert agent >= 128 || !Bits.test(box0, box1, agent);
@@ -118,10 +102,6 @@ final class State extends StateBase implements Comparable<State> {
 		return false;
 	}
 
-	public int compareTo(State a) {
-		return total_dist() - a.total_dist();
-	}
-
 	boolean equals(State s) {
 		return box0 == s.box0 && agent() == s.agent() && box1 == s.box1;
 	}
@@ -129,10 +109,6 @@ final class State extends StateBase implements Comparable<State> {
 	@Override
 	public boolean equals(Object o) {
 		return equals((State) o);
-	}
-
-	public int hashCode(Object context) {
-		return StateBase.hashCode(agent(), box0, box1, (Integer) context);
 	}
 
 	State prev(Level level) {
