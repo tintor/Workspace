@@ -17,8 +17,8 @@ public class SolverTest {
 
 	static void test(String filename, int expected_dist) {
 		// don't run slow tests
-		if (expected_dist <= 0)
-			return;
+		//if (expected_dist <= 0)
+		//	return;
 		tests.add(new Object[] { filename, expected_dist });
 	}
 
@@ -186,7 +186,7 @@ public class SolverTest {
 	@Parameter(1)
 	public int expected;
 
-	@Test(timeout = 12000)
+	@Test
 	public void solve() {
 		Level level = Level.load(filename);
 		State[] solution = Solver.solve_Astar(level, false);

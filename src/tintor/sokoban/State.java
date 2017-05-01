@@ -20,7 +20,7 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 		assert -1 <= dir && dir < 4;
 		this.dir = (byte) dir;
 
-		assert pushes == 0 || dir != -1;
+		assert pushes >= 0;
 		this.pushes = (byte) pushes;
 	}
 
@@ -95,7 +95,7 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 final class State extends StateBase implements Comparable<State> {
 	State(int agent, long box0, long box1, int dist, int dir, int pushes) {
 		super(agent, dist, dir, pushes);
-		assert agent >= 128 || !Bits.test(box0, box1, agent);
+		assert agent >= 128 || !Bits.test(box0, box1, agent) : agent + " " + dist;
 		this.box0 = box0;
 		this.box1 = box1;
 	}
@@ -127,6 +127,9 @@ final class State extends StateBase implements Comparable<State> {
 	}
 
 	State prev(Level level) {
+		if (equals(level.start))
+			return null;
+		assert dist() > level.low.dist;
 		int a = level.rmove(agent(), dir);
 		assert 0 <= a && a < level.cells;
 		if (pushes() == 0) {

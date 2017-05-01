@@ -1,5 +1,8 @@
 package tintor.sokoban;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -140,6 +143,7 @@ class Deadlock {
 	int[] histogram;
 	private final Level level;
 	boolean enable_frozen_boxes = true;
+	private BufferedWriter pattern_file;
 
 	private final Timer timer = new Timer();
 	private final Timer timerFrozen = new Timer();
@@ -154,10 +158,10 @@ class Deadlock {
 		timerMatch.total /= cycles;
 
 		long other = timer.total - timerFrozen.total - timerMatch.total;
-		System.out.printf("dead:%s live:%s rev:%s db:%s db2:%s memory:%s\n[frozen:%s match:%s other:%s]\n",
-				Util.human(deadlocks), Util.human(non_deadlocks), Util.human(reversable), Util.human(patterns),
-				Util.human(goal_zone_patterns.size()), Util.human(InstrumentationAgent.deepSizeOf(pattern_index)),
-				timerFrozen.clear(), timerMatch.clear(), other);
+		System.out.printf("dead:%s live:%s rev:%s db:%s db2:%s memory:%s\n", Util.human(deadlocks),
+				Util.human(non_deadlocks), Util.human(reversable), Util.human(patterns),
+				Util.human(goal_zone_patterns.size()), Util.human(InstrumentationAgent.deepSizeOf(pattern_index)));
+		System.out.printf("  [frozen:%s match:%s other:%s]\n", timerFrozen.clear(), timerMatch.clear(), other);
 		return timer.clear();
 	}
 
@@ -169,6 +173,12 @@ class Deadlock {
 			for (int i = 0; i < level.alive; i++)
 				pattern_index[d][i] = new Patterns(level.num_boxes, level.alive);
 		histogram = new int[level.num_boxes - 1];
+
+		try {
+			pattern_file = new BufferedWriter(new FileWriter("patterns.txt", false));
+		} catch (IOException e) {
+			throw new Error(e);
+		}
 	}
 
 	private boolean matchesPattern(int moved_box, int dir, int agent, long box0, long box1, int num_boxes) {
@@ -343,6 +353,7 @@ class Deadlock {
 				Util.updateOr(agent, visitor.visited());
 
 		// Save remaining state as a new deadlock pattern
+		addPatternToFile(agent, box);
 		histogram[num_boxes - 2] += 1;
 		for (int b = 0; b < level.alive; b++)
 			if (Bits.test(box[0], box[1], b))
@@ -351,6 +362,22 @@ class Deadlock {
 						pattern_index[level.delta[a][b]][b].add(box[0], box[1], num_boxes);
 		patterns += 1;
 		return true;
+	}
+
+	private void addPatternToFile(boolean[] agent, long[] box) {
+		char[] buffer = level.low.render(p -> {
+			if (agent[p])
+				return level.goal(p) ? LowLevel.AgentGoal : LowLevel.Agent;
+			if (Bits.test(box, p))
+				return level.goal(p) ? LowLevel.BoxGoal : LowLevel.Box;
+			return level.goal(p) ? LowLevel.Goal : LowLevel.Space;
+		});
+		try {
+			pattern_file.write(buffer, 0, buffer.length);
+			pattern_file.newLine();
+		} catch (IOException e) {
+			throw new Error(e);
+		}
 	}
 
 	static class GoalZonePattern {

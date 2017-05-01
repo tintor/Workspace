@@ -1,215 +1,115 @@
 package tintor.sokoban;
 
-import java.util.Arrays;
-
-import tintor.common.BinaryHeap;
-import tintor.common.CompactArray;
-import tintor.common.InlineChainingHashSet;
+import tintor.common.InstrumentationAgent;
 import tintor.common.Timer;
 import tintor.common.Util;
 
-class HeaplessOpenSet {
-	private final CompactArray<InlineChainingHashSet> priority = new CompactArray<InlineChainingHashSet>();
-	private int min_priority = Integer.MAX_VALUE;
-	private int size;
-	private InlineChainingHashSet.Scanner scanner;
-
-	private final Timer timer_get = new Timer();
-	private final Timer timer_update = new Timer();
-	private final Timer timer_addUnsafe = new Timer();
-	private final Timer timer_removeMin = new Timer();
-
-	long report(int cycles) {
-		timer_get.total /= cycles;
-		timer_update.total /= cycles;
-		timer_addUnsafe.total /= cycles;
-		timer_removeMin.total /= cycles;
-
-		StringBuilder sb = new StringBuilder();
-		for (int p = priority.first(); p != priority.end(); p = priority.next(p)) {
-			if (sb.length() > 0)
-				sb.append(' ');
-			sb.append(p);
-			sb.append(':');
-			sb.append(priority.get(p).size());
-			if (sb.length() > 100)
-				break;
-		}
-
-		long total_size = 0;
-		long total_capacity = 0;
-		double ratio = (double) total_size / Math.max(1, total_capacity);
-		long total = timer_get.total + timer_update.total + timer_addUnsafe.total + timer_removeMin.total;
-		System.out.printf("open:%s %.2f [get:%s update:%s add:%s pop:%s]\n", Util.human(total_size), ratio,
-				timer_get.clear(), timer_update.clear(), timer_addUnsafe.clear(), timer_removeMin.clear());
-		System.out.println(sb);
-		return total;
-	}
-
-	// O(1)
-	public State get(State s) {
-		try (Timer t = timer_get.start()) {
-			for (Object o : priority.values()) {
-				InlineChainingHashSet set = (InlineChainingHashSet) o;
-				State q = (State) set.get(s);
-				if (q != null)
-					return q;
-			}
-			return null;
-		}
-	}
-
-	// Called when a better path B to state is found than existing V
-	// O(1)
-	public void update(State v, State b) {
-		try (Timer t = timer_update.start()) {
-			priority.get(v.total_dist()).remove(v);
-			priority.get(b.total_dist()).add(b);
-		}
-	}
-
-	// O(1)
-	public void addUnsafe(State s) {
-		try (Timer t = timer_addUnsafe.start()) {
-			int p = s.total_dist();
-			InlineChainingHashSet set = priority.get(p);
-			if (set == null) {
-				set = new InlineChainingHashSet(4, null, false);
-				priority.set(p, set);
-				if (p < min_priority) {
-					min_priority = p;
-					scanner = set.new Scanner();
-				}
-			}
-			boolean added = set.add(s);
-			assert added;
-			size += 1;
-		}
-	}
-
-	// O(1)
-	public State removeMin() {
-		try (Timer t = timer_removeMin.start()) {
-			int p = min_priority;
-			assert p != priority.end();
-			InlineChainingHashSet set = priority.get(p);
-			State s = (State) scanner.remove();
-			if (set.size() == 0) {
-				priority.remove(p);
-				min_priority = priority.next(min_priority);
-				scanner = null;
-				if (min_priority != priority.end())
-					scanner = priority.get(min_priority).new Scanner();
-			}
-			size -= 1;
-			return s;
-		}
-	}
-
-	public int size() {
-		return size;
-	}
-}
-
 // Set of all States for which we found some path from the start (not sure if optimal yet)
-final class OpenSet {
-	private final BinaryHeap<State> heap = new BinaryHeap<State>();
-	private final InlineChainingHashSet set;
-	int garbage;
+class OpenSet {
+	private final StateMap map;
+	private final StateArray[] queue = new StateArray[1000];
+	private int min = queue.length;
+	private final int[] key;
 
 	private final Timer timer_get = new Timer();
 	private final Timer timer_update = new Timer();
-	private final Timer timer_addUnsafe = new Timer();
-	private final Timer timer_removeMin = new Timer();
+	private final Timer timer_add = new Timer();
+	private final Timer timer_remove_min = new Timer();
 
-	OpenSet(int alive, boolean enable_parallel_hashtable_resize) {
-		set = new InlineChainingHashSet(16, alive, enable_parallel_hashtable_resize);
+	OpenSet(int alive, int cells) {
+		map = new StateMap(alive, cells);
+		for (int i = 0; i < queue.length; i++)
+			queue[i] = new StateArray();
+		key = new int[(alive + 31) / 32];
 	}
-
-	int[] histogram = new int[1000];
 
 	long report(int cycles) {
 		timer_get.total /= cycles;
 		timer_update.total /= cycles;
-		timer_addUnsafe.total /= cycles;
-		timer_removeMin.total /= cycles;
+		timer_add.total /= cycles;
+		timer_remove_min.total /= cycles;
 
-		Arrays.fill(histogram, 0);
-		for (int i = 0; i < heap.size(); i++)
-			histogram[heap.get(i).total_dist()] += 1;
 		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < histogram.length; i++)
-			if (histogram[i] > 0) {
+		int size = 0;
+		for (int p = min; p < queue.length; p += 1) {
+			size += queue[p].size();
+			if (queue[p].size() > 0 && sb.length() < 50) {
 				if (sb.length() > 0)
 					sb.append(' ');
-				sb.append(i);
+				sb.append(p);
 				sb.append(':');
-				sb.append(histogram[i]);
-				if (sb.length() > 100)
-					break;
+				sb.append(queue[p].size());
 			}
+		}
 
-		long total = timer_get.total + timer_update.total + timer_addUnsafe.total + timer_removeMin.total;
-		System.out.printf("open:%s %.2f garbage:%s [get:%s update:%s add:%s pop:%s]\n", Util.human(size()), set.ratio(),
-				Util.human(garbage), timer_get.clear(), timer_update.clear(), timer_addUnsafe.clear(),
-				timer_removeMin.clear());
-		System.out.println(sb);
+		for (StateArray array : queue)
+			array.try_cleanup();
+
+		long total = timer_get.total + timer_update.total + timer_add.total + timer_remove_min.total;
+		System.out.printf("open:%s memory_map:%s memory_queue:%s\n", Util.human(size), deep_size(map),
+				deep_size(queue));
+		System.out.printf("  [get:%s update:%s add:%s remove_min:%s]\n", timer_get.clear(), timer_update.clear(),
+				timer_add.clear(), timer_remove_min.clear());
+		System.out.printf("  %s\n", sb);
 		return total;
 	}
 
+	static String deep_size(Object o) {
+		return Util.human(InstrumentationAgent.deepSizeOf(o));
+	}
+
 	// O(1)
-	public State get(State s) {
+	public int get_total_dist(State s) {
 		try (Timer t = timer_get.start()) {
-			return (State) set.get(s);
+			return map.get_total_dist(s);
 		}
 	}
 
 	// Called when a better path B to state is found than existing V
-	// O(logN)
-	public void updateTrashy(State v, State b) {
+	// O(1)
+	public void update(int v_total_dist, State b) {
 		try (Timer t = timer_update.start()) {
-			// TODO: try to cleanup existing garbage first if heap array is full
-			assert set.contains(v);
-			assert v.equals(b);
-			set.replaceWithEqual(v, b);
-			heap.add(b);
-			// Note: leaves garbage in heap, but that is fine
-			garbage += 1;
-			// TODO if too much garbage: 1) sort heap by (priority, identityHashCode) 2) remove duplicates (garbage), 3) done (sorted heap is a valid heap)
-			assert heap.size() == set.size() + garbage;
+			map.update(v_total_dist, b);
+			if (b.total_dist() < min)
+				min = b.total_dist();
+			queue[b.total_dist()].push(b, key);
 		}
 	}
 
-	// O(logN)
-	public void addUnsafe(State s) {
-		try (Timer t = timer_addUnsafe.start()) {
-			// TODO: try to cleanup existing garbage first if heap array is full
-			assert !set.contains(s);
-			set.addUnsafe(s);
-			heap.add(s);
-			assert heap.size() == set.size() + garbage;
+	// O(1)
+	public void add(State s) {
+		try (Timer t = timer_add.start()) {
+			map.insert(s);
+			if (s.total_dist() < min)
+				min = s.total_dist();
+			queue[s.total_dist()].push(s, key);
 		}
 	}
 
-	// O(logN)
-	public State removeMin() {
-		try (Timer t = timer_removeMin.start()) {
+	// O(1)
+	public State remove_min() {
+		try (Timer t = timer_remove_min.start()) {
 			while (true) {
-				State s = heap.removeMin();
-				if (s == null)
-					return null;
-				if (!set.remove(s)) {
-					garbage -= 1;
-					assert garbage >= 0;
-					continue;
-				}
-				return s;
+				while (queue[min].size() == 0)
+					min += 1;
+				State s = map.get_and_remove(queue[min].pop(key), key);
+				if (s != null)
+					return s;
 			}
 		}
 	}
 
+	public boolean empty() {
+		while (queue[min].size() == 0)
+			if (++min == queue.length)
+				return true;
+		return false;
+	}
+
 	public int size() {
-		assert heap.size() == set.size() + garbage;
-		return set.size();
+		int size = 0;
+		for (int p = min; p < queue.length; p += 1)
+			size += queue[p].size();
+		return size;
 	}
 }

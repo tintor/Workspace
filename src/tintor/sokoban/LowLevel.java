@@ -145,9 +145,13 @@ class LowLevel {
 	}
 
 	void print(IndexToChar ch) {
+		System.out.print(render(ch));
+	}
+
+	char[] render(IndexToChar ch) {
 		for (int i = 0; i < new_to_old.length; i++)
 			buffer[new_to_old[i]] = ch.fn(i);
-		System.out.print(buffer);
+		return buffer;
 	}
 
 	boolean wall(int i) {

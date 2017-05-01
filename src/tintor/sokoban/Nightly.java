@@ -23,14 +23,13 @@ public class Nightly {
 
 		for (Level level : levels)
 			try {
-				if (level.state_space() > 23)
+				if (level.state_space() > 27)
 					continue;
 				Log.info("%s cells:%d alive:%d boxes:%d state_space:%s", level.low.name, level.cells, level.alive,
 						level.num_boxes, level.state_space());
 				Deadlock deadlock = new Deadlock(level);
 				Solver.Context context = new Solver.Context();
 				context.trace = 0;
-				context.enable_parallel_hashtable_resize = true;
 				context.optimal_macro_moves = false;
 
 				timer.total = 0;
@@ -49,7 +48,7 @@ public class Nightly {
 				totalOpen += context.open_set_size;
 				Log.info("closed:%s open:%s patterns:%s", context.closed_set_size, context.open_set_size,
 						Util.human(deadlock.patterns));
-			} catch (Exception e) {
+			} catch (OutOfMemoryError e) {
 				Log.info("exception after %s", timer.human());
 				System.out.println(e);
 				e.printStackTrace();
@@ -57,7 +56,7 @@ public class Nightly {
 			}
 		Log.info("solved %d, unsolved %d, DIST %d, CLOSED %d, OPEN %d", solved, unsolved, totalDist, totalClosed,
 				totalOpen);
-		Log.info("snapshot [70.496 solved 390, unsolved 0, DIST 40813, CLOSED 20258351, OPEN 434998]");
+		Log.info("snapshot [52.729 Nightly:58 I solved 390, unsolved 0, DIST 40830, CLOSED 20262253, OPEN 438244");
 	}
 
 	public static void mainz(String[] args) {
