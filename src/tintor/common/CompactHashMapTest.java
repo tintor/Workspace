@@ -21,40 +21,40 @@ public class CompactHashMapTest {
 
 	@Test
 	public void simple() {
-		CompactHashMap m = new CompactHashMap(4, 4, 2, 2, make(Integer.MIN_VALUE));
+		CompactHashMap m = new CompactHashMap(4, 4, 2);
 		// empty
 		assertEquals(0, m.size());
 		assertTrue(!m.contains(make(0)));
 		assertTrue(!m.contains(make(1)));
 		assertTrue(!m.iterator().hasNext());
 		assertTrue(!m.remove(make(0)));
-		assertArrayEquals(null, m.get(make(0)));
+		assertArrayEquals(null, m.get(make(0), null));
 		// add one element
-		assertTrue(!m.set(make(0, 1)));
+		assertTrue(m.insert(make(0, 1)));
 		assertEquals(1, m.size());
 		assertTrue(m.contains(make(0)));
 		assertTrue(!m.contains(make(1)));
-		assertArrayEquals(make(1), m.get(make(0)));
+		assertArrayEquals(make(1), m.get(make(0), null));
 		Iterator<byte[]> it = m.iterator();
 		assertTrue(it.hasNext());
 		assertArrayEquals(make(0, 1), it.next());
 		assertTrue(!it.hasNext());
 		// remove one element
 		assertTrue(m.remove(make(0)));
-		assertEquals(0, m.deleted_keys());
 		assertTrue(!m.contains(make(0)));
 		assertEquals(0, m.size());
 		assertTrue(!m.iterator().hasNext());
-		assertArrayEquals(null, m.get(make(0)));
+		assertArrayEquals(null, m.get(make(0), null));
 	}
 
 	public static void main2(String[] args) {
 		Log.info("sizeof(byte[])=%d", Measurer.sizeOf(byte[].class));
-		CompactHashMap m = new CompactHashMap(4, 4, 2, 9, null);
+		CompactHashMap m = new CompactHashMap(4, 4, 2);
 		Random rand = new Random(0);
 		for (int i = 0; true; i++) {
 			if (i % 1000000 == 0)
-				Log.info("%d, %.1f bits, %.2f, %s", i / 1000000, (m.memory_usage() - m.size() * 8.0) / m.size() * 8,
+				Log.info("%d, %.1f bits, %.2f, %s", i / 1000000,
+						(InstrumentationAgent.deepSizeOf(m) - m.size() * 8.0) / m.size() * 8,
 						(double) m.size() / m.capacity(), Util.human(Runtime.getRuntime().freeMemory()));
 			m.set(make(rand.nextInt(), rand.nextInt()));
 		}
@@ -62,30 +62,20 @@ public class CompactHashMapTest {
 
 	public static void main(String[] args) {
 		Log.info("sizeof(byte[])=%d", Measurer.sizeOf(byte[].class));
-		CompactHashMap m = new CompactHashMap(4, 4, 2, 9, make(-1));
+		CompactHashMap m = new CompactHashMap(4, 4, 2);
 		for (int j = 0; j < 1000000; j++) {
 			for (int i = 0; i < 1000000; i++) {
 				m.set(make(j + i, i));
 			}
-			Log.info("%d %d", m.size(), m.deleted_keys());
 			for (int i = 0; i < 1000000; i++) {
 				m.remove(make(j + i));
 			}
-			Log.info("%d %d", m.size(), m.deleted_keys());
 		}
 	}
 
 	@Test
-	public void big6() {
-		CompactHashMap m = new CompactHashMap(4, 4, 2, 6, null);
-		Random rand = new Random();
-		for (int i = 0; i < 1000000; i++)
-			m.set(make(rand.nextInt(), rand.nextInt()));
-	}
-
-	@Test
-	public void big7() {
-		CompactHashMap m = new CompactHashMap(4, 4, 2, 7, null);
+	public void big() {
+		CompactHashMap m = new CompactHashMap(4, 4, 2);
 		Random rand = new Random();
 		for (int i = 0; i < 1000000; i++)
 			m.set(make(rand.nextInt(), rand.nextInt()));
@@ -93,13 +83,13 @@ public class CompactHashMapTest {
 
 	@Test
 	public void sequential() {
-		CompactHashMap m = new CompactHashMap(4, 4, 2, 2, make(Integer.MIN_VALUE));
+		CompactHashMap m = new CompactHashMap(4, 4, 2);
 		for (int i = 0; i < 1000000; i++) {
 			assertTrue(!m.contains(make(i)));
-			assertArrayEquals(null, m.get(make(i)));
+			assertArrayEquals(null, m.get(make(i), null));
 			m.set(make(i, -i));
 			assertTrue(m.contains(make(i)));
-			assertArrayEquals(make(-i), m.get(make(i)));
+			assertArrayEquals(make(-i), m.get(make(i), null));
 			assertEquals(i + 1, m.size());
 		}
 	}
