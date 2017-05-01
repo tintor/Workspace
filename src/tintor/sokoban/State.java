@@ -10,11 +10,11 @@ import tintor.common.Zobrist;
 
 // State without boxes
 abstract class StateBase extends InlineChainingHashSet.Element {
-	StateBase(int agent, int dist, int dir, int pushes) {
+	StateBase(int agent, int dist, int dir, int pushes, int prev_agent) {
 		assert 0 <= agent && agent < 256 : agent;
 		this.agent = (byte) agent;
 
-		assert 0 <= dist && dist <= Short.MAX_VALUE : dist;
+		assert 0 <= dist && dist < (8 * 1024) : dist;
 		this.dist = (short) dist;
 
 		assert -1 <= dir && dir < 4;
@@ -22,10 +22,17 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 
 		assert pushes >= 0;
 		this.pushes = (byte) pushes;
+
+		assert 0 <= prev_agent && prev_agent < 256;
+		this.prev_agent = (byte) prev_agent;
 	}
 
 	public int agent() {
 		return (int) agent & 0xFF;
+	}
+
+	public int prev_agent() {
+		return (int) prev_agent & 0xFF;
 	}
 
 	public int dist() {
@@ -90,12 +97,14 @@ abstract class StateBase extends InlineChainingHashSet.Element {
 
 	// Transient fields for OpenSet
 	private short total_dist; // = distance from start + heuristic to goal
+
+	private final byte prev_agent;
 }
 
 final class State extends StateBase implements Comparable<State> {
-	State(int agent, long box0, long box1, int dist, int dir, int pushes) {
-		super(agent, dist, dir, pushes);
-		assert agent >= 128 || !Bits.test(box0, box1, agent) : agent + " " + dist;
+	State(int agent, long box0, long box1, int dist, int dir, int pushes, int prev_agent) {
+		super(agent, dist, dir, pushes, prev_agent);
+		assert agent >= 128 || !Bits.test(box0, box1, agent);
 		this.box0 = box0;
 		this.box1 = box1;
 	}
@@ -148,7 +157,7 @@ final class State extends StateBase implements Comparable<State> {
 			}
 			assert a != agent();
 			assert dist >= level.low.dist;
-			return new State(a, box0, box1, dist, -1, 0);
+			return new State(a, box0, box1, dist, -1, 0, 0);
 		}
 
 		assert 0 <= dir && dir < 4;
@@ -176,7 +185,7 @@ final class State extends StateBase implements Comparable<State> {
 		else
 			nbox1 = Bits.set(nbox1, b - 64);
 
-		return new State(level.rmove(b, dir), nbox0, nbox1, dist() - pushes(), -1, 0);
+		return new State(level.rmove(b, dir), nbox0, nbox1, dist() - pushes(), -1, 0, 0);
 	}
 
 	State move(int dir, Level level, boolean optimal) {
@@ -200,48 +209,49 @@ final class State extends StateBase implements Comparable<State> {
 				a = next;
 				dist += 1;
 			}
-			return new State(a, box0, box1, dist, dir, 0);
+			return new State(a, box0, box1, dist, dir, 0, 0);
 		}
+		return push(a, dir, level, optimal);
+	}
 
-		int b = level.move(a, dir);
-		if (b == -1 || b >= level.alive)
+	State push(int box, int dir, Level level, boolean optimal) {
+		int b = level.move(box, dir);
+		if (b == -1 || b >= level.alive || box(b))
 			return null;
-		if (!box(b)) {
-			long nbox0 = box0;
-			long nbox1 = box1;
-			if (a < 64)
-				nbox0 = Bits.clear(nbox0, a);
+
+		long nbox0 = box0;
+		long nbox1 = box1;
+		if (box < 64)
+			nbox0 = Bits.clear(nbox0, box);
+		else
+			nbox1 = Bits.clear(nbox1, box - 64);
+		if (b < 64)
+			nbox0 = Bits.set(nbox0, b);
+		else
+			nbox1 = Bits.set(nbox1, b - 64);
+		int pushes = 1;
+
+		// keep pushing box until the end of tunnel
+		while (can_force_push(box, b, level, optimal)) {
+			// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
+			int c = level.move(b, dir);
+			if (c == -1 || c >= level.alive || box(c))
+				return null;
+			box = b;
+			b = c;
+			assert dir == level.delta[box][b];
+			if (box < 64)
+				nbox0 = Bits.clear(nbox0, box);
 			else
-				nbox1 = Bits.clear(nbox1, a - 64);
+				nbox1 = Bits.clear(nbox1, box - 64);
 			if (b < 64)
 				nbox0 = Bits.set(nbox0, b);
 			else
 				nbox1 = Bits.set(nbox1, b - 64);
-			int pushes = 1;
-
-			// keep pushing box until the end of tunnel
-			while (can_force_push(a, b, level, optimal)) {
-				// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
-				int c = level.move(b, dir);
-				if (c == -1 || c >= level.alive || box(c))
-					return null;
-				a = b;
-				b = c;
-				assert dir == level.delta[a][b];
-				if (a < 64)
-					nbox0 = Bits.clear(nbox0, a);
-				else
-					nbox1 = Bits.clear(nbox1, a - 64);
-				if (b < 64)
-					nbox0 = Bits.set(nbox0, b);
-				else
-					nbox1 = Bits.set(nbox1, b - 64);
-				pushes += 1;
-			}
-
-			return new State(a, nbox0, nbox1, dist() + pushes, dir, pushes);
+			pushes += 1;
 		}
-		return null;
+
+		return new State(box, nbox0, nbox1, dist() + pushes, dir, pushes, 0);
 	}
 
 	private boolean more_goals_than_boxes_in_room(int a, int door, Level level) {

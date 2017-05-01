@@ -23,7 +23,7 @@ public class Nightly {
 
 		for (Level level : levels)
 			try {
-				if (level.state_space() > 27)
+				if (level.state_space() > 23)
 					continue;
 				Log.info("%s cells:%d alive:%d boxes:%d state_space:%s", level.low.name, level.cells, level.alive,
 						level.num_boxes, level.state_space());

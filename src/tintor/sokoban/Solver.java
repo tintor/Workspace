@@ -8,6 +8,7 @@ import tintor.common.InlineChainingHashSet;
 import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
+import tintor.common.Visitor;
 
 // try –XX:+UseG1GC
 
@@ -217,6 +218,47 @@ public final class Solver {
 		}
 	}
 
+	static void exploreNew(State a, Monitor monitor, Context context) {
+		Visitor visitor = monitor.level.visitor;
+		visitor.init(a.agent());
+		while (!visitor.done()) {
+			int agent = visitor.next();
+			for (int dir : monitor.level.dirs[agent]) {
+				int move = monitor.level.move(agent, dir);
+				if (visitor.visited(move))
+					continue;
+				if (!a.box(move)) {
+					visitor.add(move);
+					continue;
+				}
+
+				monitor.timer_moves.start();
+				State b = a.push(move, dir, monitor.level, context.optimal_macro_moves);
+				monitor.timer_moves.stop();
+				if (b == null || monitor.closed.contains(b))
+					continue;
+
+				int v_total_dist = monitor.open.get_total_dist(b);
+				if (v_total_dist == 0 && b.is_push() && monitor.deadlock.check(b))
+					continue;
+
+				int h = monitor.heuristic.evaluate(b, a);
+				if (h == Integer.MAX_VALUE)
+					continue;
+				b.set_heuristic(h);
+				assert b.total_dist() != 0;
+
+				if (v_total_dist == 0) {
+					monitor.open.add(b);
+					monitor.branches += 1;
+					continue;
+				}
+				if (b.total_dist() < v_total_dist)
+					monitor.open.update(v_total_dist, b);
+			}
+		}
+	}
+
 	static void printSolution(Level level, State[] solution) {
 		ArrayList<State> pushes = new ArrayList<State>();
 		for (State s : solution)
@@ -233,7 +275,7 @@ public final class Solver {
 	static Timer timer = new Timer();
 
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load("original:2");
+		Level level = Level.load("original:1");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
