@@ -27,6 +27,10 @@ public final class InlineChainingHashSet implements Iterable<InlineChainingHashS
 		return size;
 	}
 
+	public int capacity() {
+		return buckets.length;
+	}
+
 	public double ratio() {
 		return (double) size / buckets.length;
 	}
