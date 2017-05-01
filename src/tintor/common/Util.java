@@ -9,6 +9,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class Util {
 	public static String human(long a) {
+		if (a < 0)
+			return "-" + human(-a);
 		if (a <= 10000)
 			return String.format("%d", a);
 		if (a <= 10000000)

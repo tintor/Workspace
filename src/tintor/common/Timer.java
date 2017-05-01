@@ -23,19 +23,21 @@ public final class Timer implements AutoCloseable {
 		return a;
 	}
 
+	public static String human(long total) {
+		if (total <= 5000)
+			return String.format("%dns", total);
+		if (total <= 5000000)
+			return String.format("%dus", (total + 500) / 1000);
+		if (total <= 5000000000l)
+			return String.format("%dms", (total + 500000) / 1000000);
+		if (total <= 5 * 60 * 1000000000l)
+			return String.format("%ds", (total + 500000000) / 1000000000);
+		return String.format("%dm", (total + 30000000000l) / 60000000000l);
+	}
+
 	public String human() {
-		try {
-			if (total <= 5000)
-				return String.format("%dns", total);
-			if (total <= 5000000)
-				return String.format("%dus", (total + 500) / 1000);
-			if (total <= 5000000000l)
-				return String.format("%dms", (total + 500000) / 1000000);
-			if (total <= 5 * 60 * 1000000000l)
-				return String.format("%ds", (total + 500000000) / 1000000000);
-			return String.format("%dm", (total + 30000000000l) / 60000000000l);
-		} finally {
-			total = 0;
-		}
+		long a = total;
+		total = 0;
+		return human(a);
 	}
 }
