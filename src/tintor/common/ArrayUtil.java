@@ -5,6 +5,7 @@ public final class ArrayUtil {
 	public final static long[] EmptyLongArray = new long[0];
 	public final static byte[] EmptyByteArray = new byte[0];
 	public final static int[] EmptyIntArray = new int[0];
+	public final static short[] EmptyShortArray = new short[0];
 
 	public static Object[] expand(Object[] array, int pos, int length) {
 		Object[] narray = new Object[array.length + length];

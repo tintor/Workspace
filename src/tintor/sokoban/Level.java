@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import tintor.common.ArrayDequeInt;
+import tintor.common.AutoTimer;
 import tintor.common.BitMatrix;
 import tintor.common.Bits;
 import tintor.common.Util;
@@ -12,11 +13,8 @@ import tintor.common.Visitor;
 import tintor.common.Zobrist;
 import tintor.sokoban.LowLevel.IndexToChar;
 
-class Level {
-	static class MoreThan128AliveCellsError extends Error {
-		private static final long serialVersionUID = 1L;
-	}
-
+final class Level {
+	// Note: could easily increase this limit
 	static class MoreThan256CellsError extends Error {
 		private static final long serialVersionUID = 1L;
 	}
@@ -43,7 +41,6 @@ class Level {
 		for (int i = 1; i <= count; i++)
 			try {
 				levels.add(load(filename + ":" + i));
-			} catch (MoreThan128AliveCellsError e) {
 			} catch (MoreThan256CellsError e) {
 			}
 		return levels;
@@ -51,14 +48,14 @@ class Level {
 
 	static Level load(String filename) {
 		LowLevel low = LowLevel.load(filename);
-		final boolean[] walkable = low.compute_walkable(true);
-		if (walkable == null)
-			throw new IllegalArgumentException("level contains unreachable boxes or goals");
+		final boolean[] walkable = low.compute_walkable();
+		low.add_walls(walkable);
+		low.check_boxes_and_goals();
 		if (Util.count(walkable) > 256)
 			throw new MoreThan256CellsError(); // just to avoid calling compute_alive() for huge levels
 		ArrayDequeInt deque = new ArrayDequeInt(low.cells);
 		BitMatrix visited = new BitMatrix(low.cells, low.cells); // TODO this is huge, as cells is raw buffer size
-		if (!low.are_all_goals_reachable(deque, visited))
+		if (!low.new AreAllGoalsReachable().run(visited))
 			throw new IllegalArgumentException("level contains unreachable goal");
 		final boolean[] is_alive = low.compute_alive(deque, visited, walkable);
 		return new Level(low, walkable, is_alive);
@@ -73,8 +70,6 @@ class Level {
 		if (cells > 256)
 			throw new MoreThan256CellsError();
 		alive = Util.count(is_alive);
-		if (alive > 128)
-			throw new MoreThan128AliveCellsError();
 
 		int b = 0;
 		int[] old_to_new = new int[low.cells];
@@ -223,23 +218,22 @@ class Level {
 		});
 	}
 
-	void print(State s) {
-		print(p -> s.agent() == p, p -> s.box(p));
+	void print(StateKey s) {
+		print(p -> s.agent == p, p -> s.box(p));
 	}
+
+	final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
 
 	boolean is_valid_level(IndexToChar op) {
-		LowLevel low_clone = low.clone(op);
-		if (low_clone.compute_walkable(false) == null)
-			return false;
-		if (!low_clone.check_boxes_and_goals_silent())
-			return false;
-		ArrayDequeInt deque = new ArrayDequeInt(low_clone.cells);
-		BitMatrix visited = new BitMatrix(low_clone.cells, low_clone.cells); // TODO this is huge, as cells is raw buffer size
-		return low_clone.are_all_goals_reachable(deque, visited);
-	}
-
-	void print_alive(State s) {
-		low.print(p -> p < alive ? '.' : ' ');
+		try (AutoTimer t = timer_isvalidlevel.open()) {
+			LowLevel low_clone = low.clone(op);
+			low_clone.compute_walkable();
+			if (!low_clone.check_boxes_and_goals_silent())
+				return false;
+			return true;
+			//BitMatrix visited = new BitMatrix(low_clone.cells, low_clone.cells); // TODO this is huge, as cells is raw buffer size
+			//return low_clone.new AreAllGoalsReachable().run(visited);
+		}
 	}
 
 	int move(int src, int dir) {

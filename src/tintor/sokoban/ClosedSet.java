@@ -1,13 +1,13 @@
 package tintor.sokoban;
 
+import tintor.common.AutoTimer;
 import tintor.common.InstrumentationAgent;
-import tintor.common.Timer;
 import tintor.common.Util;
 
 final class ClosedSet {
 	final StateMap map;
-	final Timer timer_add = new Timer();
-	final Timer timer_contains = new Timer();
+	final AutoTimer timer_add = new AutoTimer("closed.add");
+	final AutoTimer timer_contains = new AutoTimer("closed.contains");
 
 	ClosedSet(int alive, int cells) {
 		map = new StateMap(alive, cells);
@@ -17,28 +17,24 @@ final class ClosedSet {
 		return map.size();
 	}
 
-	long report(int cycles) {
-		timer_add.total /= cycles;
-		timer_contains.total /= cycles;
-		long total = timer_add.total + timer_contains.total;
-		System.out.printf("closed:%s memory:%s [add:%s contains:%s]\n", Util.human(size()),
-				Util.human(InstrumentationAgent.deepSizeOf(map)), timer_add.clear(), timer_contains.clear());
-		return total;
+	void report() {
+		System.out.printf("closed:%s memory:%s\n", Util.human(size()),
+				Util.human(InstrumentationAgent.deepSizeOf(map)));
 	}
 
 	void add(State s) {
-		try (Timer t = timer_add.start()) {
+		try (AutoTimer t = timer_add.open()) {
 			map.insert(s);
 		}
 	}
 
-	boolean contains(State s) {
-		try (Timer t = timer_contains.start()) {
+	boolean contains(StateKey s) {
+		try (AutoTimer t = timer_contains.open()) {
 			return map.contains(s);
 		}
 	}
 
-	State get(State s) {
+	State get(StateKey s) {
 		return map.get(s);
 	}
 }

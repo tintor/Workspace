@@ -3,16 +3,17 @@ package tintor.sokoban;
 import java.util.Arrays;
 
 import tintor.common.ArrayDequeInt;
+import tintor.common.AutoTimer;
 import tintor.common.BitMatrix;
 import tintor.common.HungarianAlgorithm;
-import tintor.common.Timer;
 
 final class Heuristic {
 	final Level level;
 	final int[] boxes;
-	final int[][] distance_box;
+	final int[][] distance_goal; // distance[agent][box] to nearest goal
+	final int[][] distance_box; // distance[box][goal_orginal]
 	final HungarianAlgorithm hungarian;
-	final Timer timer = new Timer();
+	final AutoTimer timer = new AutoTimer("heuristic");
 	int deadlocks;
 	int non_deadlocks;
 
@@ -23,6 +24,11 @@ final class Heuristic {
 		hungarian = new HungarianAlgorithm(num_boxes, num_goals);
 
 		boxes = new int[num_boxes];
+
+		distance_goal = null; // new int[level.cells][level.alive];
+		if (distance_goal != null)
+			for (int[] d : distance_goal)
+				Arrays.fill(d, Integer.MAX_VALUE);
 
 		distance_box = new int[level.alive][num_goals];
 		for (int[] d : distance_box)
@@ -70,35 +76,44 @@ final class Heuristic {
 
 			for (int c : level.moves[s_agent]) {
 				if (c != s_box && distance[c][s_box] == -1) {
-					distance[c][s_box] = distance[s_agent][s_box] + 1;
+					set_distance(c, s_box, distance[s_agent][s_box] + 1, distance);
 					deque.addLast(make_pair(c, s_box));
 				}
 				if (s_agent < level.alive && level.move(s_agent, level.delta[c][s_agent]) == s_box
 						&& distance[c][s_agent] == -1) {
-					distance[c][s_agent] = distance[s_agent][s_box] + 1;
+					set_distance(c, s_agent, distance[s_agent][s_box] + 1, distance);
 					deque.addLast(make_pair(c, s_agent));
 				}
 			}
 		}
 	}
 
-	public int evaluate(State s, State prev) {
-		try (Timer t = timer.start()) {
-			int h = (prev != null && !s.is_push()) ? evaluate_delta(s, prev) : evaluate_internal(s);
+	private void set_distance(int a, int b, int d, int[][] distance) {
+		distance[a][b] = d;
+		if (distance_goal != null && d < distance_goal[a][b])
+			distance_goal[a][b] = d;
+	}
+
+	public int evaluate(State s) {
+		try (AutoTimer t = timer.open()) {
+			int h = evaluate_internal(s);
 			assert h >= 0;
-			if (h == Integer.MAX_VALUE) {
+			if (h == Integer.MAX_VALUE)
 				deadlocks += 1;
-			} else {
+			else {
+				h *= 3; // overestimation
 				non_deadlocks += 1;
 			}
 			return h;
 		}
 	}
 
-	private int evaluate_delta(State s, State prev) {
-		int a = prev.total_dist() - prev.dist() - agent_to_nearest_box_distance(prev);
-		assert a >= 0;
-		return a + agent_to_nearest_box_distance(s);
+	private int evaluate_internal_cheap(State s) {
+		int h = 0;
+		for (int i = 0; i < level.alive; i++)
+			if (s.box(i))
+				h += distance_goal[s.agent][i];
+		return h;
 	}
 
 	private int evaluate_internal(State s) {
@@ -129,17 +144,6 @@ final class Heuristic {
 		}
 
 		assert sum >= 0;
-		return sum + agent_to_nearest_box_distance(s);
-	}
-
-	private int agent_to_nearest_box_distance(State s) {
-		int dist = Integer.MAX_VALUE;
-		for (int i = 0; i < level.alive; i++)
-			if (s.box(i) && !level.goal(i))
-				dist = Math.min(level.agent_distance[s.agent()][i], dist);
-		if (dist == Integer.MAX_VALUE)
-			return 0;
-		assert dist > 0;
-		return dist - 1;
+		return sum;
 	}
 }

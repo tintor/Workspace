@@ -69,4 +69,8 @@ public class Log {
 	public static void error(String format, Object... args) {
 		log(Level.ERROR, format, args);
 	}
+
+	public static void raw(String format, Object... args) {
+		System.out.printf(format + "\n", args);
+	}
 }

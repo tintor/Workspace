@@ -6,128 +6,122 @@ import tintor.common.Bits;
 import tintor.common.Visitor;
 
 class StateKey {
-	int agent;
-	int[] boxes;
-}
+	final int agent;
+	final int[] box;
 
-class State_ extends StateKey {
-	int dir; // direction of move from previous state
-	int dist;
-	int pushes; // number of box pushes from single call to State.move()
-	int total_dist; // = distance from start + heuristic to goal
-	int prev_agent;
-}
-
-// State without boxes
-class StateBase {
-	StateBase(int agent, int dist, int dir, int pushes, int prev_agent) {
-		assert 0 <= agent && agent < 256 : agent;
-		this.agent = (byte) agent;
-
-		assert 0 <= dist && dist < (8 * 1024) : dist;
-		this.dist = (short) dist;
-
-		assert -1 <= dir && dir < 4;
-		this.dir = (byte) dir;
-
-		assert pushes >= 0;
-		this.pushes = (byte) pushes;
-
-		assert 0 <= prev_agent && prev_agent < 256;
-		this.prev_agent = (byte) prev_agent;
-	}
-
-	public int agent() {
-		return (int) agent & 0xFF;
-	}
-
-	public int prev_agent() {
-		return (int) prev_agent & 0xFF;
-	}
-
-	public int dist() {
-		return (int) dist & 0xFFFF;
-	}
-
-	public int total_dist() {
-		return (int) total_dist & 0xFFFF;
-	}
-
-	public boolean is_push() {
-		return pushes != 0;
-	}
-
-	public int pushes() {
-		return (int) pushes & 0xFF;
-	}
-
-	public void set_heuristic(int heuristic) {
-		assert heuristic >= 0 && heuristic < 65536 - dist() : heuristic;
-		this.total_dist = (short) (dist() + heuristic);
-	}
-
-	// Identity (primary key)
-	private final byte agent;
-
-	// Properties of State
-	final byte dir; // direction of move from previous state
-	private final short dist;
-	private final byte pushes; // number of box pushes from single call to State.move()
-
-	// Transient fields for OpenSet
-	private short total_dist; // = distance from start + heuristic to goal
-
-	private final byte prev_agent;
-}
-
-final class State extends StateBase {
-	State(int agent, int[] box, int dist, int dir, int pushes, int prev_agent) {
-		super(agent, dist, dir, pushes, prev_agent);
-		assert agent >= box.length * 32 || !Bits.test(box, agent);
+	public StateKey(int agent, int[] box) {
+		assert 0 <= agent : agent;
+		this.agent = agent;
+		assert box != null && box.length > 0;
 		this.box = box;
+
+		assert agent >= box.length * 32 || !Bits.test(box, agent);
 	}
 
-	boolean box(int i) {
+	public final boolean box(int i) {
 		assert i >= 0;
 		return i < box.length * 32 && Bits.test(box, i);
 	}
 
-	boolean equals(State s) {
-		return agent() == s.agent() && Arrays.equals(box, s.box);
+	public final boolean equals(StateKey s) {
+		return agent == s.agent && Arrays.equals(box, s.box);
 	}
 
 	@Override
-	public boolean equals(Object o) {
-		return equals((State) o);
+	public final boolean equals(Object o) {
+		return equals((StateKey) o);
+	}
+}
+
+class State extends StateKey {
+	final int dir; // direction of move from previous state
+	private final int dist;
+	private final int pushes; // number of box pushes from single call to State.move()
+	private int total_dist; // = distance from start + heuristic to goal
+	private final int prev_agent;
+
+	State(int agent, int[] box, int dist, int dir, int pushes, int prev_agent) {
+		super(agent, box);
+
+		assert 0 <= dist;
+		this.dist = dist;
+
+		assert 0 <= dir && dir < 4;
+		this.dir = dir;
+
+		assert pushes >= 0;
+		this.pushes = pushes;
+
+		assert 0 <= prev_agent;
+		this.prev_agent = prev_agent;
 	}
 
-	State prev(Level level) {
+	public boolean is_initial() {
+		return pushes == 0;
+	}
+
+	public static State deserialize(int agent, int[] box, long value) {
+		final int mask = (1 << 13) - 1;
+		int total_dist = (int) (value & mask);
+		int dist = (int) ((value >>> 13) & mask);
+		int dir = (int) ((value >>> 26) & 3);
+		int pushes = (int) (value >>> 28) & 0xF;
+		int prev_agent = (int) ((value >>> 32) & 0xFF);
+		assert prev_agent != 255 : String.format("%x", value);
+		State q = new State(agent, box, dist, dir, pushes, prev_agent);
+		q.set_heuristic(total_dist - dist);
+		return q;
+	}
+
+	private static boolean range(int a, int m) {
+		return 0 <= a && a < m;
+	}
+
+	public long serialize() {
+		long v = 0;
+		assert range(total_dist(), 1 << 13);
+		assert range(dist(), 1 << 13);
+		assert range(dir, 4);
+		assert range(pushes(), 16);
+		assert range(prev_agent(), 256);
+		v = total_dist();
+		v |= dist() << 13;
+		v |= dir << 26;
+		v |= (long) pushes() << 28;
+		v |= (long) prev_agent() << 32;
+		return v;
+	}
+
+	public int prev_agent() {
+		return prev_agent;
+	}
+
+	public int dist() {
+		return dist;
+	}
+
+	public int total_dist() {
+		return total_dist;
+	}
+
+	public int pushes() {
+		return pushes;
+	}
+
+	public void set_heuristic(int heuristic) {
+		assert heuristic >= 0 && heuristic < 65536 - dist() : heuristic;
+		this.total_dist = dist() + heuristic;
+	}
+
+	StateKey prev(Level level) {
+		assert prev_agent < level.cells;
 		if (equals(level.start))
 			return null;
 		assert dist() > level.low.dist;
-		int a = level.rmove(agent(), dir);
+		int a = level.rmove(agent, dir);
 		assert 0 <= a && a < level.cells;
-		if (pushes() == 0) {
-			int dist = dist() - 1;
-			int prev = agent();
-			// forced move: keep moving until the end of tunnel
-			while (level.moves[a].length == 2 && dist > level.low.dist) {
-				assert level.moves[a][0] == prev || level.moves[a][1] == prev;
-				int next = prev ^ level.moves[a][0] ^ level.moves[a][1];
-				assert next != a;
-				if (box(next))
-					break;
-				prev = a;
-				a = next;
-				dist -= 1;
-			}
-			assert a != agent();
-			assert dist >= level.low.dist;
-			return new State(a, box, dist, -1, 0, 0);
-		}
-
 		assert 0 <= dir && dir < 4;
-		int b = agent();
+		int b = agent;
 		assert 0 <= b && b < level.alive;
 		assert !box(b);
 		for (int i = 0; i < pushes() - 1; i++) {
@@ -136,43 +130,22 @@ final class State extends StateBase {
 			assert !box(b);
 		}
 
-		int c = level.move(agent(), dir);
+		int c = level.move(agent, dir);
 		assert 0 <= c && c < level.alive;
 		assert box(c);
 
 		int[] nbox = box.clone();
 		Bits.clear(nbox, c);
 		Bits.set(nbox, b);
-		return new State(level.rmove(b, dir), nbox, dist() - pushes(), -1, 0, 0);
+		return new StateKey(prev_agent, nbox);
 	}
 
-	State move(int dir, Level level, boolean optimal) {
-		assert 0 <= dir && dir < 4;
-		int a = level.move(agent(), dir);
-		if (a == -1)
-			return null;
-		if (!box(a)) {
-			int dist = dist() + 1;
-			int prev = agent();
-			// forced move: keep moving until the end of tunnel
-			while (level.moves[a].length == 2) {
-				assert level.moves[a][0] == prev || level.moves[a][1] == prev;
-				int next = prev ^ level.moves[a][0] ^ level.moves[a][1];
-				assert next != a;
-				// TODO try to push the box OR return null
-				if (box(next))
-					break;
-				dir = level.delta[a][next];
-				prev = a;
-				a = next;
-				dist += 1;
-			}
-			return new State(a, box, dist, dir, 0, 0);
-		}
-		return push(a, dir, level, optimal);
-	}
+	State push(int a, int dir, Level level, boolean optimal, int moves, int prev_agent) {
+		assert 0 <= prev_agent && prev_agent < level.cells;
+		assert !box(prev_agent);
+		assert box(a);
+		assert !box(level.rmove(a, dir));
 
-	State push(int a, int dir, Level level, boolean optimal) {
 		int b = level.move(a, dir);
 		if (b == -1 || b >= level.alive || box(b))
 			return null;
@@ -183,7 +156,7 @@ final class State extends StateBase {
 		int pushes = 1;
 
 		// keep pushing box until the end of tunnel
-		while (can_force_push(a, b, level, optimal)) {
+		while (pushes < 15 && can_force_push(a, b, level, optimal)) {
 			// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
 			int c = level.move(b, dir);
 			if (c == -1 || c >= level.alive || box(c))
@@ -196,16 +169,17 @@ final class State extends StateBase {
 			pushes += 1;
 		}
 
-		return new State(a, nbox, dist() + pushes, dir, pushes, 0);
+		return new State(a, nbox, dist() + moves + pushes, dir, pushes, prev_agent);
 	}
 
 	private boolean more_goals_than_boxes_in_room(int a, int door, Level level) {
 		assert level.degree(door) == 2 && level.bottleneck[door];
-		Visitor visitor = new Visitor(level.cells);
+		Visitor visitor = level.visitor;
+		visitor.init(a);
 		visitor.visited()[door] = true;
-		visitor.add(a);
 		int result = 0;
-		for (int b : visitor) {
+		while (!visitor.done()) {
+			int b = visitor.next();
 			if (level.goal(b))
 				result += 1;
 			if (box(b))
@@ -240,6 +214,4 @@ final class State extends StateBase {
 
 		return false;
 	}
-
-	final int[] box;
 }

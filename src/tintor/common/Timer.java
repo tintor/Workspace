@@ -2,15 +2,14 @@ package tintor.common;
 
 public final class Timer implements AutoCloseable {
 	public long total;
-	private long start;
 
 	public Timer start() {
-		start = System.nanoTime();
+		total -= System.nanoTime();
 		return this;
 	}
 
 	public void stop() {
-		total += System.nanoTime() - start;
+		total += System.nanoTime();
 	}
 
 	public void close() {

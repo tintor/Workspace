@@ -3,14 +3,27 @@ package tintor.sokoban;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 
+import tintor.common.AutoTimer;
 import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
 import tintor.common.Visitor;
 
-// try –XX:+UseG1GC
+// TODO: try –XX:+UseG1GC
+
+// TODO: store extra data for every level: boxes, alive, cells, state_space,
+//       optimal_solution (steps and compute time), some_solution (steps and compute time)
+
+// TODO: re-implement HungarianAlgorithm:
+//       - int instead of double
+//       - avoid N^2 cost of populating the input matrix
+
+// TODO: estimate upper bound on the remaining time to solve()
+//       total_space_size - closed_size * (walkable - boxes) - states_covered_by_every_deadlock_pattern
 
 // Deadlock:
+// TODO: +++ if subset of boxes (not on goal) didn't move for a long time (potential deadlock)
+//       run full deadlock check of that subset => could solve 
 // TODO: how to speed up deadlock pattern lookups?
 // TODO: Take every 2 and 3 box subset from start position and initialize deadlock DB
 //       with all REACHABLE deadlock patterns of size 2 and 3. This way ContainsFrozenBoxes can stop when it reaches 2 or 3 boxes.
@@ -21,8 +34,7 @@ import tintor.common.Visitor;
 //       Will reduce number of live cells and make deadlock checking and heuristic faster and more accurate.
 // TODO: can avoid calling matchesPattern() inside containsFrozenBoxes() if box push can be reversed
 //       (can do a very cheap check here, just try to go around the box)
-// TODO: store deadlock patterns from deadlocks found by Heuristic
-// TODO: scan open and closed sets for deadlocks (once more patterns have been discovered) and remove deadlock states
+// TODO: --- store deadlock patterns from deadlocks found by Heuristic
 
 // Search space reduction:
 // TODO: only "store" push States (heuristic will not have to worry about distance of agent to box)
@@ -36,62 +48,242 @@ import tintor.common.Visitor;
 // TODO: Split level into sub-levels that can be solved independently
 
 // Memory:
-// TODO: 33% savings on ClosedSet memory (every add() writes to file, don't store map values in memory)
-// TODO: How to remove states from ClosedSet and OpenSet that were later found to be deadlocks?
-//       - Keep scanning ClosedSet and OpenSet slowly continuously against the deadlock db and remove deadlocks
-//       - If state A is explored and all of its next B states are deadlocks then we can safely not add A to ClosedSet.
-//       - In ClosedSet keep of number of all non-deadlock next nodes that were generated.
-//             When node A is found to be deadlock update its parent in ClosedSet (and recursively).
-// TODO: store only states with unique boxes, not unique boxes and agent (but still optimize for moves)
-//       - might need to keep more than one (agent, distance) pair (but not all pairs as most can be derived)
+// TODO: +++ when a new deadlock pattern is found with >=3 boxes scan Closed and Open with new pattern to trim them
+// TODO: Change ClosedSet to use memory StateSet and store key/value pairs in file (every add() writes to file, don't store map values in memory)
 
 // Search order:
-// TODO: add num_solved_boxes as second priority for State (might not make any difference)
-// TODO: shorten last iteration: once B is found solved, we can return it as soon as all shorter States are removed from Queue
+// TODO: shorten last iteration: once B is found solved, we can remove all >= States from OpenSet (continue search to try to find a better solution)
 
 // Heuristic:
+// TODO: +++ if level has a goal room with single entrance ==> speed up matching by matching from the goal room entrance
+// TODO: should be exact if only one box is left?
 // TODO: tell MatchingModel which solved boxes are frozen (so that it could potentially find a new deadlock)
 
 // Other:
-// TODO: Switch State to int[]
 // TODO: IDA*
 // TODO: How can search be parallelized?
 //       - more exhaustive deadlock check per State
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
 // TODO: Look at the sokoban PhD for more ideas.
 
-public final class Solver {
-	static State[] extractPath(Level level, State start, State end, ClosedSet closed) {
+class AStarSolver {
+	final Level level;
+	final OpenSet open;
+	final ClosedSet closed;
+	final Heuristic heuristic;
+	final Deadlock deadlock;
+
+	int closed_size_limit;
+	boolean optimal_macro_moves;
+	boolean disable_deadlock_check;
+	int trace; // 0 to turn off any tracing
+	State[] valid;
+
+	AStarSolver(Level level) {
+		this.level = level;
+		open = new OpenSet(level.alive, level.cells);
+		closed = new ClosedSet(level.alive, level.cells);
+		heuristic = new Heuristic(level);
+		deadlock = new Deadlock(level);
+
+		visitor = new Visitor(level.cells);
+		moves = new int[level.cells];
+	}
+
+	static class ClosedSizeLimitError extends Error {
+		private static final long serialVersionUID = 1L;
+	};
+
+	AutoTimer timer_solve = new AutoTimer("solve");
+
+	State solve() {
+		int h = heuristic.evaluate(level.start);
+		if (h == Integer.MAX_VALUE)
+			return null;
+		level.start.set_heuristic(h);
+		if (level.is_solved_fast(level.start.box))
+			return level.start;
+
+		long next_report = 10 * AutoTimer.Second;
+
+		open.add(level.start);
+		State a = null;
+		while (true) {
+			try (AutoTimer t = timer_solve.open()) {
+				a = open.remove_min();
+				if (a == null || level.is_solved_fast(a.box))
+					break;
+				closed.add(a);
+				if (closed_size_limit != 0 && closed.size() >= closed_size_limit)
+					throw new ClosedSizeLimitError();
+
+				explore(a);
+			}
+
+			if (trace > 0 && AutoTimer.total() >= next_report) {
+				report(a);
+				next_report += 10 * AutoTimer.Second;
+			}
+		}
+		if (trace > 0)
+			report(a);
+		return a;
+	}
+
+	boolean solveable(State start) {
+		if (level.is_solved_fast(start.box))
+			return true;
+
+		final ArrayList<State> stack = new ArrayList<State>();
+		final StateMap explored = new StateMap(level.alive, level.cells);
+		explored.insert(start);
+		stack.add(start);
+
+		while (stack.size() != 0) {
+			State a = stack.remove(stack.size() - 1);
+			visitor.init(a.agent);
+			while (!visitor.done()) {
+				int agent = visitor.next();
+				for (int p : level.moves[agent]) {
+					if (!a.box(p)) {
+						if (visitor.visited(p))
+							continue;
+						visitor.add(p);
+						continue;
+					}
+					State b = a.push(p, level.delta[agent][p], level, false, 0, 0);
+					if (b == null || explored.contains(b))
+						continue;
+					if (level.is_solved_fast(b.box))
+						return true;
+					stack.add(b);
+				}
+			}
+			if (explored.size() % 1000000 == 0)
+				Log.info("%d", explored.size() / 1000000);
+		}
+		return false;
+	}
+
+	// TODO ReadWriteLock to ClosedSet
+	// TODO ReadWriteLock to OpenSet
+	// TODO ReadWriteLock to Deadlock (pattern database)
+	// TODO move shared data from Heuristic to ThreadLocal
+	// TODO parallelize: submit a task to execute this loop
+	private Visitor visitor;
+	private int[] moves;
+
+	final AutoTimer timer_moves = new AutoTimer("moves");
+	int cutoff = Integer.MAX_VALUE;
+	int cutoffs = 0;
+
+	void explore(State a) {
+		visitor.init(a.agent);
+		moves[a.agent] = 0; // TODO merge moves to visitor (into set)
+		while (!visitor.done()) {
+			// TODO stop the loop early after we reach all sides of all boxes
+			// TODO prioritize cells closer to untouched sides of boxes
+			int agent = visitor.next();
+			for (int p : level.moves[agent]) {
+				if (!a.box(p)) {
+					if (visitor.visited(p))
+						continue;
+					visitor.add(p);
+					moves[p] = moves[agent] + 1;
+					continue;
+				}
+
+				timer_moves.open();
+				State b = a.push(p, level.delta[agent][p], level, optimal_macro_moves, moves[agent], a.agent);
+				timer_moves.close();
+				if (b == null || closed.contains(b))
+					continue;
+
+				int v_total_dist = open.get_total_dist(b);
+				if (v_total_dist == 0 && !disable_deadlock_check && deadlock.check(b))
+					continue;
+
+				int h = heuristic.evaluate(b);
+				if (h >= cutoff) {
+					cutoffs += 1;
+					continue;
+				}
+				b.set_heuristic(h);
+
+				if (v_total_dist == 0) {
+					if (level.is_solved_fast(b.box)) {
+						open.remove_all_ge(b.total_dist());
+						cutoff = b.total_dist();
+					}
+					open.add(b);
+					continue;
+				}
+				if (b.total_dist() < v_total_dist)
+					open.update(v_total_dist, b);
+			}
+		}
+	}
+
+	State[] extractPath(State end) {
 		ArrayDeque<State> path = new ArrayDeque<State>();
-		while (!end.equals(start)) {
+		while (!end.equals(level.start)) {
 			path.addFirst(end);
 			end = closed.get(end.prev(level));
 		}
 		return path.toArray(new State[path.size()]);
 	}
 
-	static State[] solve_IDAstar(Level level, State start, Heuristic model, Deadlock deadlock, Context context) {
-		if (deadlock != null && deadlock.check(start))
-			return null;
-		if (level.is_solved_fast(start.box))
-			return new State[] {};
+	private long prev_time = 0;
+	private int prev_open = 0;
+	private int prev_closed = 0;
+	private double speed = 0;
+
+	private void report(State a) {
+		long delta_time = AutoTimer.total() - prev_time;
+		int delta_closed = closed.size() - prev_closed;
+		int delta_open = open.size() - prev_open;
+		prev_time = AutoTimer.total();
+		prev_closed = closed.size();
+		prev_open = open.size();
+
+		speed = (speed + 1e9 * delta_closed / delta_time) / 2;
+
+		closed.report();
+		open.report();
+		deadlock.report();
+		System.out.printf("dist:%d total_dist:%d cutoff:%s dead:%s live:%s\n", a.dist(), a.total_dist(),
+				Util.human(cutoffs), Util.human(heuristic.deadlocks), Util.human(heuristic.non_deadlocks));
+		System.out.printf("speed:%s ", Util.human((int) speed));
+		System.out.printf("branch:%.2f ", 1 + (double) delta_open / delta_closed);
+		Log.info("free_memory:%s", Util.human(Runtime.getRuntime().freeMemory()));
+		AutoTimer.report();
+
+		level.print(a);
+	}
+}
+
+class IterativeDeepeningAStar {
+	State solve(Level level) {
+		Heuristic heuristic = new Heuristic(level);
+		if (level.is_solved_fast(level.start.box))
+			return level.start;
 
 		ArrayDeque<State> stack = new ArrayDeque<State>();
-		int total_dist_max = model.evaluate(start, null);
+		int total_dist_max = heuristic.evaluate(level.start);
 		while (true) {
 			assert stack.isEmpty();
-			stack.push(start);
+			stack.push(level.start);
 
 			int total_dist_cutoff_min = Integer.MAX_VALUE;
 			while (!stack.isEmpty()) {
 				State a = stack.pop();
-				for (int dir : level.dirs[a.agent()]) {
-					State b = a.move(dir, level, context.optimal_macro_moves);
+				for (int dir : level.dirs[a.agent]) {
+					State b = null; // a.move(dir, level, context.optimal_macro_moves);
 					if (b == null)
 						break;
 					// TODO cut move if possible
 
-					b.set_heuristic(model.evaluate(b, a));
+					b.set_heuristic(heuristic.evaluate(b));
 					if (b.total_dist() > total_dist_max) {
 						total_dist_cutoff_min = Math.min(total_dist_cutoff_min, b.total_dist());
 						continue;
@@ -106,201 +298,46 @@ public final class Solver {
 		}
 		return null;
 	}
+}
 
-	static State[] solve_Astar(Level level, boolean trace) {
-		Context context = new Context();
-		context.trace = trace ? 1 : 0;
-		return solve_Astar(level, level.start, new Heuristic(level), new Deadlock(level), context);
-	}
-
-	static State[] solve_Astar(Level level, State start, Heuristic heuristic, Deadlock deadlock, Context context) {
-		int h = heuristic.evaluate(start, null);
-		if (h == Integer.MAX_VALUE)
-			return null;
-		start.set_heuristic(h);
-		if (deadlock.check(start))
-			return null;
-		if (level.is_solved_fast(start.box))
-			return new State[] {};
-
-		// Generate initial deadlock patterns
-		if (context.enable_populate) {
-			/*InlineChainingHashSet set = new InlineChainingHashSet(1 << 20, level, true);
-			ArrayDeque<State> queue = new ArrayDeque<State>();
-			queue.add(start);
-			while (!queue.isEmpty() && set.size() < (1 << 20) - 3) {
-				State a = queue.removeFirst();
-				for (byte dir = 0; dir < 4; dir++) {
-					State b = a.move(dir, level, context.optimal_macro_moves);
-					if (b == null || set.contains(b))
-						continue;
-					if (b.is_push() && deadlock.check(b))
-						continue;
-					queue.addLast(b);
-					set.addUnsafe(b);
-					if (set.size() % (1 << 20) == 0)
-						Log.info("found %d patterns (set %s) %s", deadlock.patterns, Util.human(set.size()),
-								Arrays.toString(deadlock.histogram));
-				}
-			}*/
-		}
-
-		final ClosedSet closed = new ClosedSet(level.alive, level.cells);
-		final OpenSet open = new OpenSet(level.alive, level.cells);
-		assert start.total_dist() != 0;
-		open.add(start);
-
-		final Monitor monitor = new Monitor();
-		monitor.closed = closed;
-		monitor.open = open;
-		monitor.deadlock = deadlock;
-		monitor.level = level;
-		monitor.heuristic = heuristic;
-		monitor.timer.start();
-
-		while (!open.empty()) {
-			State a = open.remove_min();
-			assert a.total_dist() != 0;
-			closed.add(a);
-
-			if (level.is_solved_fast(a.box)) {
-				context.open_set_size = open.size();
-				context.closed_set_size = closed.size();
-				return extractPath(level, start, a, closed);
-			}
-
-			// TODO parallelize: submit a task to execute this loop
-			explore(a, monitor, context);
-
-			if (context.trace > 0)
-				monitor.report(a);
-		}
-		return null;
-	}
-
-	// TODO ReadWriteLock to ClosedSet
-	// TODO ReadWriteLock to OpenSet
-	// TODO move shared data from OpenSet to ThreadLocal
-	// TODO ReadWriteLock to Deadlock (pattern database)
-	// TODO move shared data from Heuristic to ThreadLocal
-	static void explore(State a, Monitor monitor, Context context) {
-		int reverse_dir = -1;
-		if (!a.is_push() && a.dist() != 0)
-			reverse_dir = Level.reverseDir(a.dir);
-		for (int dir : monitor.level.dirs[a.agent()]) {
-			if (dir == reverse_dir)
-				continue;
-			monitor.timer_moves.start();
-			State b = a.move(dir, monitor.level, context.optimal_macro_moves);
-			monitor.timer_moves.stop();
-			if (b == null || monitor.closed.contains(b))
-				continue;
-
-			int v_total_dist = monitor.open.get_total_dist(b);
-			if (v_total_dist == 0 && b.is_push() && monitor.deadlock.check(b))
-				continue;
-
-			int h = monitor.heuristic.evaluate(b, a);
-			if (h == Integer.MAX_VALUE)
-				continue;
-			b.set_heuristic(h);
-			assert b.total_dist() != 0;
-
-			if (v_total_dist == 0) {
-				monitor.open.add(b);
-				monitor.branches += 1;
-				continue;
-			}
-			if (b.total_dist() < v_total_dist)
-				monitor.open.update(v_total_dist, b);
-		}
-	}
-
-	static void exploreNew(State a, Monitor monitor, Context context) {
-		Visitor visitor = monitor.level.visitor;
-		visitor.init(a.agent());
-		while (!visitor.done()) {
-			int agent = visitor.next();
-			for (int dir : monitor.level.dirs[agent]) {
-				int move = monitor.level.move(agent, dir);
-				if (visitor.visited(move))
-					continue;
-				if (!a.box(move)) {
-					visitor.add(move);
-					continue;
-				}
-
-				monitor.timer_moves.start();
-				State b = a.push(move, dir, monitor.level, context.optimal_macro_moves);
-				monitor.timer_moves.stop();
-				if (b == null || monitor.closed.contains(b))
-					continue;
-
-				int v_total_dist = monitor.open.get_total_dist(b);
-				if (v_total_dist == 0 && b.is_push() && monitor.deadlock.check(b))
-					continue;
-
-				int h = monitor.heuristic.evaluate(b, a);
-				if (h == Integer.MAX_VALUE)
-					continue;
-				b.set_heuristic(h);
-				assert b.total_dist() != 0;
-
-				if (v_total_dist == 0) {
-					monitor.open.add(b);
-					monitor.branches += 1;
-					continue;
-				}
-				if (b.total_dist() < v_total_dist)
-					monitor.open.update(v_total_dist, b);
-			}
-		}
-	}
-
+public class Solver {
 	static void printSolution(Level level, State[] solution) {
-		ArrayList<State> pushes = new ArrayList<State>();
-		for (State s : solution)
-			if (s.is_push())
-				pushes.add(s);
-		for (int i = 0; i < pushes.size(); i++) {
-			State s = pushes.get(i);
-			State n = i == pushes.size() - 1 ? null : pushes.get(i + 1);
-			if (i == pushes.size() - 1 || level.move(s.agent(), s.dir) != n.agent() || s.dir != n.dir)
+		for (int i = 0; i < solution.length; i++) {
+			State s = solution[i];
+			State n = i == solution.length - 1 ? null : solution[i + 1];
+			if (i == solution.length - 1 || level.move(s.agent, s.dir) != n.agent || s.dir != n.dir) {
+				System.out.printf("dist:%s heur:%s\n", s.dist(), s.total_dist() - s.dist());
 				level.print(s);
+			}
 		}
 	}
 
 	static Timer timer = new Timer();
 
+	// solved original 1 2 3 4 * 6 7 *
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load("original:1");
+		Level level = Level.load("microban4:86");
+		//Level level = Level.load("original:15");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
-		Context context = new Context();
-		context.trace = 1;
-		context.enable_populate = false;
-		context.optimal_macro_moves = false;
+		AStarSolver solver = new AStarSolver(level);
+		solver.trace = 1;
 
-		Deadlock deadlock = new Deadlock(level);
 		timer.start();
-		State[] solution = solve_Astar(level, level.start, new Heuristic(level), deadlock, context);
+		State end = solver.solve();
 		timer.stop();
-		if (solution == null) {
+		if (end == null) {
 			Log.info("no solution! %s", timer.human());
 		} else {
+			State[] solution = solver.extractPath(end);
+			for (State s : solution)
+				if (solver.deadlock.check(s)) {
+					level.print(s);
+					throw new Error();
+				}
 			printSolution(level, solution);
-			Log.info("solved in %d steps! %s", solution[solution.length - 1].dist(), timer.human());
+			Log.info("solved in %d steps! %s", end.dist(), timer.human());
 		}
-		Log.info("closed:%s open:%s patterns:%s", context.closed_set_size, context.open_set_size,
-				Util.human(deadlock.patterns));
-	}
-
-	static class Context {
-		boolean enable_populate;
-		boolean optimal_macro_moves = false;
-		int trace; // 0 to turn off any tracing
-		int open_set_size;
-		int closed_set_size;
 	}
 }

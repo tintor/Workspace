@@ -42,7 +42,6 @@ public class LevelLoaderTest {
 	public void solve() {
 		try {
 			Level.load(filename);
-		} catch (Level.MoreThan128AliveCellsError e) {
 		} catch (Level.MoreThan256CellsError e) {
 		}
 	}

@@ -2,7 +2,6 @@ package tintor.sokoban;
 
 import tintor.common.Log;
 import tintor.common.Timer;
-import tintor.sokoban.Solver.Context;
 
 public class ScanAllLevels {
 	static final int MinStateSpace = 25;
@@ -15,38 +14,28 @@ public class ScanAllLevels {
 		for (int i = 1; i <= levels; i++) {
 			String[] s = prefix.split("/");
 			String name = s[s.length - 1];
-			try {
-				timer.start();
-				Level level = Level.load(prefix + i);
-				timer.stop();
-				cells += level.cells;
-				alive += level.alive;
-				int state_space = level.state_space();
-				Log.info("%s%d cells:%d alive:%d boxes:%d state_space:%s time:%s", name, i, level.cells, level.alive,
-						level.num_boxes, state_space, timer.human());
-				// TODO show tunnels, articulation points
-				level.print(level.start);
-				//Log.info("alive");
-				//level.low.print(p -> p < level.alive ? '.' : ' ');
-				Log.info("bottleneck");
-				level.low.print(p -> level.bottleneck[p] ? '.' : ' ');
-				if (MinStateSpace <= state_space && state_space <= MaxStateSpace) {
-					Context context = new Context();
-					context.trace = 1;
-					try {
-						State[] solution = Solver.solve_Astar(level, level.start, new Heuristic(level),
-								new Deadlock(level), context);
-						if (solution != null)
-							solved += 1;
-						else
-							no_solution += 1;
-					} catch (OutOfMemoryError e) {
-						out_of_memory += 1;
-					}
+			timer.start();
+			Level level = Level.load(prefix + i);
+			timer.stop();
+			cells += level.cells;
+			alive += level.alive;
+			int state_space = level.state_space();
+			Log.info("%s%d cells:%d alive:%d boxes:%d state_space:%s time:%s", name, i, level.cells, level.alive,
+					level.num_boxes, state_space, timer.human());
+			level.print(level.start);
+			Log.info("bottleneck");
+			level.low.print(p -> level.bottleneck[p] ? '.' : ' ');
+			if (MinStateSpace <= state_space && state_space <= MaxStateSpace) {
+				AStarSolver solver = new AStarSolver(level);
+				solver.trace = 1;
+				try {
+					if (solver.solve() != null)
+						solved += 1;
+					else
+						no_solution += 1;
+				} catch (OutOfMemoryError e) {
+					out_of_memory += 1;
 				}
-			} catch (Level.MoreThan128AliveCellsError e) {
-				Log.error("%s%d more than 128 alive cells error", name, i);
-				errors += 1;
 			}
 			timer.total = 0;
 		}

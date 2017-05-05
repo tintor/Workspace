@@ -2,8 +2,6 @@ package tintor.sokoban;
 
 import org.junit.Assert;
 
-import tintor.sokoban.Solver.Context;
-
 public class NonOptimalSolverTest {
 	//@Test(timeout = 3000)
 	public void solve_test_1() {
@@ -17,10 +15,9 @@ public class NonOptimalSolverTest {
 
 	private void solve(String filename, int expected) {
 		Level level = Level.load(filename);
-		Context context = new Context();
-		context.optimal_macro_moves = false;
-		State[] solution = Solver.solve_Astar(level, level.start, new Heuristic(level), new Deadlock(level), context);
-		Assert.assertTrue(solution != null);
-		Assert.assertEquals(expected, solution[solution.length - 1].dist());
+		AStarSolver solver = new AStarSolver(level);
+		State end = solver.solve();
+		Assert.assertTrue(end != null);
+		Assert.assertEquals(expected, end.dist());
 	}
 }

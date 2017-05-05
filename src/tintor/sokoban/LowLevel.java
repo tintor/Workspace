@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Scanner;
 
 import tintor.common.ArrayDequeInt;
+import tintor.common.BinaryHeapInt;
 import tintor.common.BitMatrix;
 import tintor.common.Regex;
 import tintor.common.Util;
@@ -231,26 +232,28 @@ class LowLevel {
 		return b;
 	}
 
-	boolean[] compute_walkable(boolean add_walls) {
+	boolean[] compute_walkable() {
 		Visitor visitor = new Visitor(cells);
-		for (int a : visitor.init(agent()))
+		visitor.add(agent());
+		while (!visitor.done()) {
+			int a = visitor.next();
 			for (byte dir = 0; dir < 4; dir++) {
 				int b = move(a, dir);
 				if (b != Level.Bad && !visitor.visited(b))
 					visitor.add(b);
 			}
+		}
 		// remove cells that are far from walkable cells
 		for (int i = 0; i < buffer.length; i++)
-			if (!visitor.visited()[i] && buffer[i] != '\n' && !is_close_to_walkable(i, visitor.visited(), false)) {
-				if (buffer[i] == Box || buffer[i] == Goal)
-					return null;
+			if (!visitor.visited()[i] && buffer[i] != '\n' && !is_close_to_walkable(i, visitor.visited(), false))
 				buffer[i] = Space;
-			}
-		if (add_walls)
-			for (int i = 0; i < buffer.length; i++)
-				if (!visitor.visited()[i] && buffer[i] != '\n' && is_close_to_walkable(i, visitor.visited(), true))
-					buffer[i] = Wall;
 		return visitor.visited();
+	}
+
+	void add_walls(boolean[] walkable) {
+		for (int i = 0; i < buffer.length; i++)
+			if (!walkable[i] && buffer[i] != '\n' && is_close_to_walkable(i, walkable, true))
+				buffer[i] = Wall;
 	}
 
 	private boolean is_close_to_walkable(int pos, boolean[] walkable, boolean diagonal) {
@@ -262,52 +265,102 @@ class LowLevel {
 		return false;
 	}
 
-	private static int make_pair(int a, int b) {
-		assert 0 <= a && a < 65536;
-		assert 0 <= b && b < 65536;
-		return (a << 16) | b;
+	class AreAllGoalsReachable {
+		int num_goals;
+		int[] goals;
+		boolean[] reached = new boolean[cells];
+
+		int manhattan_dist(int a, int b) {
+			int ax = a % width, ay = a / width;
+			int bx = b % width, by = b / width;
+			return Math.abs(ax - bx) + Math.abs(ay - by);
+		}
+
+		int min_manhattan_dist_to_goal(int a) {
+			int d = Integer.MAX_VALUE;
+			for (int e : goals)
+				if (!reached[e])
+					d = Math.min(d, manhattan_dist(a, e));
+			return d;
+		}
+
+		int make_pair(int a, int b) {
+			int dist = manhattan_dist(a, b) + min_manhattan_dist_to_goal(b);
+			assert 0 <= dist && dist < (1 << 8);
+			dist -= 128;
+			assert -128 <= dist && dist <= 127;
+			assert !(dist < 0) || ((dist << 24) < 0);
+			assert !(dist >= 0) || ((dist << 24) >= 0);
+
+			assert 0 <= a && a < (1 << 12);
+			assert 0 <= b && b < (1 << 12);
+			return (dist << 24) | (a << 12) | b;
+		}
+
+		int update_pair(int pair) {
+			return make_pair((pair >> 12) & 0xFFF, pair & 0xFFF);
+		}
+
+		void init_goals_without_boxes() {
+			num_goals = 0;
+			for (int i = 0; i < cells; i++)
+				if (goal(i) && !box(i))
+					num_goals += 1;
+			goals = new int[num_goals];
+			int w = 0;
+			for (int i = 0; i < cells; i++)
+				if (goal(i) && !box(i))
+					goals[w++] = i;
+		}
+
+		// is every goal reachable by some box
+		boolean run(BitMatrix visited) {
+			BinaryHeapInt queue = new BinaryHeapInt();
+			init_goals_without_boxes();
+			int num_goals = goals.length;
+			if (num_goals == 0)
+				return true;
+			final int agent = agent();
+			for (int i = 0; i < cells; i++)
+				if (box(i))
+					queue.add(make_pair(agent, i));
+
+			while (queue.size() > 0) {
+				final int s = queue.removeMin();
+				final int s_agent = (s >> 12) & 0xFFF;
+				final int s_box = s & 0xFFF;
+
+				for (int dir = 0; dir < 4; dir++) {
+					final int ap = move(s_agent, dir);
+					if (ap == Level.Bad)
+						continue;
+					if (ap != s_box) {
+						if (visited.try_set(ap, s_box))
+							queue.add(make_pair(ap, s_box));
+						continue;
+					}
+					final int bp = move(ap, dir);
+					if (bp != Level.Bad && visited.try_set(ap, bp)) {
+						if (goal(bp) && !reached[bp]) {
+							reached[bp] = true;
+							if (--num_goals == 0)
+								return true;
+							for (int i = 0; i < queue.size(); i++)
+								queue.set(i, update_pair(queue.get(i)));
+							queue.heapify();
+						}
+						queue.add(make_pair(ap, bp));
+					}
+				}
+			}
+			return false;
+		}
 	}
 
-	// is every goal reachable by some box
-	boolean are_all_goals_reachable(ArrayDequeInt deque, BitMatrix visited) {
-		int goals = 0;
-		final int agent = agent();
-		for (int i = 0; i < cells; i++) {
-			if (box(i))
-				deque.addLast(make_pair(agent, i));
-			if (goal(i))
-				goals += 1;
-		}
-		if (goals == 0)
-			return true;
-
-		final boolean[] reached = new boolean[cells];
-		while (!deque.isEmpty()) {
-			final int s = deque.removeFirst(); // TODO also try removeLast if faster overall
-			final int s_agent = (s >> 16) & 0xFFFF;
-			final int s_box = s & 0xFFFF;
-
-			if (goal(s_box) && !reached[s_box]) {
-				reached[s_box] = true;
-				if (--goals == 0)
-					return true;
-			}
-
-			for (int dir = 0; dir < 4; dir++) {
-				final int ap = move(s_agent, dir);
-				if (ap == Level.Bad)
-					continue;
-				if (ap != s_box) {
-					if (visited.try_set(ap, s_box))
-						deque.addLast(make_pair(ap, s_box));
-					continue;
-				}
-				final int bp = move(ap, dir);
-				if (bp != Level.Bad && visited.try_set(ap, bp))
-					deque.addLast(make_pair(ap, bp));
-			}
-		}
-		return false;
+	private static int make_pair(int a, int b) {
+		assert 0 <= a && a < (1 << 12);
+		assert 0 <= b && b < (1 << 12);
+		return (a << 12) | b;
 	}
 
 	// TODO instead of searching forward N times => search backward once from every goal
@@ -333,8 +386,8 @@ class LowLevel {
 
 			while (!deque.isEmpty()) {
 				final int s = deque.removeFirst();
-				final int s_agent = (s >> 16) & 0xFFFF;
-				final int s_box = s & 0xFFFF;
+				final int s_agent = (s >> 12) & 0xFFF;
+				final int s_box = s & 0xFFF;
 
 				for (int dir = 0; dir < 4; dir++) {
 					final int ap = move(s_agent, dir);
@@ -371,6 +424,41 @@ class LowLevel {
 			}
 		}
 		return alive;
+	}
+
+	// remove empty rows and columns of cells
+	void minimize() {
+		// TODO
+	}
+
+	// ignores boxes
+	boolean is_symetric(boolean[] walkable, boolean flipX, boolean flipY, boolean flipDiag) {
+		int height = buffer.length / width;
+		if (flipDiag && height != width - 1) {
+			flipDiag = false;
+			if (!flipX && !flipY)
+				return false;
+		}
+		for (int i = 0; i < buffer.length; i++) {
+			int j = i;
+			if (flipX) {
+				int x = j % width;
+				int xp = width - 1 - x;
+				j = j - x + xp;
+			}
+			if (flipY) {
+				int x = j % width, y = j / width;
+				int yp = height - 1 - y;
+				j = yp * width + x;
+			}
+			if (flipDiag) {
+				int x = j % width, y = j / width;
+				j = x * width + y;
+			}
+			if (walkable[i] && goal(i) != goal(j))
+				return false;
+		}
+		return true;
 	}
 
 	final static char Box = '$';
