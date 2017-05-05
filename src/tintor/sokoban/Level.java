@@ -53,8 +53,8 @@ final class Level {
 		low.check_boxes_and_goals();
 		if (Util.count(walkable) > 256)
 			throw new MoreThan256CellsError(); // just to avoid calling compute_alive() for huge levels
-		ArrayDequeInt deque = new ArrayDequeInt(low.cells);
-		BitMatrix visited = new BitMatrix(low.cells, low.cells); // TODO this is huge, as cells is raw buffer size
+		ArrayDequeInt deque = new ArrayDequeInt(low.cells());
+		BitMatrix visited = new BitMatrix(low.cells(), low.cells()); // TODO this is huge, as cells is raw buffer size
 		if (!low.new AreAllGoalsReachable().run(visited))
 			throw new IllegalArgumentException("level contains unreachable goal");
 		final boolean[] is_alive = low.compute_alive(deque, visited, walkable);
@@ -72,17 +72,17 @@ final class Level {
 		alive = Util.count(is_alive);
 
 		int b = 0;
-		int[] old_to_new = new int[low.cells];
+		int[] old_to_new = new int[low.cells()];
 		low.new_to_old = new int[cells];
 		Arrays.fill(old_to_new, -1);
-		for (int a = 0; a < low.cells; a++)
+		for (int a = 0; a < low.cells(); a++)
 			if (is_alive[a]) {
 				old_to_new[a] = b;
 				low.new_to_old[b] = a;
 				b += 1;
 			}
 		assert b == alive;
-		for (int a = 0; a < low.cells; a++)
+		for (int a = 0; a < low.cells(); a++)
 			if (walkable[a] && !is_alive[a]) {
 				assert old_to_new[a] == -1;
 				old_to_new[a] = b;
@@ -92,17 +92,17 @@ final class Level {
 		assert b == cells;
 
 		move = new int[4 * cells];
-		for (int i = 0; i < low.cells; i++)
+		for (int i = 0; i < low.cells(); i++)
 			if (walkable[i])
 				for (int dir = 0; dir < 4; dir++)
 					move[old_to_new[i] * 4 + dir] = (low.move(i, dir) != Bad) ? old_to_new[low.move(i, dir)] : Bad;
 
 		boolean[] goalb = new boolean[alive];
-		for (int i = 0; i < low.cells; i++)
+		for (int i = 0; i < low.cells(); i++)
 			if (low.goal(i))
 				goalb[old_to_new[i]] = true;
 		boolean[] box = new boolean[alive];
-		for (int i = 0; i < low.cells; i++)
+		for (int i = 0; i < low.cells(); i++)
 			if (low.box(i))
 				box[old_to_new[i]] = true;
 

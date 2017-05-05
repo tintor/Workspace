@@ -81,7 +81,6 @@ class LowLevel {
 		assert buffer.length % (w + 1) == 0;
 		this.buffer = buffer;
 		width = w + 1;
-		cells = buffer.length;
 
 		// try to move agent and remove walkable dead cells
 		int a = agent();
@@ -98,7 +97,7 @@ class LowLevel {
 		dist = d;
 
 		// remove dead end cells
-		for (int p = 0; p < cells; p++) {
+		for (int p = 0; p < cells(); p++) {
 			a = p;
 			while (degree(a) == 1 && buffer[a] == Space) {
 				int b = moves(a, 0);
@@ -110,7 +109,7 @@ class LowLevel {
 
 	void check_boxes_and_goals() {
 		int boxes = 0, goals = 0;
-		for (int i = 0; i < cells; i++) {
+		for (int i = 0; i < cells(); i++) {
 			if (box(i))
 				boxes += 1;
 			if (goal(i))
@@ -125,7 +124,7 @@ class LowLevel {
 
 	boolean check_boxes_and_goals_silent() {
 		int boxes = 0, goals = 0;
-		for (int i = 0; i < cells; i++) {
+		for (int i = 0; i < cells(); i++) {
 			if (box(i))
 				boxes += 1;
 			if (goal(i))
@@ -169,7 +168,7 @@ class LowLevel {
 
 	int agent() {
 		int a = -1;
-		for (int i = 0; i < cells; i++) {
+		for (int i = 0; i < cells(); i++) {
 			if (buffer[i] == AgentGoal || buffer[i] == Agent) {
 				if (a != -1)
 					throw new IllegalArgumentException("multiple agents");
@@ -191,7 +190,7 @@ class LowLevel {
 			m = pos + 1;
 		if (dir == Level.Up && pos >= width)
 			m = pos - width;
-		if (dir == Level.Down && pos + width < cells)
+		if (dir == Level.Down && pos + width < cells())
 			m = pos + width;
 		return (m != Level.Bad && !wall(m)) ? m : Level.Bad;
 	}
@@ -233,7 +232,7 @@ class LowLevel {
 	}
 
 	boolean[] compute_walkable() {
-		Visitor visitor = new Visitor(cells);
+		Visitor visitor = new Visitor(cells());
 		visitor.add(agent());
 		while (!visitor.done()) {
 			int a = visitor.next();
@@ -268,7 +267,7 @@ class LowLevel {
 	class AreAllGoalsReachable {
 		int num_goals;
 		int[] goals;
-		boolean[] reached = new boolean[cells];
+		boolean[] reached = new boolean[cells()];
 
 		int manhattan_dist(int a, int b) {
 			int ax = a % width, ay = a / width;
@@ -303,12 +302,12 @@ class LowLevel {
 
 		void init_goals_without_boxes() {
 			num_goals = 0;
-			for (int i = 0; i < cells; i++)
+			for (int i = 0; i < cells(); i++)
 				if (goal(i) && !box(i))
 					num_goals += 1;
 			goals = new int[num_goals];
 			int w = 0;
-			for (int i = 0; i < cells; i++)
+			for (int i = 0; i < cells(); i++)
 				if (goal(i) && !box(i))
 					goals[w++] = i;
 		}
@@ -321,7 +320,7 @@ class LowLevel {
 			if (num_goals == 0)
 				return true;
 			final int agent = agent();
-			for (int i = 0; i < cells; i++)
+			for (int i = 0; i < cells(); i++)
 				if (box(i))
 					queue.add(make_pair(agent, i));
 
@@ -365,8 +364,8 @@ class LowLevel {
 
 	// TODO instead of searching forward N times => search backward once from every goal
 	boolean[] compute_alive(ArrayDequeInt deque, BitMatrix visited, boolean[] walkable) {
-		boolean[] alive = new boolean[cells];
-		for (int b = 0; b < cells; b++) {
+		boolean[] alive = new boolean[cells()];
+		for (int b = 0; b < cells(); b++) {
 			if (!walkable[b])
 				continue;
 			if (goal(b)) {
@@ -413,7 +412,7 @@ class LowLevel {
 		}
 
 		// Remove useless alive cells (no goal dead-ends of alive cells)
-		for (int i = 0; i < cells; i++) {
+		for (int i = 0; i < cells(); i++) {
 			int a = i;
 			while (true) {
 				int b = end_of_half_tunnel(a, alive);
@@ -428,13 +427,48 @@ class LowLevel {
 
 	// remove empty rows and columns of cells
 	void minimize() {
-		// TODO
+		while (remove_empty_column(0)) {
+		}
+		while (remove_empty_column(width - 1)) {
+		}
+		while (remove_empty_row(0)) {
+		}
+		while (remove_empty_row(buffer.length / width - 1)) {
+		}
+	}
+
+	int height() {
+		return buffer.length / width;
+	}
+
+	private boolean remove_empty_column(int column) {
+		for (int y = 0; y < height(); y++)
+			if (buffer[y * width + column] != Space)
+				return false;
+		char[] bb = new char[(width - 1) * height()];
+		for (int y = 0; y < height(); y++)
+			for (int x = 0; x < width; x++)
+				bb[y * width + (x < column ? x : x - 1)] = buffer[y * width + x];
+		buffer = bb;
+		width -= 1;
+		return true;
+	}
+
+	private boolean remove_empty_row(int row) {
+		for (int x = 0; x < width - 1; x++)
+			if (buffer[row * width + x] != Space)
+				return false;
+		char[] bb = new char[width * (height() - 1)];
+		for (int y = 0; y < height(); y++)
+			for (int x = 0; x < width; x++)
+				bb[(y < row ? y : y - 1) * width + x] = buffer[y * width + x];
+		buffer = bb;
+		return true;
 	}
 
 	// ignores boxes
 	boolean is_symetric(boolean[] walkable, boolean flipX, boolean flipY, boolean flipDiag) {
-		int height = buffer.length / width;
-		if (flipDiag && height != width - 1) {
+		if (flipDiag && height() != width - 1) {
 			flipDiag = false;
 			if (!flipX && !flipY)
 				return false;
@@ -448,7 +482,7 @@ class LowLevel {
 			}
 			if (flipY) {
 				int x = j % width, y = j / width;
-				int yp = height - 1 - y;
+				int yp = height() - 1 - y;
 				j = yp * width + x;
 			}
 			if (flipDiag) {
@@ -461,6 +495,10 @@ class LowLevel {
 		return true;
 	}
 
+	int cells() {
+		return buffer.length;
+	}
+
 	final static char Box = '$';
 	final static char Wall = '#';
 	final static char BoxGoal = '*';
@@ -469,9 +507,9 @@ class LowLevel {
 	final static char Agent = '@';
 	final static char Space = ' ';
 
-	final int width, cells;
+	int width;
 	final int dist; // initial distance of agent
-	final char[] buffer;
+	char[] buffer;
 	protected int[] new_to_old;
 	final String name;
 }
