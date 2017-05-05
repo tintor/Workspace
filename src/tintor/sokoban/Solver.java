@@ -63,6 +63,8 @@ import tintor.common.Visitor;
 // TODO: IDA*
 // TODO: How can search be parallelized?
 //       - more exhaustive deadlock check per State
+//       - parallel explore(a)
+//       - parallel pattern search
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
 // TODO: Look at the sokoban PhD for more ideas.
 
@@ -165,11 +167,6 @@ class AStarSolver {
 		return false;
 	}
 
-	// TODO ReadWriteLock to ClosedSet
-	// TODO ReadWriteLock to OpenSet
-	// TODO ReadWriteLock to Deadlock (pattern database)
-	// TODO move shared data from Heuristic to ThreadLocal
-	// TODO parallelize: submit a task to execute this loop
 	private Visitor visitor;
 	private int[] moves;
 
@@ -316,7 +313,7 @@ public class Solver {
 
 	// solved original 1 2 3 4 * 6 7 *
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load("microban4:86");
+		Level level = Level.load("microban5:21");
 		//Level level = Level.load("original:15");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());

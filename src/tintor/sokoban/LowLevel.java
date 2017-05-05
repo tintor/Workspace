@@ -426,74 +426,76 @@ class LowLevel {
 	}
 
 	// remove empty rows and columns of cells
-	void minimize() {
-		while (remove_empty_column(0)) {
-		}
-		while (remove_empty_column(width - 1)) {
-		}
-		while (remove_empty_row(0)) {
-		}
-		while (remove_empty_row(buffer.length / width - 1)) {
-		}
+	boolean[] minimize(boolean[] walkable) {
+		boolean[] remove_column = Util.array(width, x -> Util.all(height(), y -> buffer[y * width + x] == Space));
+		boolean[] remove_row = Util.array(height(), y -> Util.all(width, x -> buffer[y * width + x] == Space));
+
+		int size = (width - Util.count(remove_column)) * (height() - Util.count(remove_row));
+		if (size == buffer.length)
+			return walkable;
+
+		char[] new_buffer = new char[size];
+		boolean[] new_walkable = new boolean[size];
+		int w = 0;
+		for (int y = 0; y < height(); y++)
+			if (!remove_row[y])
+				for (int x = 0; x < width; x++)
+					if (!remove_column[x]) {
+						new_buffer[w] = buffer[y * width + x];
+						new_walkable[w] = walkable[y * width + x];
+						w += 1;
+					}
+		buffer = new_buffer;
+		width -= Util.count(remove_column);
+		return new_walkable;
 	}
 
 	int height() {
 		return buffer.length / width;
 	}
 
-	private boolean remove_empty_column(int column) {
-		for (int y = 0; y < height(); y++)
-			if (buffer[y * width + column] != Space)
-				return false;
-		char[] bb = new char[(width - 1) * height()];
-		for (int y = 0; y < height(); y++)
-			for (int x = 0; x < width; x++)
-				bb[y * width + (x < column ? x : x - 1)] = buffer[y * width + x];
-		buffer = bb;
-		width -= 1;
-		return true;
-	}
-
-	private boolean remove_empty_row(int row) {
-		for (int x = 0; x < width - 1; x++)
-			if (buffer[row * width + x] != Space)
-				return false;
-		char[] bb = new char[width * (height() - 1)];
-		for (int y = 0; y < height(); y++)
-			for (int x = 0; x < width; x++)
-				bb[(y < row ? y : y - 1) * width + x] = buffer[y * width + x];
-		buffer = bb;
-		return true;
+	int map_symetry(int a, int symmetry) {
+		assert 0 <= a && a < cells();
+		assert 0 < symmetry && symmetry < 8;
+		if ((symmetry & 1) != 0) { // flip left and right
+			int x = a % width;
+			int xp = width - 1 - x;
+			a = a - x + xp;
+		}
+		if ((symmetry & 2) != 0) { // flip up and down
+			int x = a % width, y = a / width;
+			int yp = height() - 1 - y;
+			a = yp * width + x;
+		}
+		if ((symmetry & 4) != 0) {
+			assert height() == width - 1;
+			int x = a % width, y = a / width;
+			a = x * width + y;
+		}
+		return a;
 	}
 
 	// ignores boxes
-	boolean is_symetric(boolean[] walkable, boolean flipX, boolean flipY, boolean flipDiag) {
-		if (flipDiag && height() != width - 1) {
-			flipDiag = false;
-			if (!flipX && !flipY)
-				return false;
-		}
-		for (int i = 0; i < buffer.length; i++) {
-			int j = i;
-			if (flipX) {
-				int x = j % width;
-				int xp = width - 1 - x;
-				j = j - x + xp;
-			}
-			if (flipY) {
-				int x = j % width, y = j / width;
-				int yp = height() - 1 - y;
-				j = yp * width + x;
-			}
-			if (flipDiag) {
-				int x = j % width, y = j / width;
-				j = x * width + y;
-			}
-			if (walkable[i] && goal(i) != goal(j))
+	boolean is_symmetric(boolean[] walkable, int symmetry) {
+		if ((symmetry & 4) != 0 && height() != width - 1)
+			return false;
+		for (int a = 0; a < cells(); a++) {
+			if (!walkable[a])
+				continue;
+			int b = map_symetry(a, symmetry);
+			if (!walkable[b] || goal(a) != goal(b))
 				return false;
 		}
 		return true;
 	}
+
+	void compute_symetries(boolean[] walkable) {
+		symmetric[0] = true;
+		for (int i = 1; i < symmetric.length; i++)
+			symmetric[i] = is_symmetric(walkable, i);
+	}
+
+	final boolean[] symmetric = new boolean[8];
 
 	int cells() {
 		return buffer.length;

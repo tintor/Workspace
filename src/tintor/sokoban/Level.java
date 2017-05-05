@@ -48,16 +48,22 @@ final class Level {
 
 	static Level load(String filename) {
 		LowLevel low = LowLevel.load(filename);
-		final boolean[] walkable = low.compute_walkable();
+
+		boolean[] walkable = low.compute_walkable();
 		low.add_walls(walkable);
 		low.check_boxes_and_goals();
 		if (Util.count(walkable) > 256)
 			throw new MoreThan256CellsError(); // just to avoid calling compute_alive() for huge levels
+
+		walkable = low.minimize(walkable);
+		low.compute_symetries(walkable);
+
 		ArrayDequeInt deque = new ArrayDequeInt(low.cells());
 		BitMatrix visited = new BitMatrix(low.cells(), low.cells()); // TODO this is huge, as cells is raw buffer size
 		if (!low.new AreAllGoalsReachable().run(visited))
 			throw new IllegalArgumentException("level contains unreachable goal");
 		final boolean[] is_alive = low.compute_alive(deque, visited, walkable);
+
 		return new Level(low, walkable, is_alive);
 	}
 

@@ -137,6 +137,13 @@ public class Util {
 				f.operation(i);
 	}
 
+	public static boolean[] array(int size, IndexToBool p) {
+		boolean[] array = new boolean[size];
+		for (int i = 0; i < size; i++)
+			array[i] = p.operation(i);
+		return array;
+	}
+
 	public static int roundUpPowerOf2(int v) {
 		v--;
 		v |= v >> 1;
