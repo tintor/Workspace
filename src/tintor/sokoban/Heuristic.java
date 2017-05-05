@@ -58,7 +58,7 @@ final class Heuristic {
 	void compute_distances_from_goal(int goal, int goal_ordinal, ArrayDequeInt deque, BitMatrix visited) {
 		int[][] distance = new int[level.cells][level.alive];
 		for (int[] d : distance)
-			Arrays.fill(d, -1);
+			Arrays.fill(d, Integer.MAX_VALUE);
 		deque.clear();
 		visited.clear();
 
@@ -72,15 +72,17 @@ final class Heuristic {
 			final int s = deque.removeFirst();
 			final int s_agent = (s >> 16) & 0xFFFF;
 			final int s_box = s & 0xFFFF;
+			assert distance[s_agent][s_box] >= 0;
+			assert distance[s_agent][s_box] != Integer.MAX_VALUE;
 			distance_box[s_box][goal_ordinal] = Math.min(distance_box[s_box][goal_ordinal], distance[s_agent][s_box]);
 
 			for (int c : level.moves[s_agent]) {
-				if (c != s_box && distance[c][s_box] == -1) {
+				if (c != s_box && distance[c][s_box] == Integer.MAX_VALUE) {
 					set_distance(c, s_box, distance[s_agent][s_box] + 1, distance);
 					deque.addLast(make_pair(c, s_box));
 				}
 				if (s_agent < level.alive && level.move(s_agent, level.delta[c][s_agent]) == s_box
-						&& distance[c][s_agent] == -1) {
+						&& distance[c][s_agent] == Integer.MAX_VALUE) {
 					set_distance(c, s_agent, distance[s_agent][s_box] + 1, distance);
 					deque.addLast(make_pair(c, s_agent));
 				}
@@ -119,31 +121,24 @@ final class Heuristic {
 	private int evaluate_internal(State s) {
 		int w = 0;
 		for (int i = 0; i < level.alive; i++)
-			if (s.box(i))
+			if (s.box(i)) {
+				System.arraycopy(distance_box[i], 0, hungarian.cost[w], 0, level.num_boxes);
 				boxes[w++] = i;
+			}
 		assert w == boxes.length;
 
-		for (int i = 0; i < boxes.length; i++) {
-			for (int j = 0; j < distance_box[0].length; j++) {
-				int d = distance_box[boxes[i]][j];
-				hungarian.cost[i][j] = (d < 0 || d == Integer.MAX_VALUE) ? Double.POSITIVE_INFINITY : d;
-			}
-		}
-
 		int[] goal = hungarian.execute();
-		for (int i = 0; i < boxes.length; i++)
-			if (goal[i] < 0)
-				return Integer.MAX_VALUE;
-
 		int sum = 0;
 		for (int i = 0; i < boxes.length; i++) {
+			if (goal[i] < 0)
+				return Integer.MAX_VALUE;
 			int d = distance_box[boxes[i]][goal[i]];
+			if (d == Integer.MAX_VALUE)
+				return Integer.MAX_VALUE;
 			assert d >= 0;
-			assert d != Integer.MAX_VALUE;
 			sum += d;
+			assert sum >= 0 && sum < Integer.MAX_VALUE;
 		}
-
-		assert sum >= 0;
 		return sum;
 	}
 }

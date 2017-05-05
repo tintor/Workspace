@@ -2,27 +2,6 @@ package tintor.common;
 
 import java.util.Arrays;
 
-/* Copyright (c) 2012 Kevin L. Stern
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
 /**
  * An implementation of the Hungarian algorithm for solving the assignment
  * problem. An instance of the assignment problem consists of a number of
@@ -47,12 +26,12 @@ import java.util.Arrays;
  * 
  * @author Kevin L. Stern
  */
-public class HungarianAlgorithm {
-	public final double[][] cost;
+public final class HungarianAlgorithm {
+	public final int[][] cost;
 	private final int rows, cols, dim;
-	private final double[] labelByWorker, labelByJob;
+	private final int[] labelByWorker, labelByJob;
 	private final int[] minSlackWorkerByJob;
-	private final double[] minSlackValueByJob;
+	private final int[] minSlackValueByJob;
 	private final int[] matchJobByWorker, matchWorkerByJob;
 	private final int[] parentWorkerByCommittedJob;
 	private final boolean[] committedWorkers;
@@ -67,14 +46,14 @@ public class HungarianAlgorithm {
 	 */
 	public HungarianAlgorithm(int rows, int cols) {
 		dim = Math.max(rows, cols);
-		cost = new double[dim][dim];
+		cost = new int[dim][dim];
 		this.rows = rows;
 		this.cols = cols;
 
-		labelByWorker = new double[dim];
-		labelByJob = new double[dim];
+		labelByWorker = new int[dim];
+		labelByJob = new int[dim];
 		minSlackWorkerByJob = new int[dim];
-		minSlackValueByJob = new double[dim];
+		minSlackValueByJob = new int[dim];
 		committedWorkers = new boolean[dim];
 		parentWorkerByCommittedJob = new int[dim];
 		matchJobByWorker = new int[dim];
@@ -87,8 +66,7 @@ public class HungarianAlgorithm {
 	 * among its incident edges.
 	 */
 	protected void computeInitialFeasibleSolution() {
-		for (int j = 0; j < dim; j++)
-			labelByJob[j] = Double.POSITIVE_INFINITY;
+		Arrays.fill(labelByJob, Integer.MAX_VALUE);
 		for (int w = 0; w < dim; w++)
 			for (int j = 0; j < dim; j++)
 				if (cost[w][j] < labelByJob[j])
@@ -158,7 +136,7 @@ public class HungarianAlgorithm {
 	protected boolean executePhase() {
 		while (true) {
 			int minSlackWorker = -1, minSlackJob = -1;
-			double minSlackValue = Double.POSITIVE_INFINITY;
+			int minSlackValue = Integer.MAX_VALUE;
 			for (int j = 0; j < dim; j++)
 				if (parentWorkerByCommittedJob[j] == -1)
 					if (minSlackValueByJob[j] < minSlackValue) {
@@ -198,7 +176,7 @@ public class HungarianAlgorithm {
 				committedWorkers[worker] = true;
 				for (int j = 0; j < dim; j++)
 					if (parentWorkerByCommittedJob[j] == -1) {
-						double slack = cost[worker][j] - labelByWorker[worker] - labelByJob[j];
+						int slack = cost[worker][j] - labelByWorker[worker] - labelByJob[j];
 						if (minSlackValueByJob[j] > slack) {
 							minSlackValueByJob[j] = slack;
 							minSlackWorkerByJob[j] = worker;
@@ -265,15 +243,15 @@ public class HungarianAlgorithm {
 	 */
 	protected void reduce() {
 		for (int w = 0; w < dim; w++) {
-			double min = Double.POSITIVE_INFINITY;
+			int min = Integer.MAX_VALUE;
 			for (int j = 0; j < dim; j++)
 				if (cost[w][j] < min)
 					min = cost[w][j];
 			for (int j = 0; j < dim; j++)
 				cost[w][j] -= min;
 		}
-		double[] min = new double[dim];
-		Arrays.fill(min, Double.POSITIVE_INFINITY);
+		int[] min = new int[dim];
+		Arrays.fill(min, Integer.MAX_VALUE);
 		for (int w = 0; w < dim; w++)
 			for (int j = 0; j < dim; j++)
 				if (cost[w][j] < min[j])
@@ -288,7 +266,7 @@ public class HungarianAlgorithm {
 	 * committed workers and by subtracting the slack value for committed jobs. In
 	 * addition, update the minimum slack values appropriately.
 	 */
-	protected void updateLabeling(double slack) {
+	protected void updateLabeling(int slack) {
 		for (int w = 0; w < dim; w++)
 			if (committedWorkers[w])
 				labelByWorker[w] += slack;

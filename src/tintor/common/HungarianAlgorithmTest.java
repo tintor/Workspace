@@ -12,7 +12,7 @@ public class HungarianAlgorithmTest {
 		HungarianAlgorithm hung = new HungarianAlgorithm(n, n);
 		for (int i = 0; i < n; i++)
 			for (int j = 0; j < n; j++)
-				hung.cost[i][j] = rand.nextDouble();
+				hung.cost[i][j] = rand.nextInt();
 
 		int[] result = null;
 		try (Timer t = timer.start()) {
