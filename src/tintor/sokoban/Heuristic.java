@@ -5,34 +5,37 @@ import java.util.Arrays;
 import tintor.common.ArrayDequeInt;
 import tintor.common.AutoTimer;
 import tintor.common.BitMatrix;
-import tintor.common.HungarianAlgorithm;
+import tintor.common.Hungarian;
 
 final class Heuristic {
+	private final int Infinity = Integer.MAX_VALUE / 2; // limitation due to Hungarian
 	final Level level;
+	final boolean optimal;
 	final int[] boxes;
-	final int[][] distance_goal; // distance[agent][box] to nearest goal
+	//final int[][] distance_goal; // distance[agent][box] to nearest goal
 	final int[][] distance_box; // distance[box][goal_orginal]
-	final HungarianAlgorithm hungarian;
+	final Hungarian hungarian;
 	final AutoTimer timer = new AutoTimer("heuristic");
 	int deadlocks;
 	int non_deadlocks;
 
-	Heuristic(Level level) {
+	Heuristic(Level level, boolean optimal) {
 		this.level = level;
+		this.optimal = optimal;
 		int num_goals = level.num_boxes;
 		int num_boxes = level.num_boxes;
-		hungarian = new HungarianAlgorithm(num_boxes, num_goals);
+		hungarian = new Hungarian(level.num_boxes);
 
 		boxes = new int[num_boxes];
 
-		distance_goal = null; // new int[level.cells][level.alive];
+		/*distance_goal = null; // new int[level.cells][level.alive];
 		if (distance_goal != null)
 			for (int[] d : distance_goal)
-				Arrays.fill(d, Integer.MAX_VALUE);
+				Arrays.fill(d, Integer.MAX_VALUE);*/
 
 		distance_box = new int[level.alive][num_goals];
 		for (int[] d : distance_box)
-			Arrays.fill(d, Integer.MAX_VALUE);
+			Arrays.fill(d, Infinity);
 		int w = 0;
 		ArrayDequeInt deque = new ArrayDequeInt(level.cells);
 		BitMatrix visited = new BitMatrix(level.cells, level.alive);
@@ -58,7 +61,7 @@ final class Heuristic {
 	void compute_distances_from_goal(int goal, int goal_ordinal, ArrayDequeInt deque, BitMatrix visited) {
 		int[][] distance = new int[level.cells][level.alive];
 		for (int[] d : distance)
-			Arrays.fill(d, Integer.MAX_VALUE);
+			Arrays.fill(d, Infinity);
 		deque.clear();
 		visited.clear();
 
@@ -73,16 +76,17 @@ final class Heuristic {
 			final int s_agent = (s >> 16) & 0xFFFF;
 			final int s_box = s & 0xFFFF;
 			assert distance[s_agent][s_box] >= 0;
-			assert distance[s_agent][s_box] != Integer.MAX_VALUE;
+			assert distance[s_agent][s_box] != Infinity;
 			distance_box[s_box][goal_ordinal] = Math.min(distance_box[s_box][goal_ordinal], distance[s_agent][s_box]);
 
 			for (int c : level.moves[s_agent]) {
-				if (c != s_box && distance[c][s_box] == Integer.MAX_VALUE) {
+				if (c != s_box && distance[c][s_box] == Infinity) {
+					// TODO moves included only if ! optimal
 					set_distance(c, s_box, distance[s_agent][s_box] + 1, distance);
 					deque.addLast(make_pair(c, s_box));
 				}
 				if (s_agent < level.alive && level.move(s_agent, level.delta[c][s_agent]) == s_box
-						&& distance[c][s_agent] == Integer.MAX_VALUE) {
+						&& distance[c][s_agent] == Infinity) {
 					set_distance(c, s_agent, distance[s_agent][s_box] + 1, distance);
 					deque.addLast(make_pair(c, s_agent));
 				}
@@ -92,52 +96,52 @@ final class Heuristic {
 
 	private void set_distance(int a, int b, int d, int[][] distance) {
 		distance[a][b] = d;
-		if (distance_goal != null && d < distance_goal[a][b])
-			distance_goal[a][b] = d;
+		/*if (distance_goal != null && d < distance_goal[a][b])
+			distance_goal[a][b] = d;*/
 	}
 
-	public int evaluate(State s) {
+	public int evaluate(StateKey s) {
 		try (AutoTimer t = timer.open()) {
 			int h = evaluate_internal(s);
 			assert h >= 0;
-			if (h == Integer.MAX_VALUE)
+			if (h == Integer.MAX_VALUE) {
 				deadlocks += 1;
-			else {
-				h *= 3; // overestimation
-				non_deadlocks += 1;
+				return h;
 			}
+
+			if (!optimal)
+				h *= 3;
+			non_deadlocks += 1;
 			return h;
 		}
 	}
 
-	private int evaluate_internal_cheap(State s) {
+	/*private int evaluate_internal_cheap(State s) {
 		int h = 0;
 		for (int i = 0; i < level.alive; i++)
 			if (s.box(i))
 				h += distance_goal[s.agent][i];
 		return h;
-	}
+	}*/
 
-	private int evaluate_internal(State s) {
-		int w = 0;
-		for (int i = 0; i < level.alive; i++)
-			if (s.box(i)) {
-				System.arraycopy(distance_box[i], 0, hungarian.cost[w], 0, level.num_boxes);
-				boxes[w++] = i;
+	private int evaluate_internal(StateKey s) {
+		int bc = 0;
+		for (int b = 0; b < level.alive; b++)
+			if (s.box(b)) {
+				System.arraycopy(distance_box[b], 0, hungarian.costs[bc], 0, level.num_boxes);
+				boxes[bc++] = b;
 			}
-		assert w == boxes.length;
+		assert bc == boxes.length;
 
-		int[] goal = hungarian.execute();
+		int[] result = hungarian.execute();
 		int sum = 0;
 		for (int i = 0; i < boxes.length; i++) {
-			if (goal[i] < 0)
+			int d = distance_box[boxes[result[i]]][i];
+			assert 0 <= d && d <= Infinity;
+			if (d == Infinity)
 				return Integer.MAX_VALUE;
-			int d = distance_box[boxes[i]][goal[i]];
-			if (d == Integer.MAX_VALUE)
-				return Integer.MAX_VALUE;
-			assert d >= 0;
 			sum += d;
-			assert sum >= 0 && sum < Integer.MAX_VALUE;
+			assert 0 <= sum && sum < Infinity;
 		}
 		return sum;
 	}
