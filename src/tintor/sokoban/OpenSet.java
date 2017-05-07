@@ -71,9 +71,9 @@ class OpenSet {
 	public void update(int v_total_dist, State b) {
 		try (AutoTimer t = timer_update.open()) {
 			map.update(v_total_dist, b);
-			if (b.total_dist() < min)
-				min = b.total_dist();
-			queue(b.total_dist()).push(b);
+			if (b.total_dist < min)
+				min = b.total_dist;
+			queue(b.total_dist).push(b);
 		}
 	}
 
@@ -81,9 +81,9 @@ class OpenSet {
 	public void add(State s) {
 		try (AutoTimer t = timer_add.open()) {
 			map.insert(s);
-			if (s.total_dist() < min)
-				min = s.total_dist();
-			queue(s.total_dist()).push(s);
+			if (s.total_dist < min)
+				min = s.total_dist;
+			queue(s.total_dist).push(s);
 		}
 	}
 

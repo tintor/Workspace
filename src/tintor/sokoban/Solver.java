@@ -70,22 +70,22 @@ import tintor.common.Visitor;
 
 class AStarSolver {
 	final Level level;
+	final boolean optimal;
 	final OpenSet open;
 	final ClosedSet closed;
 	final Heuristic heuristic;
 	final Deadlock deadlock;
 
 	int closed_size_limit;
-	boolean optimal_macro_moves;
-	boolean disable_deadlock_check;
 	int trace; // 0 to turn off any tracing
 	State[] valid;
 
-	AStarSolver(Level level) {
+	AStarSolver(Level level, boolean optimal) {
 		this.level = level;
+		this.optimal = optimal;
 		open = new OpenSet(level.alive, level.cells);
-		closed = new ClosedSet(level.alive, level.cells);
-		heuristic = new Heuristic(level);
+		closed = new ClosedSet(level);
+		heuristic = new Heuristic(level, optimal);
 		deadlock = new Deadlock(level);
 
 		visitor = new Visitor(level.cells);
@@ -122,7 +122,7 @@ class AStarSolver {
 				explore(a);
 			}
 
-			if (trace > 0 && AutoTimer.total() >= next_report) {
+			if (trace > 0 && timer_moves.group.total() >= next_report) {
 				report(a);
 				next_report += 10 * AutoTimer.Second;
 			}
@@ -191,13 +191,13 @@ class AStarSolver {
 				}
 
 				timer_moves.open();
-				State b = a.push(p, level.delta[agent][p], level, optimal_macro_moves, moves[agent], a.agent);
+				State b = a.push(p, level.delta[agent][p], level, optimal, moves[agent], a.agent);
 				timer_moves.close();
 				if (b == null || closed.contains(b))
 					continue;
 
 				int v_total_dist = open.get_total_dist(b);
-				if (v_total_dist == 0 && !disable_deadlock_check && deadlock.check(b))
+				if (v_total_dist == 0 && deadlock.check(b))
 					continue;
 
 				int h = heuristic.evaluate(b);
@@ -209,13 +209,13 @@ class AStarSolver {
 
 				if (v_total_dist == 0) {
 					if (level.is_solved_fast(b.box)) {
-						open.remove_all_ge(b.total_dist());
-						cutoff = b.total_dist();
+						open.remove_all_ge(b.total_dist);
+						cutoff = b.total_dist;
 					}
 					open.add(b);
 					continue;
 				}
-				if (b.total_dist() < v_total_dist)
+				if (b.total_dist < v_total_dist)
 					open.update(v_total_dist, b);
 			}
 		}
@@ -223,9 +223,11 @@ class AStarSolver {
 
 	State[] extractPath(State end) {
 		ArrayDeque<State> path = new ArrayDeque<State>();
-		while (!end.equals(level.start)) {
+		while (!level.normalize(end).equals(level.normalize(level.start))) {
 			path.addFirst(end);
 			end = closed.get(end.prev(level));
+			if (end == null)
+				throw new Error();
 		}
 		return path.toArray(new State[path.size()]);
 	}
@@ -236,10 +238,10 @@ class AStarSolver {
 	private double speed = 0;
 
 	private void report(State a) {
-		long delta_time = AutoTimer.total() - prev_time;
+		long delta_time = timer_moves.group.total() - prev_time;
 		int delta_closed = closed.size() - prev_closed;
 		int delta_open = open.size() - prev_open;
-		prev_time = AutoTimer.total();
+		prev_time = timer_moves.group.total();
 		prev_closed = closed.size();
 		prev_open = open.size();
 
@@ -248,12 +250,12 @@ class AStarSolver {
 		closed.report();
 		open.report();
 		deadlock.report();
-		System.out.printf("dist:%d total_dist:%d cutoff:%s dead:%s live:%s\n", a.dist(), a.total_dist(),
-				Util.human(cutoffs), Util.human(heuristic.deadlocks), Util.human(heuristic.non_deadlocks));
+		System.out.printf("cutoff:%s dead:%s live:%s\n", Util.human(cutoffs), Util.human(heuristic.deadlocks),
+				Util.human(heuristic.non_deadlocks));
 		System.out.printf("speed:%s ", Util.human((int) speed));
 		System.out.printf("branch:%.2f ", 1 + (double) delta_open / delta_closed);
 		Log.info("free_memory:%s", Util.human(Runtime.getRuntime().freeMemory()));
-		AutoTimer.report();
+		timer_moves.group.report();
 
 		level.print(a);
 	}
@@ -261,7 +263,7 @@ class AStarSolver {
 
 class IterativeDeepeningAStar {
 	State solve(Level level) {
-		Heuristic heuristic = new Heuristic(level);
+		Heuristic heuristic = new Heuristic(level, false);
 		if (level.is_solved_fast(level.start.box))
 			return level.start;
 
@@ -281,8 +283,8 @@ class IterativeDeepeningAStar {
 					// TODO cut move if possible
 
 					b.set_heuristic(heuristic.evaluate(b));
-					if (b.total_dist() > total_dist_max) {
-						total_dist_cutoff_min = Math.min(total_dist_cutoff_min, b.total_dist());
+					if (b.total_dist > total_dist_max) {
+						total_dist_cutoff_min = Math.min(total_dist_cutoff_min, b.total_dist);
 						continue;
 					}
 					stack.push(b);
@@ -303,7 +305,7 @@ public class Solver {
 			State s = solution[i];
 			State n = i == solution.length - 1 ? null : solution[i + 1];
 			if (i == solution.length - 1 || level.move(s.agent, s.dir) != n.agent || s.dir != n.dir) {
-				System.out.printf("dist:%s heur:%s\n", s.dist(), s.total_dist() - s.dist());
+				System.out.printf("dist:%s heur:%s\n", s.dist, s.total_dist - s.dist);
 				level.print(s);
 			}
 		}
@@ -313,12 +315,12 @@ public class Solver {
 
 	// solved original 1 2 3 4 * 6 7 *
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load("microban5:21");
+		Level level = Level.load("microban2:115");
 		//Level level = Level.load("original:15");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);
-		AStarSolver solver = new AStarSolver(level);
+		AStarSolver solver = new AStarSolver(level, false);
 		solver.trace = 1;
 
 		timer.start();
@@ -334,7 +336,7 @@ public class Solver {
 					throw new Error();
 				}
 			printSolution(level, solution);
-			Log.info("solved in %d steps! %s", end.dist(), timer.human());
+			Log.info("solved in %d steps! %s", end.dist, timer.human());
 		}
 	}
 }

@@ -454,23 +454,63 @@ class LowLevel {
 		return buffer.length / width;
 	}
 
-	int map_symetry(int a, int symmetry) {
+	private int flip_hor(int a) {
+		int x = a % width;
+		int xp = width - 1 - x;
+		return a - x + xp;
+	}
+
+	private int flip_ver(int a) {
+		int x = a % width, y = a / width;
+		int yp = height() - 1 - y;
+		return yp * width + x;
+	}
+
+	private int transpose(int a) {
+		assert height() == width - 1;
+		int x = a % width, y = a / width;
+		return x * width + y;
+	}
+
+	final static int Left = 0;
+	final static int Up = 1;
+	final static int Right = 2;
+	final static int Down = 3;
+
+	int transform_dir(int dir, int symmetry, boolean reverse) {
+		int dd = dir;
+		assert 0 <= dir && dir < 4;
+		if (reverse && (symmetry & 4) != 0) {
+			dir = (dir <= 1) ? Left ^ Up ^ dir : Right ^ Down ^ dir;
+		}
+		if ((symmetry & 1) != 0) { // flip left and right
+			dir = (dir % 2 == 0) ? Left ^ Right ^ dir : dir;
+		}
+		if ((symmetry & 2) != 0) { // flip up and down
+			dir = (dir % 2 == 1) ? Down ^ Up ^ dir : dir;
+		}
+		if (!reverse && (symmetry & 4) != 0) {
+			dir = (dir <= 1) ? Left ^ Up ^ dir : Right ^ Down ^ dir;
+		}
+		if (!reverse)
+			assert dd == transform_dir(dir, symmetry, true);
+		return dir;
+	}
+
+	int transform(int a, int symmetry) {
 		assert 0 <= a && a < cells();
 		assert 0 < symmetry && symmetry < 8;
 		if ((symmetry & 1) != 0) { // flip left and right
-			int x = a % width;
-			int xp = width - 1 - x;
-			a = a - x + xp;
+			assert a == flip_hor(flip_hor(a));
+			a = flip_hor(a);
 		}
 		if ((symmetry & 2) != 0) { // flip up and down
-			int x = a % width, y = a / width;
-			int yp = height() - 1 - y;
-			a = yp * width + x;
+			assert a == flip_ver(flip_ver(a));
+			a = flip_ver(a);
 		}
 		if ((symmetry & 4) != 0) {
-			assert height() == width - 1;
-			int x = a % width, y = a / width;
-			a = x * width + y;
+			assert a == transpose(transpose(a));
+			a = transpose(a);
 		}
 		return a;
 	}
@@ -482,20 +522,12 @@ class LowLevel {
 		for (int a = 0; a < cells(); a++) {
 			if (!walkable[a])
 				continue;
-			int b = map_symetry(a, symmetry);
+			int b = transform(a, symmetry);
 			if (!walkable[b] || goal(a) != goal(b))
 				return false;
 		}
 		return true;
 	}
-
-	void compute_symetries(boolean[] walkable) {
-		symmetric[0] = true;
-		for (int i = 1; i < symmetric.length; i++)
-			symmetric[i] = is_symmetric(walkable, i);
-	}
-
-	final boolean[] symmetric = new boolean[8];
 
 	int cells() {
 		return buffer.length;

@@ -6,11 +6,13 @@ import tintor.common.Util;
 
 final class ClosedSet {
 	final StateMap map;
+	final Level level;
 	final AutoTimer timer_add = new AutoTimer("closed.add");
 	final AutoTimer timer_contains = new AutoTimer("closed.contains");
 
-	ClosedSet(int alive, int cells) {
-		map = new StateMap(alive, cells);
+	ClosedSet(Level level) {
+		this.level = level;
+		map = new StateMap(level.alive, level.cells);
 	}
 
 	int size() {
@@ -24,17 +26,17 @@ final class ClosedSet {
 
 	void add(State s) {
 		try (AutoTimer t = timer_add.open()) {
-			map.insert(s);
+			map.insert(level.normalize(s));
 		}
 	}
 
 	boolean contains(StateKey s) {
 		try (AutoTimer t = timer_contains.open()) {
-			return map.contains(s);
+			return map.contains(level.normalize(s));
 		}
 	}
 
 	State get(StateKey s) {
-		return map.get(s);
+		return level.denormalize(map.get(level.normalize(s)));
 	}
 }

@@ -41,7 +41,7 @@ public class SolverTest {
 	public void solve() {
 		try {
 			Level level = Level.load(filename);
-			AStarSolver solver = new AStarSolver(level);
+			AStarSolver solver = new AStarSolver(level, false);
 			solver.closed_size_limit = 135000;
 			try {
 				State end = solver.solve();

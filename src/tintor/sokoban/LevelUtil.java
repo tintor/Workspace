@@ -16,7 +16,7 @@ class LevelUtil {
 			int[] box = s.box.clone();
 			Bits.clear(box, b);
 			Bits.set(box, s.agent);
-			State s2 = new State(b, box, s.dist(), (s.dir + 2) % 4, 1, c);
+			State s2 = new State(b, box, 0, s.dist, (s.dir + 2) % 4, 1, c);
 
 			int b2 = level.move(s2.agent, s2.dir);
 			assert b2 == s.agent;

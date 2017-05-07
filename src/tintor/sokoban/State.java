@@ -15,7 +15,7 @@ class StateKey {
 		assert box != null && box.length > 0;
 		this.box = box;
 
-		assert agent >= box.length * 32 || !Bits.test(box, agent);
+		assert agent >= box.length * 32 || !Bits.test(box, agent) : agent + " " + box.length;
 	}
 
 	public final boolean box(int i) {
@@ -28,20 +28,24 @@ class StateKey {
 	}
 
 	@Override
-	public final boolean equals(Object o) {
+	public boolean equals(Object o) {
 		return equals((StateKey) o);
 	}
 }
 
-class State extends StateKey {
+final class State extends StateKey {
+	final int symmetry;
 	final int dir; // direction of move from previous state
-	private final int dist;
-	private final int pushes; // number of box pushes from single call to State.move()
-	private int total_dist; // = distance from start + heuristic to goal
-	private final int prev_agent;
+	final int dist;
+	final int pushes; // number of box pushes from single call to State.move()
+	int total_dist; // = distance from start + heuristic to goal
+	final int prev_agent;
 
-	State(int agent, int[] box, int dist, int dir, int pushes, int prev_agent) {
+	State(int agent, int[] box, int symmetry, int dist, int dir, int pushes, int prev_agent) {
 		super(agent, box);
+
+		assert 0 <= symmetry && symmetry < 8;
+		this.symmetry = symmetry;
 
 		assert 0 <= dist;
 		this.dist = dist;
@@ -56,6 +60,16 @@ class State extends StateKey {
 		this.prev_agent = prev_agent;
 	}
 
+	public final boolean equals(State s) {
+		return agent == s.agent && Arrays.equals(box, s.box) && symmetry == s.symmetry && dist == s.dist && dir == s.dir
+				&& pushes == s.pushes && prev_agent == s.prev_agent;
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		return equals((State) o);
+	}
+
 	public boolean is_initial() {
 		return pushes == 0;
 	}
@@ -64,11 +78,13 @@ class State extends StateKey {
 		final int mask = (1 << 13) - 1;
 		int total_dist = (int) (value & mask);
 		int dist = (int) ((value >>> 13) & mask);
+		assert dist <= total_dist;
 		int dir = (int) ((value >>> 26) & 3);
 		int pushes = (int) (value >>> 28) & 0xF;
 		int prev_agent = (int) ((value >>> 32) & 0xFF);
+		int symmetry = (int) ((value >>> 40) & 0x7);
 		assert prev_agent != 255 : String.format("%x", value);
-		State q = new State(agent, box, dist, dir, pushes, prev_agent);
+		State q = new State(agent, box, symmetry, dist, dir, pushes, prev_agent);
 		q.set_heuristic(total_dist - dist);
 		return q;
 	}
@@ -78,53 +94,40 @@ class State extends StateKey {
 	}
 
 	public long serialize() {
-		long v = 0;
-		assert range(total_dist(), 1 << 13);
-		assert range(dist(), 1 << 13);
+		long v = 1l << 63;
+		assert range(total_dist, 1 << 13);
+		assert 0 <= dist && dist <= total_dist : dist + " " + total_dist;
 		assert range(dir, 4);
-		assert range(pushes(), 16);
-		assert range(prev_agent(), 256);
-		v = total_dist();
-		v |= dist() << 13;
+		assert range(pushes, 16);
+		assert range(prev_agent, 256);
+		assert range(symmetry, 8);
+		v |= total_dist;
+		v |= dist << 13;
 		v |= dir << 26;
-		v |= (long) pushes() << 28;
-		v |= (long) prev_agent() << 32;
+		v |= ((long) pushes) << 28;
+		v |= ((long) prev_agent) << 32;
+		v |= ((long) symmetry) << 40;
 		return v;
 	}
 
-	public int prev_agent() {
-		return prev_agent;
-	}
-
-	public int dist() {
-		return dist;
-	}
-
-	public int total_dist() {
-		return total_dist;
-	}
-
-	public int pushes() {
-		return pushes;
-	}
-
 	public void set_heuristic(int heuristic) {
-		assert heuristic >= 0 && heuristic < 65536 - dist() : heuristic;
-		this.total_dist = dist() + heuristic;
+		assert heuristic >= 0 && heuristic < 65536 - dist : heuristic;
+		this.total_dist = dist + heuristic;
 	}
 
 	StateKey prev(Level level) {
+		assert symmetry == 0;
 		assert prev_agent < level.cells;
 		if (equals(level.start))
 			return null;
-		assert dist() > level.low.dist;
+		assert dist > level.low.dist;
 		int a = level.rmove(agent, dir);
 		assert 0 <= a && a < level.cells;
 		assert 0 <= dir && dir < 4;
 		int b = agent;
 		assert 0 <= b && b < level.alive;
 		assert !box(b);
-		for (int i = 0; i < pushes() - 1; i++) {
+		for (int i = 0; i < pushes - 1; i++) {
 			b = level.rmove(b, dir);
 			assert 0 <= b && b < level.alive;
 			assert !box(b);
@@ -141,6 +144,7 @@ class State extends StateKey {
 	}
 
 	State push(int a, int dir, Level level, boolean optimal, int moves, int prev_agent) {
+		assert symmetry == 0;
 		assert 0 <= prev_agent && prev_agent < level.cells;
 		assert !box(prev_agent);
 		assert box(a);
@@ -169,7 +173,7 @@ class State extends StateKey {
 			pushes += 1;
 		}
 
-		return new State(a, nbox, dist() + moves + pushes, dir, pushes, prev_agent);
+		return new State(a, nbox, 0, dist + moves + pushes, dir, pushes, prev_agent);
 	}
 
 	private boolean more_goals_than_boxes_in_room(int a, int door, Level level) {

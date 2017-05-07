@@ -114,7 +114,7 @@ public final class OpenAddressingIntArrayHashMap {
 		}
 
 		while (true) {
-			if (between(hash_of(b) & mask, z, a)) {
+			if (between(hash_of(b, key) & mask, z, a)) {
 				copy(a, b);
 				a = b;
 			}
@@ -178,10 +178,6 @@ public final class OpenAddressingIntArrayHashMap {
 		for (int i = 0; i < N; i++)
 			key[N * a + i] = key[N * b + i];
 		value[a] = value[b];
-	}
-
-	private int hash_of(int a) {
-		return hash_of(a, key);
 	}
 
 	private int hash_of(int a, int[] array) {

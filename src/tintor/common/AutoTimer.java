@@ -3,27 +3,32 @@ package tintor.common;
 import java.util.ArrayList;
 import java.util.Collections;
 
-public final class AutoTimer implements AutoCloseable, Comparable<AutoTimer> {
+public final class AutoTimer implements AutoCloseable {
+	public static final long Second = 1000000000l;
+
 	private final String name;
 	private long total;
 	private AutoTimer parent;
+	public final Group group;
 
 	private AutoTimer() {
 		name = null;
+		group = null;
 	}
 
 	public AutoTimer(String name) {
 		assert name != null;
 		this.name = name;
-		list.add(this);
+		group = Group.tls.get();
+		group.list.add(this);
 	}
 
 	public AutoTimer open() {
 		assert parent == null;
 		long now = System.nanoTime();
-		current.total += now;
-		parent = current;
-		current = this;
+		group.current.total += now;
+		parent = group.current;
+		group.current = this;
 		total -= now;
 		return this;
 	}
@@ -32,45 +37,38 @@ public final class AutoTimer implements AutoCloseable, Comparable<AutoTimer> {
 		assert parent != null;
 		long now = System.nanoTime();
 		total += now;
-		current = parent;
+		group.current = parent;
 		parent = null;
-		current.total -= now;
+		group.current.total -= now;
 	}
 
-	@Override
-	public int compareTo(AutoTimer o) {
-		if (o.total > total)
-			return 1;
-		if (o.total < total)
-			return -1;
-		return 0;
-	}
+	public static class Group {
+		private static final ThreadLocal<Group> tls = new ThreadLocal<Group>() {
+			protected Group initialValue() {
+				return new Group();
+			}
+		};
+		private final ArrayList<AutoTimer> list = new ArrayList<>();
+		private AutoTimer current = new AutoTimer();
 
-	// static
-
-	public static final long Second = 1000000000l;
-	private static final ArrayList<AutoTimer> list = new ArrayList<>();
-	private static AutoTimer current = new AutoTimer();
-
-	public static void reset() {
-		current.total = 0;
-		list.clear();
-	}
-
-	public static void report() {
-		assert current.name == null;
-		Collections.sort(list);
-		for (AutoTimer t : list) {
-			double p = 100.0 * t.total / -current.total;
-			if (p < 1)
-				break;
-			System.out.printf("%s:%d ", t.name, (int) (p * 10));
+		private Group() {
 		}
-		System.out.println();
-	}
 
-	public static long total() {
-		assert current.name == null;
-		return -current.total;
+		public void report() {
+			assert current.name == null;
+			Collections.sort(list, (a, b) -> Long.compare(b.total, a.total));
+			for (AutoTimer t : list) {
+				double p = 100.0 * t.total / -current.total;
+				if (p < 1)
+					break;
+				System.out.printf("%s:%d ", t.name, (int) (p * 10));
+			}
+			System.out.println();
+		}
+
+		public long total() {
+			assert current.name == null;
+			return -current.total;
+		}
 	}
 }
