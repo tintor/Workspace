@@ -14,7 +14,7 @@ final class Heuristic {
 	//final int[][] distance_goal; // distance[agent][box] to nearest goal
 	final int[][] distance_box; // distance[box][goal_orginal]
 	final Hungarian hungarian;
-	final AutoTimer timer = new AutoTimer("heuristic");
+	static final AutoTimer timer = new AutoTimer("heuristic");
 	int deadlocks;
 	int non_deadlocks;
 

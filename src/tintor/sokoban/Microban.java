@@ -36,13 +36,14 @@ public class Microban {
 			space[s].add(level);
 		}
 
-		for (int i = 31; i < space.length; i++)
+		for (int i = 0; i < space.length; i++)
 			if (space[i] != null)
 				for (Level level : space[i])
 					try {
 						Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.low.name, level.cells,
 								level.alive, level.num_boxes, level.state_space());
 						AStarSolver solver = new AStarSolver(level, false);
+						solver.trace = 1;
 						timer.total = 0;
 						timer.start();
 						State end = solver.solve();

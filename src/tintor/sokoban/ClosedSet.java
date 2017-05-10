@@ -8,12 +8,12 @@ import tintor.sokoban.StateMap.StateKeyPredicate;
 final class ClosedSet {
 	final StateMap map;
 	final Level level;
-	final AutoTimer timer_add = new AutoTimer("closed.add");
-	final AutoTimer timer_contains = new AutoTimer("closed.contains");
+	static final AutoTimer timer_add = new AutoTimer("closed.add");
+	static final AutoTimer timer_contains = new AutoTimer("closed.contains");
 
 	ClosedSet(Level level) {
 		this.level = level;
-		map = new StateMap(level.alive, level.cells, OpenAddressingIntArrayHashMap.Values.InMemory);
+		map = new StateMap(level.alive, level.cells, OpenAddressingIntArrayHashMap.Values.Ignore);
 	}
 
 	int size() {

@@ -111,7 +111,7 @@ class AStarSolver {
 		private static final long serialVersionUID = 1L;
 	};
 
-	AutoTimer timer_solve = new AutoTimer("solve");
+	static final AutoTimer timer_solve = new AutoTimer("solve");
 
 	State solve() {
 		int h = heuristic.evaluate(level.start);
@@ -121,7 +121,8 @@ class AStarSolver {
 		if (level.is_solved_fast(level.start.box))
 			return level.start;
 
-		long next_report = 10 * AutoTimer.Second;
+		AutoTimer.reset();
+		long next_report = 30 * AutoTimer.Second;
 		explore(level.start);
 		State a = null;
 		while (true) {
@@ -138,15 +139,17 @@ class AStarSolver {
 				explore(a);
 			}
 
-			if (timer_moves.group.total() >= 60 * AutoTimer.Second)
-				break;
-			if (trace > 0 && timer_moves.group.total() >= next_report) {
-				report(a);
-				next_report += 10 * AutoTimer.Second;
+			if (trace > 1 && AutoTimer.total() >= next_report) {
+				report();
+				AutoTimer.report();
+				level.print(a);
+				next_report += 30 * AutoTimer.Second;
 			}
 		}
+		if (trace > 1)
+			report();
 		if (trace > 0)
-			report(a);
+			AutoTimer.report();
 		return a;
 	}
 
@@ -188,7 +191,7 @@ class AStarSolver {
 	private Visitor visitor;
 	private int[] moves;
 
-	final AutoTimer timer_moves = new AutoTimer("moves");
+	static final AutoTimer timer_moves = new AutoTimer("moves");
 	int cutoff = Integer.MAX_VALUE;
 	int cutoffs = 0;
 
@@ -257,11 +260,11 @@ class AStarSolver {
 	private int prev_closed = 0;
 	private double speed = 0;
 
-	private void report(State a) {
-		long delta_time = timer_moves.group.total() - prev_time;
+	private void report() {
+		long delta_time = AutoTimer.total() - prev_time;
 		int delta_closed = closed.size() - prev_closed;
 		int delta_open = open.size() - prev_open;
-		prev_time = timer_moves.group.total();
+		prev_time = AutoTimer.total();
 		prev_closed = closed.size();
 		prev_open = open.size();
 
@@ -272,12 +275,9 @@ class AStarSolver {
 		deadlock.report();
 		System.out.printf("cutoff:%s dead:%s live:%s ", Util.human(cutoffs), Util.human(heuristic.deadlocks),
 				Util.human(heuristic.non_deadlocks));
+		System.out.printf("time:%s ", Util.human(AutoTimer.total() / AutoTimer.Second));
 		System.out.printf("speed:%s ", Util.human((int) speed));
 		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
-		Log.info("free_memory:%s", Util.human(Runtime.getRuntime().freeMemory()));
-		timer_moves.group.report();
-
-		level.print(a);
 	}
 }
 
@@ -341,7 +341,7 @@ public class Solver {
 				level.state_space());
 		level.print(level.start);
 		AStarSolver solver = new AStarSolver(level, false);
-		solver.trace = 1;
+		solver.trace = 2;
 
 		timer.start();
 		State end = solver.solve();

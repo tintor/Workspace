@@ -384,7 +384,7 @@ final class Level {
 		print(p -> s.agent == p, p -> s.box(p));
 	}
 
-	final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
+	static final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
 
 	boolean is_valid_level(IndexToChar op) {
 		try (AutoTimer t = timer_isvalidlevel.open()) {

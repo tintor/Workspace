@@ -115,13 +115,13 @@ final class Deadlock {
 	private final Level level;
 	private FileWriter pattern_file;
 
-	private final AutoTimer timer = new AutoTimer("deadlock");
-	private final AutoTimer timerFrozen = new AutoTimer("deadlock.frozen");
-	private final AutoTimer timerMatch = new AutoTimer("deadlock.match");
-	private final AutoTimer timerAdd = new AutoTimer("deadlock.add");
-	private final AutoTimer timerMinimize = new AutoTimer("deadlock.minimize");
-	private final AutoTimer timerCleanup = new AutoTimer("deadlock.cleanup");
-	private final AutoTimer timerGoalzone = new AutoTimer("deadlock.goalzone");
+	private static final AutoTimer timer = new AutoTimer("deadlock");
+	private static final AutoTimer timer_frozen = new AutoTimer("deadlock.frozen");
+	private static final AutoTimer timer_match = new AutoTimer("deadlock.match");
+	private static final AutoTimer timer_add = new AutoTimer("deadlock.add");
+	private static final AutoTimer timer_minimize = new AutoTimer("deadlock.minimize");
+	private static final AutoTimer timer_cleanup = new AutoTimer("deadlock.cleanup");
+	private static final AutoTimer timer_goalzone = new AutoTimer("deadlock.goalzone");
 
 	private int deadlocks = 0;
 	private int non_deadlocks = 0;
@@ -226,7 +226,7 @@ final class Deadlock {
 	}
 
 	private boolean matchesPattern(int agent, int[] box, int num_boxes) {
-		try (AutoTimer t = timerMatch.open()) {
+		try (AutoTimer t = timer_match.open()) {
 			assert looksLikeAPush(agent, box);
 			return pattern_index[agent].matches(box, num_boxes);
 		}
@@ -238,7 +238,7 @@ final class Deadlock {
 
 	// Note: modifies input array!
 	private Result containsFrozenBoxes(int agent, int[] box, int num_boxes) {
-		try (AutoTimer t = timerFrozen.open()) {
+		try (AutoTimer t = timer_frozen.open()) {
 			if (num_boxes < 2)
 				return Result.NotFrozen;
 			int pushed_boxes = 0;
@@ -316,7 +316,7 @@ final class Deadlock {
 			return false;
 		if (matchesPattern(s.agent, s.box, num_boxes) || matchesGoalZonePattern(s.agent, s.box))
 			return true;
-		try (AutoTimer t = timerGoalzone.open()) {
+		try (AutoTimer t = timer_goalzone.open()) {
 			if (isGoalZoneDeadlock(s))
 				return true;
 		}
@@ -359,7 +359,7 @@ final class Deadlock {
 		boolean[] agent = visitor.visited().clone();
 
 		// TODO there could be more than one minimal pattern from box
-		try (AutoTimer t = timerMinimize.open()) {
+		try (AutoTimer t = timer_minimize.open()) {
 			// try to removing boxes to generalize the pattern
 			for (int i = 0; i < level.alive; i++)
 				if (Bits.test(box, i) && !level.is_solved(box)) {
@@ -381,7 +381,7 @@ final class Deadlock {
 		}
 
 		// Save remaining state as a new deadlock pattern
-		try (AutoTimer t = timerAdd.open()) {
+		try (AutoTimer t = timer_add.open()) {
 			addPatternToFile(agent, box);
 			histogram[num_boxes - 2] += 1;
 			for (int b = 0; b < level.alive; b++)
@@ -392,7 +392,7 @@ final class Deadlock {
 			patterns += 1;
 		}
 
-		try (AutoTimer t = timerCleanup.open()) {
+		try (AutoTimer t = timer_cleanup.open()) {
 			StateKeyPredicate predicate = (s_agent, s_box) -> matchesPattern(s_agent, s_box, level.num_boxes);
 			open.remove_if(predicate);
 			closed.remove_if(predicate);

@@ -13,10 +13,10 @@ class OpenSet {
 	private StateArray[] queue = new StateArray[0];
 	private int min = Integer.MAX_VALUE;
 
-	private final AutoTimer timer_get = new AutoTimer("open.get");
-	private final AutoTimer timer_update = new AutoTimer("open.update");
-	private final AutoTimer timer_add = new AutoTimer("open.add");
-	private final AutoTimer timer_remove_min = new AutoTimer("open.remove_min");
+	private static final AutoTimer timer_get = new AutoTimer("open.get");
+	private static final AutoTimer timer_update = new AutoTimer("open.update");
+	private static final AutoTimer timer_add = new AutoTimer("open.add");
+	private static final AutoTimer timer_remove_min = new AutoTimer("open.remove_min");
 
 	OpenSet(int alive, int cells) {
 		map = new StateMap(alive, cells, OpenAddressingIntArrayHashMap.Values.InMemory);
