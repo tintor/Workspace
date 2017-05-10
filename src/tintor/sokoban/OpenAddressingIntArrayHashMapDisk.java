@@ -1,26 +1,35 @@
 package tintor.sokoban;
 
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.function.Predicate;
 
 import tintor.common.MurmurHash3;
+import tintor.common.Util;
 
 // Maps int[N] -> long. Very memory compact.
 // Can store values in memory or on disk.
 // Removing elements is efficient and doesn't leave garbage.
-public final class OpenAddressingIntArrayHashMap {
+public final class OpenAddressingIntArrayHashMapDisk {
 	private int[] key;
-	private long[] value;
+	private FileChannel file;
+	private final ByteBuffer buffer = ByteBuffer.allocate(8);
 	private final int N;
 	private int size;
 	private int mask;
 
-	public OpenAddressingIntArrayHashMap(int N) {
+	public OpenAddressingIntArrayHashMapDisk(int N) {
 		this.N = N;
 		int capacity = 8;
 		key = new int[N * capacity];
 		mask = capacity - 1;
-		value = new long[capacity];
+		file = Util.newTempFile();
+	}
+
+	@Override
+	protected void finalize() {
+		Util.close(file);
 	}
 
 	public int size() {
@@ -33,8 +42,6 @@ public final class OpenAddressingIntArrayHashMap {
 
 	public void clear() {
 		Arrays.fill(key, 0);
-		if (value != null)
-			Arrays.fill(value, 0);
 		size = 0;
 	}
 
@@ -154,15 +161,18 @@ public final class OpenAddressingIntArrayHashMap {
 		mask = mask * 2 + 1;
 		assert mask == key.length / N - 1;
 
-		final long[] old_value = value;
-		value = new long[value.length * 2];
-		for (int b = 0; b < old_value.length; b++) {
-			long v = old_value[b];
-			if (v == 0)
+		final FileChannel old_file = file;
+		file = Util.newTempFile();
+		for (int b = 0; b < old_key.length / N; b++) {
+			if (empty(b, old_key))
 				continue;
 			int a = copy_unsafe(b, old_key);
-			value[a] = v;
+			buffer.position(0);
+			Util.read(old_file, buffer, b * 8L);
+			buffer.position(0);
+			Util.write(file, buffer, a * 8L);
 		}
+		Util.close(old_file);
 	}
 
 	public int copy_unsafe(int b, int[] old_key) {
@@ -186,15 +196,19 @@ public final class OpenAddressingIntArrayHashMap {
 	}
 
 	private long value(int a) {
-		return value[a];
+		buffer.position(0);
+		Util.read(file, buffer, a * 8L);
+		return buffer.getLong(0);
 	}
 
 	private void set_value(int a, long v) {
-		value[a] = v;
+		buffer.position(0);
+		buffer.putLong(0, v);
+		Util.write(file, buffer, a * 8L);
 	}
 
 	private boolean empty(int a) {
-		return value[a] == 0; // empty(a, key);
+		return empty(a, key);
 	}
 
 	private boolean empty(int a, int[] key) {
@@ -214,8 +228,6 @@ public final class OpenAddressingIntArrayHashMap {
 	private void clear(int a) {
 		for (int i = 0; i < N; i++)
 			key[N * a + i] = 0;
-		if (value != null)
-			value[a] = 0; // mark it empty
 		assert empty(a);
 	}
 
@@ -227,7 +239,10 @@ public final class OpenAddressingIntArrayHashMap {
 	private void copy(int a, int b) {
 		for (int i = 0; i < N; i++)
 			key[N * a + i] = key[N * b + i];
-		value[a] = value[b];
+		buffer.position(0);
+		Util.read(file, buffer, b * 8L);
+		buffer.position(0);
+		Util.write(file, buffer, a * 8L);
 	}
 
 	private int hash_of(int a, int[] array) {

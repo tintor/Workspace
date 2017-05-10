@@ -43,7 +43,7 @@ public class Microban {
 						Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.low.name, level.cells,
 								level.alive, level.num_boxes, level.state_space());
 						AStarSolver solver = new AStarSolver(level, false);
-						solver.trace = 1;
+						solver.trace = 2;
 						timer.total = 0;
 						timer.start();
 						State end = solver.solve();

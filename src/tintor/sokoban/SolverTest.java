@@ -9,6 +9,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 
+import tintor.common.AutoTimer;
 import tintor.common.ParallelParameterized;
 import tintor.sokoban.AStarSolver.ClosedSizeLimitError;
 import tintor.sokoban.Level.MoreThan256CellsError;
@@ -39,6 +40,7 @@ public class SolverTest {
 
 	@Test
 	public void solve() {
+		AutoTimer.enabled = false;
 		try {
 			Level level = Level.load(filename);
 			AStarSolver solver = new AStarSolver(level, false);
@@ -46,7 +48,7 @@ public class SolverTest {
 			try {
 				State end = solver.solve();
 				Assert.assertTrue(end != null);
-				solver.extractPath(end);
+				//solver.extractPath(end);
 			} catch (ClosedSizeLimitError e) {
 				Assert.assertTrue("ClosedSizeLimit " + level.state_space(), level.state_space() > 21);
 			}

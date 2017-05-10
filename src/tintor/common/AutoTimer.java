@@ -23,26 +23,31 @@ public final class AutoTimer implements AutoCloseable {
 	}
 
 	public AutoTimer open() {
-		assert parent == null;
-		long now = System.nanoTime();
-		current.total += now;
-		parent = current;
-		current = this;
-		total -= now;
+		if (enabled) {
+			assert parent == null;
+			long now = System.nanoTime();
+			current.total += now;
+			parent = current;
+			current = this;
+			total -= now;
+		}
 		return this;
 	}
 
 	public void close() {
-		assert parent != null;
-		long now = System.nanoTime();
-		total += now;
-		current = parent;
-		parent = null;
-		current.total -= now;
+		if (enabled) {
+			assert parent != null;
+			long now = System.nanoTime();
+			total += now;
+			current = parent;
+			parent = null;
+			current.total -= now;
+		}
 	}
 
 	private static final ArrayList<AutoTimer> list = new ArrayList<>();
 	private static AutoTimer current = new AutoTimer();
+	public static boolean enabled = true;
 
 	public static void reset() {
 		synchronized (list) {

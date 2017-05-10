@@ -3,17 +3,16 @@ package tintor.sokoban;
 import tintor.common.AutoTimer;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
-import tintor.sokoban.StateMap.StateKeyPredicate;
 
 final class ClosedSet {
-	final StateMap map;
+	final StateMapDisk map;
 	final Level level;
 	static final AutoTimer timer_add = new AutoTimer("closed.add");
 	static final AutoTimer timer_contains = new AutoTimer("closed.contains");
 
 	ClosedSet(Level level) {
 		this.level = level;
-		map = new StateMap(level.alive, level.cells, OpenAddressingIntArrayHashMap.Values.Ignore);
+		map = new StateMapDisk(level.alive, level.cells);
 	}
 
 	int size() {
@@ -31,7 +30,9 @@ final class ClosedSet {
 
 	void add(State s) {
 		try (AutoTimer t = timer_add.open()) {
-			map.insert(level.normalize(s));
+			State a = level.normalize(s);
+			assert !map.contains(a);
+			map.insert(a);
 		}
 	}
 

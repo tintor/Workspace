@@ -5,7 +5,6 @@ import java.util.Arrays;
 import tintor.common.AutoTimer;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
-import tintor.sokoban.StateMap.StateKeyPredicate;
 
 // Set of all States for which we found some path from the start (not sure if optimal yet)
 class OpenSet {
@@ -19,7 +18,7 @@ class OpenSet {
 	private static final AutoTimer timer_remove_min = new AutoTimer("open.remove_min");
 
 	OpenSet(int alive, int cells) {
-		map = new StateMap(alive, cells, OpenAddressingIntArrayHashMap.Values.InMemory);
+		map = new StateMap(alive, cells);
 	}
 
 	void report() {

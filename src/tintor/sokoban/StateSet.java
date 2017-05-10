@@ -1,7 +1,6 @@
 package tintor.sokoban;
 
 import tintor.common.Array;
-import tintor.sokoban.StateMap.StateKeyPredicate;
 
 final class StateSet {
 	private final OpenAddressingIntArrayHashSet[] set;

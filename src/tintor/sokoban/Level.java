@@ -119,6 +119,8 @@ final class Level {
 
 		transforms = new int[7][];
 		inv_transforms = new int[7][];
+		dir_transforms = new int[7][];
+		inv_dir_transforms = new int[7][];
 		int w = 0;
 		for (int symmetry = 1; symmetry <= 7; symmetry += 1)
 			if (low.is_symmetric(walkable, symmetry)) {
@@ -132,7 +134,7 @@ final class Level {
 						inv_mapping[a] = c;
 					}
 				transforms[w] = mapping;
-				inv_transforms[w++] = inv_mapping;
+				inv_transforms[w] = inv_mapping;
 
 				for (int i = 0; i < alive; i++)
 					assert 0 <= mapping[i] && mapping[i] < alive;
@@ -140,11 +142,23 @@ final class Level {
 					assert alive <= mapping[i] && mapping[i] < cells;
 				assert Util.all(cells, i -> inv_mapping[mapping[i]] == i);
 				assert Util.sum(cells, i -> i - mapping[i]) == 0;
+
+				dir_transforms[w] = new int[4];
+				inv_dir_transforms[w] = new int[4];
+				for (int a = 0; a < 4; a++) {
+					int c = low.transform_dir(a, symmetry, false);
+					dir_transforms[w][c] = a;
+					inv_dir_transforms[w][a] = c;
+				}
+
+				w += 1;
 			}
 		transforms = Arrays.copyOf(transforms, w);
 		transforms = new int[0][];
 		inv_transforms = Arrays.copyOf(inv_transforms, w);
 		inv_transforms = new int[0][];
+		dir_transforms = Arrays.copyOf(dir_transforms, w);
+		inv_dir_transforms = Arrays.copyOf(inv_dir_transforms, w);
 
 		visitor = new Visitor(cells);
 		moves = new int[cells][];
@@ -162,6 +176,9 @@ final class Level {
 	// For all the level symmetries
 	private int[][] transforms;
 	private int[][] inv_transforms;
+
+	private int[][] dir_transforms;
+	private int[][] inv_dir_transforms;
 
 	private int[] transform(int[] box, int[] mapping) {
 		int[] out = new int[box.length];
@@ -244,13 +261,14 @@ final class Level {
 
 		for (int i = 0; i < transforms.length; i++) {
 			int[] map = transforms[i];
+			int[] dmap = dir_transforms[i];
 
 			int nagent = map[s.agent];
 			if (nagent < agent) {
 				agent = nagent;
 				box = transform(s.box, map);
 				symmetry = i + 1;
-				dir = low.transform_dir(s.dir, s.symmetry, false);
+				dir = dmap[s.dir];
 				prev_agent = map[s.prev_agent];
 				continue;
 			}
@@ -268,7 +286,7 @@ final class Level {
 				agent = nagent;
 				box = nbox;
 				symmetry = i + 1;
-				dir = low.transform_dir(s.dir, s.symmetry, false);
+				dir = dmap[s.dir];
 				prev_agent = map[s.prev_agent];
 			}
 		}
@@ -284,7 +302,7 @@ final class Level {
 		assert denormalize(q).dist == s.dist;
 		assert denormalize(q).total_dist == s.total_dist;
 		assert denormalize(q).prev_agent == s.prev_agent;
-		assert denormalize(q).dir == s.dir;
+		assert denormalize(q).dir == s.dir : denormalize(q).dir + " " + q.dir + " " + s.dir + " " + q.symmetry;
 		assert denormalize(q).equals(s);
 		return q;
 	}
@@ -293,8 +311,8 @@ final class Level {
 		if (s == null || s.symmetry == 0)
 			return s;
 		int[] map = inv_transforms[s.symmetry - 1];
-		State q = new State(map[s.agent], transform(s.box, map), 0, s.dist, low.transform_dir(s.dir, s.symmetry, true),
-				s.pushes, map[s.prev_agent]);
+		int[] dmap = inv_dir_transforms[s.symmetry - 1];
+		State q = new State(map[s.agent], transform(s.box, map), 0, s.dist, dmap[s.dir], s.pushes, map[s.prev_agent]);
 		q.set_heuristic(s.total_dist - s.dist);
 		return q;
 	}

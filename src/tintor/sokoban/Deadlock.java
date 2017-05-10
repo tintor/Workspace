@@ -11,7 +11,6 @@ import tintor.common.Bits;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
 import tintor.common.Visitor;
-import tintor.sokoban.StateMap.StateKeyPredicate;
 
 // TODO: new int[] + System.arraycopy() might be faster than clone() (or maybe even Arrays.copyOf(array, array.length))
 
