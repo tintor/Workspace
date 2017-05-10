@@ -2,7 +2,7 @@ package tintor.common;
 
 import java.util.Arrays;
 
-public class ArrayDequeInt {
+public final class ArrayDequeInt {
 	private int[] array;
 	private int head, tail;
 

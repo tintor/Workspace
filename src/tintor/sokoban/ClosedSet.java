@@ -3,6 +3,7 @@ package tintor.sokoban;
 import tintor.common.AutoTimer;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
+import tintor.sokoban.StateMap.StateKeyPredicate;
 
 final class ClosedSet {
 	final StateMap map;
@@ -12,7 +13,7 @@ final class ClosedSet {
 
 	ClosedSet(Level level) {
 		this.level = level;
-		map = new StateMap(level.alive, level.cells);
+		map = new StateMap(level.alive, level.cells, OpenAddressingIntArrayHashMap.Values.InMemory);
 	}
 
 	int size() {
@@ -22,6 +23,10 @@ final class ClosedSet {
 	void report() {
 		System.out.printf("closed:%s memory:%s\n", Util.human(size()),
 				Util.human(InstrumentationAgent.deepSizeOf(map)));
+	}
+
+	public void remove_if(StateKeyPredicate fn) {
+		map.remove_if(fn);
 	}
 
 	void add(State s) {

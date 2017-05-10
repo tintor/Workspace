@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.Random;
 
 // Note: It only returns 31-bits! non-negative integers!
-public class Zobrist {
+public final class Zobrist {
 	private static int[] hash = new int[0];
 	private static final Random random = new Random(0);
 

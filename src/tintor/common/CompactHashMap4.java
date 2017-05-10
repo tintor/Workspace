@@ -15,7 +15,7 @@ public final class CompactHashMap4 implements Iterable<int[]> {
 		this.key_length = key_length;
 		this.length = key_length + value_length;
 		bucket = new int[1 << bucket_count_bits][];
-		Arrays.fill(bucket, ArrayUtil.EmptyIntArray);
+		Arrays.fill(bucket, Array.EmptyIntArray);
 		bit = new long[1 << bucket_count_bits];
 		shift = 32 - bucket_count_bits - 6/*bits per bucket*/;
 		capacity_mask = bit.length * 64 - 1;
@@ -30,7 +30,7 @@ public final class CompactHashMap4 implements Iterable<int[]> {
 	}
 
 	public void clear() {
-		Arrays.fill(bucket, ArrayUtil.EmptyIntArray);
+		Arrays.fill(bucket, Array.EmptyIntArray);
 		Arrays.fill(bit, 0);
 		size = 0;
 	}
@@ -177,7 +177,7 @@ public final class CompactHashMap4 implements Iterable<int[]> {
 
 		int[][] obuckets = bucket;
 		bucket = new int[bucket.length * 2][];
-		Arrays.fill(bucket, ArrayUtil.EmptyIntArray);
+		Arrays.fill(bucket, Array.EmptyIntArray);
 		bit = new long[bit.length * 2];
 		shift -= 1;
 		capacity_mask = bit.length * 64 - 1;
@@ -199,7 +199,7 @@ public final class CompactHashMap4 implements Iterable<int[]> {
 
 	private void remove(int a, int q) {
 		clear_bit(a);
-		bucket[a >>> 6] = ArrayUtil.remove(bucket[a >>> 6], length * q, length);
+		bucket[a >>> 6] = Array.remove(bucket[a >>> 6], length * q, length);
 	}
 
 	private int prev_q(int q, int index) {
@@ -213,7 +213,7 @@ public final class CompactHashMap4 implements Iterable<int[]> {
 	}
 
 	boolean equals(int a, int q, int[] key) {
-		return ArrayUtil.equals(key, 0, bucket[a >>> 6], length * q, key_length);
+		return Array.equals(key, 0, bucket[a >>> 6], length * q, key_length);
 	}
 
 	void set_value(int a, int q, int[] value, int offset) {
@@ -227,13 +227,13 @@ public final class CompactHashMap4 implements Iterable<int[]> {
 	private void insert(int index, int q, int[] key_and_value, int offset) {
 		assert offset + length <= key_and_value.length;
 		set_bit(index);
-		bucket[index >>> 6] = ArrayUtil.expand(bucket[index >>> 6], length * q, length);
+		bucket[index >>> 6] = Array.expand(bucket[index >>> 6], length * q, length);
 		System.arraycopy(key_and_value, offset, bucket[index >>> 6], length * q, length);
 	}
 
 	private int index(int[] key, int offset) {
 		assert offset + key_length <= key.length : offset + " " + key_length + " " + key.length;
-		return ArrayUtil.murmurhash3_32(key, offset, key_length, 0/*seed*/) >>> shift;
+		return MurmurHash3.hash(key, offset, key_length, 0/*seed*/) >>> shift;
 	}
 
 	private int prev(int index) {

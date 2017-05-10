@@ -1,13 +1,49 @@
 package tintor.common;
 
 import java.io.File;
-import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.math.BigInteger;
-import java.util.Random;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.Scanner;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.IntPredicate;
+import java.util.function.IntUnaryOperator;
 
-public class Util {
+public final class Util {
+	public static FileChannel newTempFile() {
+		return Util.checkIOException(() -> FileChannel.open(Files.createTempFile(null, null), StandardOpenOption.CREATE,
+				StandardOpenOption.DELETE_ON_CLOSE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
+				StandardOpenOption.READ));
+	}
+
+	public static void close(FileChannel file) {
+		try {
+			file.close();
+		} catch (IOException e) {
+			throw new Error(e);
+		}
+	}
+
+	public static void read(FileChannel file, ByteBuffer buffer, long offset) {
+		try {
+			if (file.read(buffer, offset) != buffer.capacity())
+				throw new Error();
+		} catch (IOException e) {
+			throw new Error(e);
+		}
+	}
+
+	public static void write(FileChannel file, ByteBuffer buffer, long offset) {
+		try {
+			if (file.write(buffer, offset) != buffer.capacity())
+				throw new Error();
+		} catch (IOException e) {
+			throw new Error(e);
+		}
+	}
+
 	public static String human(long a) {
 		if (a < 0)
 			return "-" + human(-a);
@@ -88,60 +124,61 @@ public class Util {
 		return q;
 	}
 
-	public static Scanner scanFile(String filename) {
-		try {
-			return new Scanner(new File(filename));
-		} catch (FileNotFoundException e) {
-			throw new RuntimeException(e);
-		}
+	public static Scanner scanner(String filename) {
+		return checkIOException(() -> new Scanner(new File(filename)));
 	}
 
-	public static interface IndexToInt {
-		int operation(int index);
-	}
-
-	public static int sum(int range, IndexToInt g) {
+	public static int sum(int range, IntUnaryOperator fn) {
 		int s = 0;
-		for (int i = 0; i < range; i++) {
-			s += g.operation(i);
-		}
+		for (int i = 0; i < range; i++)
+			s += fn.applyAsInt(i);
 		return s;
 	}
 
-	public static interface IndexToBool {
-		boolean operation(int index);
-	}
-
-	public static int count(int range, IndexToBool g) {
+	public static int count(int range, IntPredicate fn) {
 		int count = 0;
 		for (int i = 0; i < range; i++)
-			if (g.operation(i))
+			if (fn.test(i))
 				count += 1;
 		return count;
 	}
 
-	public static boolean all(int range, IndexToBool p) {
+	public static boolean all(int range, IntPredicate fn) {
 		for (int i = 0; i < range; i++)
-			if (!p.operation(i))
+			if (!fn.test(i))
 				return false;
 		return true;
 	}
 
-	public static interface IndexToVoid {
-		void operation(int index);
+	public static boolean any(int range, IntPredicate fn) {
+		for (int i = 0; i < range; i++)
+			if (fn.test(i))
+				return true;
+		return false;
 	}
 
-	public static void for_each_true(boolean[] array, IndexToVoid f) {
-		for (int i = 0; i < array.length; i++)
-			if (array[i])
-				f.operation(i);
+	public static interface IOExceptionFunction<T> {
+		T call() throws IOException;
 	}
 
-	public static boolean[] array(int size, IndexToBool p) {
-		boolean[] array = new boolean[size];
-		for (int i = 0; i < size; i++)
-			array[i] = p.operation(i);
-		return array;
+	public static <T> T checkIOException(IOExceptionFunction<T> fn) {
+		try {
+			return fn.call();
+		} catch (IOException e) {
+			throw new Error(e);
+		}
+	}
+
+	public static interface IOExceptionFunctionVoid {
+		void call() throws IOException;
+	}
+
+	public static void checkIOException(IOExceptionFunctionVoid fn) {
+		try {
+			fn.call();
+		} catch (IOException e) {
+			throw new Error(e);
+		}
 	}
 
 	public static int roundUpPowerOf2(int v) {
@@ -153,16 +190,5 @@ public class Util {
 		v |= v >> 16;
 		v++;
 		return v;
-	}
-
-	public static void shuffle(int[] array) {
-		// Implementing Fisher–Yates shuffle
-		Random rnd = ThreadLocalRandom.current();
-		for (int i = array.length - 1; i > 0; i--) {
-			int j = rnd.nextInt(i + 1);
-			int a = array[j];
-			array[j] = array[i];
-			array[i] = a;
-		}
 	}
 }

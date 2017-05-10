@@ -3,7 +3,7 @@ package tintor.common;
 import java.util.Arrays;
 
 @SuppressWarnings("unchecked")
-public class BinaryHeap<T extends Comparable<T>> {
+public final class BinaryHeap<T extends Comparable<T>> {
 	private Object[] queue = new Object[4];
 	private int size;
 

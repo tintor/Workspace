@@ -9,50 +9,64 @@ import tintor.common.Timer;
 import tintor.common.Util;
 import tintor.common.Visitor;
 
-// TODO: try –XX:+UseG1GC
+// Solved
+// 1:4, 6:8, 17
 
+// Unsolved
+// original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
+
+// Performance:
+// TODO: at the start greedily find order to fill goal nodes using matching from Heuristic (and trigger goal macros during search)
+// TODO: specialization of OpenAddressingIntArrayHashMap with long[] instead of int[]
+// TODO: faster search mode that doesn't keep track of previous State. Values in StateMap can be int instead of long.
+//       Used to find the distance of a solution instead of the entire path.
+// TODO: accumulate disk writes of values into a list of [index:value] and write them to disk from a background thread
+// TODO: add timer for growth operation (separate for disk and memory)
+// TODO: tweak load factor of OpenAddressingHashMap for max perf
+// TODO: once every 10s do cleanups: deadlock.cleanup (instead of immediately) and stale OpenSet.queue elements
+// TODO: try –XX:+UseG1GC
+// TODO: keep counter of how many times each deadlock pattern was triggered
+// TODO: load patterns.txt at startup
+// TODO: remove timers for code sections < 1%
+// TODO: extract deadlock pattern database into a separate class and provide multiple indexes:
+//       - all patterns for specific agent position
+//       - all patterns for specific agent position and near agent
+// TODO: web handler for Solver to be able to probe manually into the internals (or just observe search with better UI)
+//       - also be able to switch flags as search is running
+// TODO: speed up hungarian matching by starting from a good initial match (from the previous state)
+// TODO: record all Microban performance runs (also with snapshot of all the code, git branch / tag?)
+// TODO: how to teach solver to park boxes in rooms with single entrance (and to find out maximum parking space)?
+// TODO: don't run solver from Eclipse to avoid crashing it
+// TODO: force entire java heap to be allocated upfront to avoid freezing system later
+// TODO: be able to save Solver state and resume it later
+
+// TODO: general level loader class, knows only about wall cells, compresses level to only walkable interior cells
 // TODO: store extra data for every level: boxes, alive, cells, state_space,
 //       optimal_solution (steps and compute time), some_solution (steps and compute time)
 
-// TODO: re-implement HungarianAlgorithm:
-//       - int instead of double
-//       - avoid N^2 cost of populating the input matrix
-
-// TODO: estimate upper bound on the remaining time to solve()
-//       total_space_size - closed_size * (walkable - boxes) - states_covered_by_every_deadlock_pattern
+// Misc:
+// TODO: move unused common classes into a separate package 
+// TODO: move tests into a separate package
+// TODO: unit tests should be bounded by cpu time, not wall time (to avoid flaky timeouts)
 
 // Deadlock:
-// TODO: +++ if subset of boxes (not on goal) didn't move for a long time (potential deadlock)
-//       run full deadlock check of that subset => could solve 
-// TODO: how to speed up deadlock pattern lookups?
 // TODO: Take every 2 and 3 box subset from start position and initialize deadlock DB
 //       with all REACHABLE deadlock patterns of size 2 and 3. This way ContainsFrozenBoxes can stop when it reaches 2 or 3 boxes.
-// TODO: ExaustiveDeadlockTest with all boxes on goal + one box not on goal
-// TODO: ExaustiveDeadlockTest: with every subset of X boxes, is it solvable with a simple BFS solver?
-// TODO: deadlock patterns for goal cells (must keep track of which goals are empty and which are occupied by frozen boxes)
-// TODO: regenerate level (recompute alive / walkable / bottleneck cells) once a box becomes frozen on goal.
+// TODO: +++ deadlock patterns for goal cells (must keep track of which goals are empty and which are occupied by frozen boxes)
+// TODO: +++ regenerate level (recompute alive / walkable / bottleneck cells) once a box becomes frozen on goal.
 //       Will reduce number of live cells and make deadlock checking and heuristic faster and more accurate.
 // TODO: can avoid calling matchesPattern() inside containsFrozenBoxes() if box push can be reversed
 //       (can do a very cheap check here, just try to go around the box)
 // TODO: --- store deadlock patterns from deadlocks found by Heuristic
 
 // Search space reduction:
-// TODO: only "store" push States (heuristic will not have to worry about distance of agent to box)
-// TODO: Always do even number of steps (only store States with distance % 2 == 0)
-// TODO: Take advantage of symmetry
-//       State.equals and State.hashCode to treat symmetrical states as equal (also deadlock patterns)
-//       Compute all symmetry transforms: int->int for use in equals and hashCode.
-// TODO: search from end backwards and from start forwards and meet in the middle?
+// TODO: +++ (FIXME) Take advantage of symmetry
 // TODO: How to optimize goal room with single entrance? Two entrances?
 // TODO: What states can we cut without eliminating: all solutions / optimal solution? (tunnels for example)
 // TODO: Split level into sub-levels that can be solved independently
 
 // Memory:
 // TODO: +++ when a new deadlock pattern is found with >=3 boxes scan Closed and Open with new pattern to trim them
-// TODO: Change ClosedSet to use memory StateSet and store key/value pairs in file (every add() writes to file, don't store map values in memory)
-
-// Search order:
-// TODO: shorten last iteration: once B is found solved, we can remove all >= States from OpenSet (continue search to try to find a better solution)
 
 // Heuristic:
 // TODO: +++ if level has a goal room with single entrance ==> speed up matching by matching from the goal room entrance
@@ -61,8 +75,7 @@ import tintor.common.Visitor;
 
 // Other:
 // TODO: IDA*
-// TODO: How can search be parallelized?
-//       - more exhaustive deadlock check per State
+// TODO: [Last] How can search be parallelized?
 //       - parallel explore(a)
 //       - parallel pattern search
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
@@ -90,6 +103,8 @@ class AStarSolver {
 
 		visitor = new Visitor(level.cells);
 		moves = new int[level.cells];
+		deadlock.closed = closed;
+		deadlock.open = open;
 	}
 
 	static class ClosedSizeLimitError extends Error {
@@ -107,12 +122,13 @@ class AStarSolver {
 			return level.start;
 
 		long next_report = 10 * AutoTimer.Second;
-
-		open.add(level.start);
+		explore(level.start);
 		State a = null;
 		while (true) {
 			try (AutoTimer t = timer_solve.open()) {
 				a = open.remove_min();
+				if (deadlock.check(a))
+					continue;
 				if (a == null || level.is_solved_fast(a.box))
 					break;
 				closed.add(a);
@@ -122,6 +138,8 @@ class AStarSolver {
 				explore(a);
 			}
 
+			if (timer_moves.group.total() >= 60 * AutoTimer.Second)
+				break;
 			if (trace > 0 && timer_moves.group.total() >= next_report) {
 				report(a);
 				next_report += 10 * AutoTimer.Second;
@@ -137,12 +155,12 @@ class AStarSolver {
 			return true;
 
 		final ArrayList<State> stack = new ArrayList<State>();
-		final StateMap explored = new StateMap(level.alive, level.cells);
-		explored.insert(start);
+		final StateSet explored = new StateSet(level.alive, level.cells);
 		stack.add(start);
 
 		while (stack.size() != 0) {
 			State a = stack.remove(stack.size() - 1);
+			explored.insert(a);
 			visitor.init(a.agent);
 			while (!visitor.done()) {
 				int agent = visitor.next();
@@ -223,11 +241,13 @@ class AStarSolver {
 
 	State[] extractPath(State end) {
 		ArrayDeque<State> path = new ArrayDeque<State>();
-		while (!level.normalize(end).equals(level.normalize(level.start))) {
+		State start = level.normalize(level.start);
+		while (true) {
 			path.addFirst(end);
+			StateKey p = end.prev(level);
+			if (level.normalize(p).equals(start))
+				break;
 			end = closed.get(end.prev(level));
-			if (end == null)
-				throw new Error();
 		}
 		return path.toArray(new State[path.size()]);
 	}
@@ -250,10 +270,10 @@ class AStarSolver {
 		closed.report();
 		open.report();
 		deadlock.report();
-		System.out.printf("cutoff:%s dead:%s live:%s\n", Util.human(cutoffs), Util.human(heuristic.deadlocks),
+		System.out.printf("cutoff:%s dead:%s live:%s ", Util.human(cutoffs), Util.human(heuristic.deadlocks),
 				Util.human(heuristic.non_deadlocks));
 		System.out.printf("speed:%s ", Util.human((int) speed));
-		System.out.printf("branch:%.2f ", 1 + (double) delta_open / delta_closed);
+		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
 		Log.info("free_memory:%s", Util.human(Runtime.getRuntime().freeMemory()));
 		timer_moves.group.report();
 
@@ -313,10 +333,10 @@ public class Solver {
 
 	static Timer timer = new Timer();
 
-	// solved original 1 2 3 4 * 6 7 *
+	// solved original 1 2 3 4 * 6 7 8 ... 17
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load("microban2:115");
-		//Level level = Level.load("original:15");
+		//Level level = Level.load("microban2:115");
+		Level level = Level.load("original:23");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);

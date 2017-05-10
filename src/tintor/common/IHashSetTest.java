@@ -335,7 +335,7 @@ final class Element {
 	}
 
 	public int hashCode() {
-		return ArrayUtil.fmix32(value);
+		return MurmurHash3.fmix(value);
 	}
 }
 

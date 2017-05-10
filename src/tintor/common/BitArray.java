@@ -2,7 +2,7 @@ package tintor.common;
 
 import java.util.Arrays;
 
-public class BitArray {
+public final class BitArray {
 	private final int[] bits;
 
 	public BitArray(int length) {

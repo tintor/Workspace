@@ -1,7 +1,6 @@
 package tintor.sokoban;
 
-import java.util.Arrays;
-
+import tintor.common.Array;
 import tintor.common.ArrayDequeInt;
 import tintor.common.AutoTimer;
 import tintor.common.BitMatrix;
@@ -33,9 +32,7 @@ final class Heuristic {
 			for (int[] d : distance_goal)
 				Arrays.fill(d, Integer.MAX_VALUE);*/
 
-		distance_box = new int[level.alive][num_goals];
-		for (int[] d : distance_box)
-			Arrays.fill(d, Infinity);
+		distance_box = Array.ofInt(level.alive, num_goals, Infinity);
 		int w = 0;
 		ArrayDequeInt deque = new ArrayDequeInt(level.cells);
 		BitMatrix visited = new BitMatrix(level.cells, level.alive);
@@ -59,9 +56,7 @@ final class Heuristic {
 	}
 
 	void compute_distances_from_goal(int goal, int goal_ordinal, ArrayDequeInt deque, BitMatrix visited) {
-		int[][] distance = new int[level.cells][level.alive];
-		for (int[] d : distance)
-			Arrays.fill(d, Infinity);
+		int[][] distance = Array.ofInt(level.cells, level.alive, Infinity);
 		deque.clear();
 		visited.clear();
 
@@ -134,15 +129,9 @@ final class Heuristic {
 		assert bc == boxes.length;
 
 		int[] result = hungarian.execute();
-		int sum = 0;
-		for (int i = 0; i < boxes.length; i++) {
-			int d = distance_box[boxes[result[i]]][i];
-			assert 0 <= d && d <= Infinity;
-			if (d == Infinity)
-				return Integer.MAX_VALUE;
-			sum += d;
-			assert 0 <= sum && sum < Infinity;
-		}
-		return sum;
+		Array.for_each(result, (i, e) -> result[i] = distance_box[boxes[e]][i]);
+		if (Array.contains(result, Infinity))
+			return Integer.MAX_VALUE;
+		return Array.sum(result);
 	}
 }

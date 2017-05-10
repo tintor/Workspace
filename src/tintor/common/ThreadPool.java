@@ -5,7 +5,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-public class ThreadPool {
+public final class ThreadPool {
 	public static final int NumThreads = Runtime.getRuntime().availableProcessors();
 	public static final ExecutorService executor = new ThreadPoolExecutor(NumThreads, NumThreads, 0, TimeUnit.SECONDS,
 			new WaitingSynchronousQueue(), r -> newThread(r));

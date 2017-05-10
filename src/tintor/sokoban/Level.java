@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import tintor.common.Array;
 import tintor.common.ArrayDequeInt;
 import tintor.common.AutoTimer;
 import tintor.common.BitMatrix;
@@ -77,9 +78,8 @@ final class Level {
 		alive = Util.count(is_alive);
 
 		int b = 0;
-		int[] old_to_new = new int[low.cells()];
+		int[] old_to_new = Array.ofInt(low.cells(), -1);
 		low.new_to_old = new int[cells];
-		Arrays.fill(old_to_new, -1);
 		for (int a = 0; a < low.cells(); a++)
 			if (is_alive[a]) {
 				old_to_new[a] = b;
@@ -149,16 +149,14 @@ final class Level {
 		visitor = new Visitor(cells);
 		moves = new int[cells][];
 		dirs = new int[cells][];
-		delta = new int[cells][cells];
-		agent_distance = new int[cells][cells];
+		delta = Array.ofInt(cells, cells, -1);
+		agent_distance = Array.ofInt(cells, cells, Integer.MAX_VALUE);
 		bottleneck = new boolean[cells];
 
 		compute_moves_and_dirs();
 		compute_delta();
 		compute_agent_distance();
 		find_bottlenecks(0, new int[cells], -1, new int[1]);
-
-		current.set(this);
 	}
 
 	// For all the level symmetries
@@ -234,9 +232,9 @@ final class Level {
 	}
 
 	State normalize(State s) {
-		assert s.symmetry == 0;
-		if (transforms.length == 0)
+		if (s == null || transforms.length == 0)
 			return s;
+		assert s.symmetry == 0;
 
 		int agent = s.agent;
 		int[] box = s.box;
@@ -292,11 +290,11 @@ final class Level {
 	}
 
 	State denormalize(State s) {
-		if (s.symmetry == 0)
+		if (s == null || s.symmetry == 0)
 			return s;
 		int[] map = inv_transforms[s.symmetry - 1];
-		State q = new State(map[s.agent], transform(s.box, map), 0, s.dist,
-				low.transform_dir(s.dir, s.symmetry, true), s.pushes, map[s.prev_agent]);
+		State q = new State(map[s.agent], transform(s.box, map), 0, s.dist, low.transform_dir(s.dir, s.symmetry, true),
+				s.pushes, map[s.prev_agent]);
 		q.set_heuristic(s.total_dist - s.dist);
 		return q;
 	}
@@ -336,17 +334,13 @@ final class Level {
 	}
 
 	private void compute_delta() {
-		for (int i = 0; i < cells; i++) {
-			Arrays.fill(delta[i], -1);
-			for (byte dir = 0; dir < 4; dir++)
+		for (int i = 0; i < cells; i++)
+			for (int dir = 0; dir < 4; dir++)
 				if (move(i, dir) != Bad)
 					delta[i][move(i, dir)] = dir;
-		}
 	}
 
 	private void compute_agent_distance() {
-		for (int i = 0; i < cells; i++)
-			Arrays.fill(agent_distance[i], Integer.MAX_VALUE);
 		for (int i = 0; i < cells; i++) {
 			agent_distance[i][i] = 0;
 			for (int a : visitor.init(i))
@@ -399,7 +393,7 @@ final class Level {
 			if (!low_clone.check_boxes_and_goals_silent())
 				return false;
 			return true;
-			//BitMatrix visited = new BitMatrix(low_clone.cells, low_clone.cells); // TODO this is huge, as cells is raw buffer size
+			//BitMatrix visited = new BitMatrix(low_clone.cells(), low_clone.cells()); // TODO this is huge, as cells is raw buffer size
 			//return low_clone.new AreAllGoalsReachable().run(visited);
 		}
 	}
@@ -441,8 +435,6 @@ final class Level {
 			return false;
 		return (move(pos, Left) == -1 && move(pos, Right) == -1) || (move(pos, Up) == -1 && move(pos, Down) == -1);
 	}
-
-	public static final ThreadLocal<Level> current = new ThreadLocal<Level>();
 
 	final int[][] moves; // TODO make also box_moves which doesn't include dead cells
 	final int[][] dirs;

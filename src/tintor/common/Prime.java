@@ -1,6 +1,6 @@
 package tintor.common;
 
-public class Prime {
+public final class Prime {
 	public final static int Near10k = 10007;
 	public final static int Near100k = 100003;
 	public final static int Near1M = 1000003;

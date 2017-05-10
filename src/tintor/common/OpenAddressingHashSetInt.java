@@ -133,7 +133,7 @@ public final class OpenAddressingHashSetInt {
 	}
 
 	private static int hash(int a) {
-		return ArrayUtil.fmix32(a);
+		return MurmurHash3.fmix(a);
 	}
 
 	public IteratorInt iterator() {

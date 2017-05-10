@@ -5,8 +5,8 @@ import java.util.Arrays;
 // Map from non-negative integer to T (compact version)
 @SuppressWarnings("unchecked")
 public final class CompactArray<T> {
-	private Object[] values = ArrayUtil.EmptyObjectArray;
-	private long[] bits = ArrayUtil.EmptyLongArray;
+	private Object[] values = Array.EmptyObjectArray;
+	private long[] bits = Array.EmptyLongArray;
 
 	public int size() {
 		assert Bits.count(bits) == values.length;
@@ -68,7 +68,7 @@ public final class CompactArray<T> {
 		int q = Bits.count_before(bits, index);
 		if (!Bits.test(bits, index)) {
 			Bits.set(bits, index);
-			values = ArrayUtil.expand(values, q, 1);
+			values = Array.expand(values, q, 1);
 		}
 		values[q] = value;
 		assert Bits.count(bits) == values.length;
@@ -77,7 +77,7 @@ public final class CompactArray<T> {
 	public void remove(int index) {
 		if (Bits.test(bits, index)) {
 			Bits.clear(bits, index);
-			values = ArrayUtil.remove(values, Bits.count_before(bits, index), 1);
+			values = Array.remove(values, Bits.count_before(bits, index), 1);
 		}
 	}
 

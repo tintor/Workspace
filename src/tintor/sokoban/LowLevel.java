@@ -3,6 +3,7 @@ package tintor.sokoban;
 import java.util.ArrayList;
 import java.util.Scanner;
 
+import tintor.common.Array;
 import tintor.common.ArrayDequeInt;
 import tintor.common.BinaryHeapInt;
 import tintor.common.BitMatrix;
@@ -20,7 +21,7 @@ class LowLevel {
 	static int numberOfLevels(String filename) {
 		int currentLevelNo = 0;
 		boolean inside = false;
-		Scanner sc = Util.scanFile("data/sokoban/" + filename);
+		Scanner sc = Util.scanner("data/sokoban/" + filename);
 		while (sc.hasNextLine()) {
 			String s = preprocess(sc.nextLine());
 			if (!inside && !s.isEmpty()) {
@@ -42,7 +43,7 @@ class LowLevel {
 		ArrayList<String> lines = new ArrayList<String>();
 		int currentLevelNo = 0;
 		boolean inside = false;
-		Scanner sc = Util.scanFile("data/sokoban/" + filename);
+		Scanner sc = Util.scanner("data/sokoban/" + filename);
 		while (sc.hasNextLine()) {
 			String s = preprocess(sc.nextLine());
 			if (!inside && !s.isEmpty()) {
@@ -427,8 +428,8 @@ class LowLevel {
 
 	// remove empty rows and columns of cells
 	boolean[] minimize(boolean[] walkable) {
-		boolean[] remove_column = Util.array(width, x -> Util.all(height(), y -> buffer[y * width + x] == Space));
-		boolean[] remove_row = Util.array(height(), y -> Util.all(width, x -> buffer[y * width + x] == Space));
+		boolean[] remove_column = Array.ofBool(width, x -> Util.all(height(), y -> buffer[y * width + x] == Space));
+		boolean[] remove_row = Array.ofBool(height(), y -> Util.all(width, x -> buffer[y * width + x] == Space));
 
 		int size = (width - Util.count(remove_column)) * (height() - Util.count(remove_row));
 		if (size == buffer.length)

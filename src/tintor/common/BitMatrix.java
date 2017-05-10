@@ -2,7 +2,7 @@ package tintor.common;
 
 import java.util.Arrays;
 
-public class BitMatrix {
+public final class BitMatrix {
 	private final int[] bits;
 	private final int width;
 

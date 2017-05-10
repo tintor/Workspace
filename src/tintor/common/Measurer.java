@@ -7,7 +7,7 @@ import java.util.List;
 
 import sun.misc.Unsafe;
 
-public class Measurer {
+public final class Measurer {
 	private static final int NR_BITS = Integer.valueOf(System.getProperty("sun.arch.data.model"));
 	private static final int BYTE = 8;
 	private static final int WORD = NR_BITS / BYTE;

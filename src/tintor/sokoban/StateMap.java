@@ -1,18 +1,30 @@
 package tintor.sokoban;
 
+import tintor.common.Array;
+
 final class StateMap {
 	private final OpenAddressingIntArrayHashMap[] map;
 	private int size;
 
-	StateMap(int alive, int cells) {
+	StateMap(int alive, int cells, OpenAddressingIntArrayHashMap.Values values) {
 		int key_size = (alive + 31) / 32;
-		map = new OpenAddressingIntArrayHashMap[cells];
-		for (int i = 0; i < cells; i++)
-			map[i] = new OpenAddressingIntArrayHashMap(key_size);
+		map = Array.make(cells, i -> new OpenAddressingIntArrayHashMap(key_size, values));
 	}
 
 	int size() {
 		return size;
+	}
+
+	static interface StateKeyPredicate {
+		boolean test(int agent, int[] box);
+	}
+
+	void remove_if(StateKeyPredicate fn) {
+		for (int agent = 0; agent < map.length; agent++) {
+			OpenAddressingIntArrayHashMap m = map[agent];
+			final int a = agent;
+			m.remove_if(key -> fn.test(a, key));
+		}
 	}
 
 	void update(int a_total_dist, State b) {
@@ -27,7 +39,7 @@ final class StateMap {
 	}
 
 	boolean contains(StateKey s) {
-		return map[s.agent].get(s.box) != 0;
+		return map[s.agent].contains(s.box);
 	}
 
 	State get(StateKey s) {

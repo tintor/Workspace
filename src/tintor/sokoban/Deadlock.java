@@ -1,18 +1,22 @@
 package tintor.sokoban;
 
 import java.io.FileWriter;
-import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.Bits;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
 import tintor.common.Visitor;
+import tintor.sokoban.StateMap.StateKeyPredicate;
 
-class Deadlock {
-	static class Patterns {
+// TODO: new int[] + System.arraycopy() might be faster than clone() (or maybe even Arrays.copyOf(array, array.length))
+
+final class Deadlock {
+	final static class Patterns {
 		public long[] array_box = new long[0];
 
 		public int size;
@@ -23,6 +27,9 @@ class Deadlock {
 		}
 
 		public void add(int[] box, int num_boxes) {
+			if (matches(box, num_boxes))
+				return;
+
 			final int N = (box.length + 1) / 2;
 			if (array_box.length == size * N)
 				array_box = Arrays.copyOf(array_box, Math.max(N, array_box.length * 2));
@@ -48,7 +55,11 @@ class Deadlock {
 			return ((long) a) << 32;
 		}
 
-		public boolean matches(int agent, int[] box, int num_boxes) {
+		public boolean matches(int[] box, int num_boxes) {
+			return matches_internal(box, num_boxes) != -1;
+		}
+
+		public int matches_internal(int[] box, int num_boxes) {
 			final int N = (box.length + 1) / 2;
 
 			long box0 = intLow(box[0]);
@@ -57,8 +68,8 @@ class Deadlock {
 			if (N == 1) {
 				for (int i = 0; i < end[num_boxes]; i++)
 					if ((box0 | array_box[i]) == box0)
-						return true;
-				return false;
+						return i;
+				return -1;
 			}
 
 			long box1 = intLow(box[2]);
@@ -67,7 +78,8 @@ class Deadlock {
 			if (N == 2) {
 				for (int i = 0; i < end[num_boxes]; i++)
 					if ((box0 | array_box[i * 2]) == box0 && (box1 | array_box[i * 2 + 1]) == box1)
-						return true;
+						return i;
+				return -1;
 			}
 
 			long[] lbox = new long[N];
@@ -81,8 +93,8 @@ class Deadlock {
 			}
 			for (int i = 0; i < end[num_boxes]; i++)
 				if (matches_one(i, lbox))
-					return true;
-			return false;
+					return i;
+			return -1;
 		}
 
 		private boolean matches_one(int index, long[] box) {
@@ -93,8 +105,11 @@ class Deadlock {
 		}
 	}
 
+	ClosedSet closed;
+	OpenSet open;
+
 	private final Visitor visitor;
-	private final Patterns[][] pattern_index;
+	private final Patterns[] pattern_index;
 	int patterns;
 	int[] histogram;
 	private final Level level;
@@ -104,45 +119,117 @@ class Deadlock {
 	private final AutoTimer timerFrozen = new AutoTimer("deadlock.frozen");
 	private final AutoTimer timerMatch = new AutoTimer("deadlock.match");
 	private final AutoTimer timerAdd = new AutoTimer("deadlock.add");
+	private final AutoTimer timerMinimize = new AutoTimer("deadlock.minimize");
+	private final AutoTimer timerCleanup = new AutoTimer("deadlock.cleanup");
+	private final AutoTimer timerGoalzone = new AutoTimer("deadlock.goalzone");
+
 	private int deadlocks = 0;
 	private int non_deadlocks = 0;
 	private int trivial = 0;
+	private int goalzone_deadlocks = 0;
+	private int isvalidlevel_deadlocks = 0;
 
 	void report() {
-		System.out.printf("dead:%s live:%s rev:%s db:%s db2:%s memory:%s\n", Util.human(deadlocks),
-				Util.human(non_deadlocks), Util.human(trivial), Util.human(patterns),
-				Util.human(goal_zone_patterns.size()), Util.human(InstrumentationAgent.deepSizeOf(pattern_index)));
+		System.out.printf("dead:%s live:%s rev:%s goaldead:%s ivldead:%s db:%s db2:%s memory:%s\n",
+				Util.human(deadlocks), Util.human(non_deadlocks), Util.human(trivial), Util.human(goalzone_deadlocks),
+				Util.human(isvalidlevel_deadlocks), Util.human(patterns), Util.human(goal_zone_patterns.size()),
+				Util.human(InstrumentationAgent.deepSizeOf(pattern_index)));
 	}
 
 	Deadlock(Level level) {
 		this.level = level;
 		visitor = new Visitor(level.cells);
-		pattern_index = new Patterns[4][level.alive];
-		for (int d = 0; d < 4; d++)
-			for (int i = 0; i < level.alive; i++)
-				pattern_index[d][i] = new Patterns(level.num_boxes, level.alive);
+		pattern_index = Array.make(level.cells, i -> new Patterns(level.num_boxes, level.alive));
 		histogram = new int[level.num_boxes - 1];
-
-		try {
-			pattern_file = new FileWriter("patterns.txt", false);
-		} catch (IOException e) {
-			throw new Error(e);
-		}
+		pattern_file = Util.checkIOException(() -> new FileWriter("patterns.txt", false));
 	}
 
-	private boolean matchesPattern(int moved_box, int dir, int agent, int[] box, int num_boxes) {
-		try (AutoTimer t = timerMatch.open()) {
-			assert 0 <= agent && agent < level.cells;
-			assert 0 <= moved_box && moved_box < level.alive : moved_box + " vs " + level.alive;
-			return pattern_index[dir][moved_box].matches(agent, box, num_boxes);
+	private final ArrayDeque<StateKey> queue = new ArrayDeque<>();
+	private StateSet explored;
+
+	private boolean isGoalZoneDeadlock(StateKey s) {
+		// remove all boxes not on goals
+		int[] box = s.box.clone();
+		for (int b = 0; b < level.alive; b++)
+			if (Bits.test(box, b) && !level.goal(b))
+				Bits.clear(box, b);
+		if (Bits.count(box) == 0)
+			return false;
+
+		// move agent and try to push remaining boxes
+		// TODO assume at most 32 goals and represent boxes with a single int (+ agent position)
+		if (explored == null)
+			explored = new StateSet(level.alive, level.cells);
+		queue.clear();
+		explored.clear();
+		queue.addLast(new StateKey(s.agent, box));
+		while (!queue.isEmpty()) {
+			StateKey q = queue.removeFirst();
+			visitor.init(q.agent);
+			int reachableGoals = 0;
+			int boxesOnGoals = Bits.count(q.box);
+			// TODO configure visitor so that in case of a single goal room agent doesn't have to go outside all the time
+			while (!visitor.done()) {
+				int a = visitor.next();
+				if (level.goal(a)) {
+					reachableGoals += 1;
+					assert boxesOnGoals + reachableGoals <= level.num_boxes;
+					if (boxesOnGoals + reachableGoals == level.num_boxes)
+						return false;
+				}
+				for (int b : level.moves[a]) {
+					if (b >= level.alive || !Bits.test(q.box, b)) {
+						if (!visitor.visited(b))
+							visitor.add(b);
+						continue;
+					}
+					int c = level.move(b, level.delta[a][b]);
+					if (c == -1)
+						continue;
+					if (!level.goal(c)) {
+						// box is removed
+						if (--boxesOnGoals == 0)
+							return false;
+						Bits.clear(q.box, b);
+						visitor.add(b);
+						continue;
+					}
+					if (!Bits.test(q.box, c)) {
+						// push box to c
+						box = q.box.clone();
+						Bits.clear(box, b);
+						Bits.set(box, c);
+						StateKey e = new StateKey(b, box);
+						if (!explored.contains(e)) {
+							explored.insert(e);
+							queue.addLast(e);
+						}
+						continue;
+					}
+				}
+			}
 		}
+		goalzone_deadlocks += 1;
+		return true;
 	}
 
-	private boolean matchesPattern(int agent, int dir, int[] box, int num_boxes) {
-		int b = level.move(agent, dir);
-		if (0 <= b && b < box.length * 32 && Bits.test(box, b))
-			return matchesPattern(b, dir, agent, box, num_boxes);
+	private boolean looksLikeAPush(int agent, int[] box) {
+		for (int dir = 0; dir < 4; dir++) {
+			int b = level.move(agent, dir);
+			if (b == -1 || b >= level.alive || !Bits.test(box, b))
+				continue;
+			int s = level.rmove(agent, dir);
+			if (s != -1 && (s >= level.alive || !Bits.test(box, s)))
+				return true;
+		}
 		return false;
+	}
+
+	private boolean matchesPattern(int agent, int[] box, int num_boxes) {
+		try (AutoTimer t = timerMatch.open()) {
+			assert looksLikeAPush(agent, box);
+			return pattern_index[agent].matches(box, num_boxes);
+		}
 	}
 
 	static enum Result {
@@ -176,7 +263,7 @@ class Deadlock {
 
 					Bits.clear(box, b);
 					Bits.set(box, c);
-					boolean m = matchesPattern(c, dir, b, box, num_boxes);
+					boolean m = matchesPattern(b, box, num_boxes);
 					Bits.clear(box, c);
 					if (m) {
 						Bits.set(box, b);
@@ -211,23 +298,28 @@ class Deadlock {
 				if (p < level.alive && Bits.test(original_box, p))
 					return level.goal(p) ? LowLevel.BoxGoal : LowLevel.Box;
 				return level.goal(p) ? LowLevel.Goal : LowLevel.Space;
-			}))
+			})) {
+				isvalidlevel_deadlocks += 1;
 				return Result.GoalZoneDeadlock;
+			}
 
 			return Result.NotFrozen;
 		}
 	}
 
-	final AutoTimer timer_minimize = new AutoTimer("deadlock.minimize");
-
 	// Looks for boxes not on goal that can't be moved
 	// return true - means it is definitely a deadlock
 	// return false - not sure if it is a deadlock
 	private boolean checkInternal(State s, int num_boxes) {
-		if (level.is_solved(s.box))
+		// TODO do we really need this?
+		if (level.is_solved_fast(s.box))
 			return false;
-		if (matchesPattern(s.agent, s.dir, s.box, num_boxes) || matchesGoalZonePattern(s.agent, s.box))
+		if (matchesPattern(s.agent, s.box, num_boxes) || matchesGoalZonePattern(s.agent, s.box))
 			return true;
+		try (AutoTimer t = timerGoalzone.open()) {
+			if (isGoalZoneDeadlock(s))
+				return true;
+		}
 
 		int[] box = s.box.clone();
 		Result result = containsFrozenBoxes(s.agent, box, num_boxes);
@@ -266,7 +358,8 @@ class Deadlock {
 		num_boxes = Bits.count(box);
 		boolean[] agent = visitor.visited().clone();
 
-		try (AutoTimer t = timer_minimize.open()) {
+		// TODO there could be more than one minimal pattern from box
+		try (AutoTimer t = timerMinimize.open()) {
 			// try to removing boxes to generalize the pattern
 			for (int i = 0; i < level.alive; i++)
 				if (Bits.test(box, i) && !level.is_solved(box)) {
@@ -293,27 +386,31 @@ class Deadlock {
 			histogram[num_boxes - 2] += 1;
 			for (int b = 0; b < level.alive; b++)
 				if (Bits.test(box, b))
-					for (int a : level.moves[b])
+					for (int a = 0; a < level.cells; a++)
 						if (agent[a])
-							pattern_index[level.delta[a][b]][b].add(box, num_boxes);
+							pattern_index[a].add(box, num_boxes);
 			patterns += 1;
 		}
+
+		try (AutoTimer t = timerCleanup.open()) {
+			StateKeyPredicate predicate = (s_agent, s_box) -> matchesPattern(s_agent, s_box, level.num_boxes);
+			open.remove_if(predicate);
+			closed.remove_if(predicate);
+		}
 		return true;
+
 	}
 
 	private void addPatternToFile(boolean[] agent, int[] box) {
 		char[] buffer = level.low.render(p -> {
-			if (agent[p])
-				return '.';
 			if (p < box.length * 32 && Bits.test(box, p))
 				return '$';
-			return ' ';
+			if (agent[p])
+				return ' ';
+			return '.';
 		});
-		try {
-			pattern_file.write(buffer, 0, buffer.length);
-		} catch (IOException e) {
-			throw new Error(e);
-		}
+		Util.checkIOException(() -> pattern_file.write(buffer, 0, buffer.length));
+		Util.checkIOException(() -> pattern_file.flush());
 	}
 
 	static class GoalZonePattern {

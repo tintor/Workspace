@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class Regex {
+public final class Regex {
 	public static boolean matches(String text, String pattern) {
 		Pattern p = cache.get().get(pattern);
 		if (p == null) {

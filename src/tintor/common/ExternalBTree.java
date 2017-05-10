@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,20 +31,16 @@ import java.util.WeakHashMap;
 // key[n-1]: K
 // value[n-1]: V
 
-class BufferStorage {
+final class BufferStorage {
 	private final FileChannel fc;
 	private final int buffer_size;
 	private final Map<Integer, ByteBuffer> clean = new WeakHashMap<Integer, ByteBuffer>();
 
 	BufferStorage(int buffer_size) {
 		this.buffer_size = buffer_size;
-		try {
-			Path nodes = Files.createTempFile("BTree", null);
-			fc = FileChannel.open(nodes, StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE,
-					StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, StandardOpenOption.READ);
-		} catch (IOException e) {
-			throw new Error(e);
-		}
+		fc = Util.checkIOException(() -> FileChannel.open(Files.createTempFile("BTree", null),
+				StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE, StandardOpenOption.TRUNCATE_EXISTING,
+				StandardOpenOption.WRITE, StandardOpenOption.READ));
 	}
 
 	public int cleanCache() {
