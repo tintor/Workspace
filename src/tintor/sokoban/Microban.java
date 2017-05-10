@@ -53,7 +53,7 @@ public class Microban {
 							Log.raw("no solution! %s", timer.human());
 						} else {
 							solved += 1;
-							solver.extractPath(end);
+							//solver.extractPath(end);
 							Log.raw("solved in %d steps! %s", end.dist, timer.human());
 							totalDist += end.dist;
 						}
