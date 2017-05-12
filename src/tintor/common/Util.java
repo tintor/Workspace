@@ -18,6 +18,31 @@ public final class Util {
 				StandardOpenOption.READ));
 	}
 
+	public static void sleep(long millis) {
+		try {
+			Thread.sleep(millis);
+		} catch (InterruptedException e) {
+			throw new Error(e);
+		}
+	}
+
+	public static boolean try_sleep(long millis) {
+		try {
+			Thread.sleep(millis);
+			return true;
+		} catch (InterruptedException e) {
+			return false;
+		}
+	}
+
+	public static void join(Thread thread) {
+		try {
+			thread.join();
+		} catch (InterruptedException e) {
+			throw new Error(e);
+		}
+	}
+
 	public static void close(FileChannel file) {
 		try {
 			file.close();

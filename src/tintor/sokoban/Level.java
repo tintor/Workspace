@@ -410,9 +410,8 @@ final class Level {
 			low_clone.compute_walkable();
 			if (!low_clone.check_boxes_and_goals_silent())
 				return false;
-			return true;
-			//BitMatrix visited = new BitMatrix(low_clone.cells(), low_clone.cells()); // TODO this is huge, as cells is raw buffer size
-			//return low_clone.new AreAllGoalsReachable().run(visited);
+			BitMatrix visited = new BitMatrix(low_clone.cells(), low_clone.cells()); // TODO this is huge, as cells is raw buffer size
+			return low_clone.new AreAllGoalsReachable().run(visited);
 		}
 	}
 

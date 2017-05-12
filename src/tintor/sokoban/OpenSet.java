@@ -17,8 +17,8 @@ class OpenSet {
 	private static final AutoTimer timer_add = new AutoTimer("open.add");
 	private static final AutoTimer timer_remove_min = new AutoTimer("open.remove_min");
 
-	OpenSet(int alive, int cells) {
-		map = new StateMap(alive, cells);
+	OpenSet(int alive) {
+		map = new StateMap(alive);
 	}
 
 	void report() {

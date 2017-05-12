@@ -37,6 +37,13 @@ public final class MurmurHash3 {
 		return fmix(h ^ len);
 	}
 
+	public static int hash(int[] data, int seed) {
+		int h = seed;
+		for (int d : data)
+			h = step(h, d);
+		return fmix(h ^ (data.length * 4));
+	}
+
 	public static int hash(int[] data, int offset, int len, int seed) {
 		int h = seed;
 		for (int i = offset; i < offset + len; i++)

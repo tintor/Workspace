@@ -6,19 +6,48 @@ import org.junit.Test;
 public class NonOptimalSolverTest {
 	@Test
 	public void solve_test_1() {
-		solve("test:1", 550);
+		solve("test:1");
+	}
+
+	@Test
+	public void solve_original_1() {
+		solve("original:1");
 	}
 
 	@Test
 	public void solve_original_2() {
-		solve("original:2", 492);
+		solve("original:2");
 	}
 
-	private void solve(String filename, int expected) {
+	@Test
+	public void solve_original_3() {
+		solve("original:3");
+	}
+
+	@Test
+	public void solve_original_6() {
+		solve("original:6");
+	}
+
+	@Test
+	public void solve_original_7() {
+		solve("original:7");
+	}
+
+	@Test
+	public void solve_original_8() {
+		solve("original:8");
+	}
+
+	@Test
+	public void solve_original_17() {
+		solve("original:17");
+	}
+
+	private void solve(String filename) {
 		Level level = Level.load(filename);
 		AStarSolver solver = new AStarSolver(level, false);
 		State end = solver.solve();
 		Assert.assertTrue(end != null);
-		Assert.assertTrue(expected * 1.25 >= end.dist);
 	}
 }

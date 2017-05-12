@@ -6,9 +6,9 @@ final class StateMap {
 	private final OpenAddressingIntArrayHashMap[] map;
 	private int size;
 
-	StateMap(int alive, int cells) {
+	StateMap(int alive) {
 		int key_size = (alive + 31) / 32;
-		map = Array.make(cells, i -> new OpenAddressingIntArrayHashMap(key_size));
+		map = Array.make(alive, i -> new OpenAddressingIntArrayHashMap(key_size));
 	}
 
 	int size() {

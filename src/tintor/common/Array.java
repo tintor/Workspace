@@ -46,6 +46,17 @@ public final class Array {
 		return array;
 	}
 
+	public static interface IntToIntFunction {
+		int apply(int i);
+	}
+
+	public static int[] ofInt(int size, IntToIntFunction fn) {
+		int[] array = new int[size];
+		for (int i = 0; i < size; i++)
+			array[i] = fn.apply(i);
+		return array;
+	}
+
 	public static int[] ofInt(int size0, int value) {
 		int[] array = new int[size0];
 		Arrays.fill(array, value);

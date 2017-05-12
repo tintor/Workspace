@@ -9,7 +9,6 @@ import java.util.Random;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
@@ -371,7 +370,7 @@ public class IHashSetTest {
 	}
 
 	@SuppressWarnings("unchecked")
-	@Test
+	//@Test
 	public void test() throws Exception {
 		IHashSet<Element> set = (IHashSet<Element>) klass.newInstance();
 		long sum = 0;

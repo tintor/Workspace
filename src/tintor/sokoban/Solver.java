@@ -1,7 +1,6 @@
 package tintor.sokoban;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 
 import tintor.common.AutoTimer;
 import tintor.common.Log;
@@ -10,10 +9,15 @@ import tintor.common.Util;
 import tintor.common.Visitor;
 
 // Solved
-// 1:4, 6:8, 17
+// 1:3, 6:8, 17
 
 // Unsolved
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
+
+// TODO push macro:
+// - if box is pushed inside a tunnel with a box already inside (on goal) then keep pushing the box all the way through
+// TODO: separate Timer for partial deadlock.match inside frozenboxes from the global one
+// TODO: 95% of time is spend inside remove_if pattern matching
 
 // Performance:
 // TODO: at the start greedily find order to fill goal nodes using matching from Heuristic (and trigger goal macros during search)
@@ -82,6 +86,13 @@ import tintor.common.Visitor;
 // TODO: Look at the sokoban PhD for more ideas.
 
 class AStarSolver {
+	static class ClosedSizeLimitError extends Error {
+		private static final long serialVersionUID = 1L;
+	};
+
+	static final AutoTimer timer_solve = new AutoTimer("solve");
+	static final AutoTimer timer_moves = new AutoTimer("moves");
+
 	final Level level;
 	final boolean optimal;
 	final OpenSet open;
@@ -93,10 +104,16 @@ class AStarSolver {
 	int trace; // 0 to turn off any tracing
 	State[] valid;
 
+	private Visitor visitor;
+	private int[] moves;
+
+	private int cutoff = Integer.MAX_VALUE;
+	int cutoffs = 0;
+
 	AStarSolver(Level level, boolean optimal) {
 		this.level = level;
 		this.optimal = optimal;
-		open = new OpenSet(level.alive, level.cells);
+		open = new OpenSet(level.alive);
 		closed = new ClosedSet(level);
 		heuristic = new Heuristic(level, optimal);
 		deadlock = new Deadlock(level);
@@ -107,12 +124,6 @@ class AStarSolver {
 		deadlock.open = open;
 	}
 
-	static class ClosedSizeLimitError extends Error {
-		private static final long serialVersionUID = 1L;
-	};
-
-	static final AutoTimer timer_solve = new AutoTimer("solve");
-
 	State solve() {
 		int h = heuristic.evaluate(level.start);
 		if (h == Integer.MAX_VALUE)
@@ -122,7 +133,7 @@ class AStarSolver {
 			return level.start;
 
 		AutoTimer.reset();
-		long next_report = 30 * AutoTimer.Second;
+		long next_report = 20 * AutoTimer.Second;
 		explore(level.start);
 		State a = null;
 		while (true) {
@@ -143,7 +154,7 @@ class AStarSolver {
 				report();
 				AutoTimer.report();
 				level.print(a);
-				next_report += 30 * AutoTimer.Second;
+				next_report += 20 * AutoTimer.Second;
 			}
 		}
 		if (trace > 1)
@@ -152,48 +163,6 @@ class AStarSolver {
 			AutoTimer.report();
 		return a;
 	}
-
-	boolean solveable(State start) {
-		if (level.is_solved_fast(start.box))
-			return true;
-
-		final ArrayList<State> stack = new ArrayList<State>();
-		final StateSet explored = new StateSet(level.alive, level.cells);
-		stack.add(start);
-
-		while (stack.size() != 0) {
-			State a = stack.remove(stack.size() - 1);
-			explored.insert(a);
-			visitor.init(a.agent);
-			while (!visitor.done()) {
-				int agent = visitor.next();
-				for (int p : level.moves[agent]) {
-					if (!a.box(p)) {
-						if (visitor.visited(p))
-							continue;
-						visitor.add(p);
-						continue;
-					}
-					State b = a.push(p, level.delta[agent][p], level, false, 0, 0);
-					if (b == null || explored.contains(b))
-						continue;
-					if (level.is_solved_fast(b.box))
-						return true;
-					stack.add(b);
-				}
-			}
-			if (explored.size() % 1000000 == 0)
-				Log.info("%d", explored.size() / 1000000);
-		}
-		return false;
-	}
-
-	private Visitor visitor;
-	private int[] moves;
-
-	static final AutoTimer timer_moves = new AutoTimer("moves");
-	int cutoff = Integer.MAX_VALUE;
-	int cutoffs = 0;
 
 	void explore(State a) {
 		visitor.init(a.agent);
@@ -333,10 +302,9 @@ public class Solver {
 
 	static Timer timer = new Timer();
 
-	// solved original 1 2 3 4 * 6 7 8 ... 17
 	public static void main(String[] args) throws Exception {
 		//Level level = Level.load("microban2:115");
-		Level level = Level.load("original:23");
+		Level level = Level.load("original:17");
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
 				level.state_space());
 		level.print(level.start);

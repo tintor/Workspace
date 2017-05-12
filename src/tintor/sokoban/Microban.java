@@ -4,6 +4,7 @@ import java.util.ArrayList;
 
 import tintor.common.Log;
 import tintor.common.Timer;
+import tintor.common.Util;
 
 // [20, 23]: 105.5s for 68 levels (with AreAllGoalsReachable.run)
 // [20, 23]: 57.1s for 68 levels
@@ -38,7 +39,7 @@ public class Microban {
 
 		for (int i = 0; i < space.length; i++)
 			if (space[i] != null)
-				for (Level level : space[i])
+				for (Level level : space[i]) {
 					try {
 						Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.low.name, level.cells,
 								level.alive, level.num_boxes, level.state_space());
@@ -53,7 +54,7 @@ public class Microban {
 							Log.raw("no solution! %s", timer.human());
 						} else {
 							solved += 1;
-							//solver.extractPath(end);
+							solver.extractPath(end);
 							Log.raw("solved in %d steps! %s", end.dist, timer.human());
 							totalDist += end.dist;
 						}
@@ -66,6 +67,14 @@ public class Microban {
 						e.printStackTrace();
 						unsolved += 1;
 					}
+
+					System.gc();
+					Util.sleep(10);
+					System.gc();
+					Util.sleep(10);
+					System.gc();
+					Util.sleep(10);
+				}
 		Log.raw("solved %d, unsolved %d, DIST %d, CLOSED %d, OPEN %d", solved, unsolved, totalDist, totalClosed,
 				totalOpen);
 		Log.raw("snapshot [52.729 Nightly:58 I solved 390, unsolved 0, DIST 40830, CLOSED 20262253, OPEN 438244");
