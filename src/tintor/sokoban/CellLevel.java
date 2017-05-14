@@ -1,6 +1,7 @@
 package tintor.sokoban;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import tintor.common.Array;
@@ -90,6 +91,18 @@ final class CellLevel {
 	final CellLevelTransforms transforms;
 	final boolean has_goal_rooms;
 	final boolean has_goal_zone;
+
+	public static ArrayList<CellLevel> loadAll(String filename) {
+		int count = LevelLoader.numberOfLevels(filename);
+		ArrayList<CellLevel> levels = new ArrayList<CellLevel>();
+		for (int i = 1; i <= count; i++)
+			try {
+				String name = filename + ":" + i;
+				levels.add(new CellLevel(LevelLoader.load(name), name));
+			} catch (MoreThan256CellsError e) {
+			}
+		return levels;
+	}
 
 	CellLevel(char[] buffer, String name) {
 		int w = 0;
