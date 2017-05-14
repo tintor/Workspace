@@ -35,7 +35,7 @@ public final class OpenSet {
 						cleanup += q.garbage;
 						garbage -= q.garbage;
 						q.garbage = 0;
-						if (garbage <= s / 4 * 3)
+						if (garbage <= s - s / 32)
 							return;
 					}
 				}

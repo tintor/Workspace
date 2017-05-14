@@ -9,11 +9,13 @@ import tintor.common.Timer;
 // Unsolved
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
 
+// TODO remove dead cells that don't border with alive cell
 // TODO push macro:
 // - if box is pushed inside a tunnel with a box already inside (on goal) then keep pushing the box all the way through
 // TODO goal cut:
 // - if there are multiple pushes from a given State and some of them reduce the number of unreachable goal cells (by pushing into unreachable goal cell) then cut all other pushes
-// TODO: separate Timer for partial deadlock.match inside frozenboxes from the global one
+// TODO: separate Timer for partial deadlock.match inside frozen boxes from the global one
+// TODO: OpenSet: keep StateArray index in map to avoid garbage (and expensive cleanup)
 
 // Performance:
 // TODO: at the start greedily find order to fill goal nodes using matching from Heuristic (and trigger goal macros during search)
@@ -95,8 +97,7 @@ public class Solver {
 	}
 
 	public static void main(String[] args) throws Exception {
-		//Level level = Level.load("microban2:115");
-		Level level = Level.load("microban3:58");
+		Level level = Level.load(args[1]);
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells, level.alive,
 				level.num_boxes, level.state_space(), level.has_goal_rooms);
 		level.print(level.start);

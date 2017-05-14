@@ -5,9 +5,25 @@ import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.IntConsumer;
 import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 
 public final class Array {
 	private Array() {
+	}
+
+	public static <T> boolean all(T[] array, Predicate<T> fn) {
+		for (T e : array)
+			if (!fn.test(e))
+				return false;
+		return true;
+	}
+
+	public static <T> int count(T[] array, Predicate<T> fn) {
+		int count = 0;
+		for (T e : array)
+			if (fn.test(e))
+				count += 1;
+		return count;
 	}
 
 	public static int[] concat(int[] a, int[] b) {

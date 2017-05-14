@@ -1,82 +1,16 @@
 package tintor.sokoban;
 
-import java.util.ArrayList;
-import java.util.Scanner;
-
 import tintor.common.Array;
 import tintor.common.BipartiteMatching;
 import tintor.common.PairVisitor;
-import tintor.common.Regex;
 import tintor.common.Util;
 import tintor.common.Visitor;
 
 public final class LowLevel {
-	private static String preprocess(String line) {
-		if (line.startsWith("'") || line.startsWith(";") || line.trim().isEmpty() || Regex.matches(line, "^Level\\s+"))
-			return "";
-		return line;
-	}
-
-	static int numberOfLevels(String filename) {
-		int currentLevelNo = 0;
-		boolean inside = false;
-		Scanner sc = Util.scanner("data/sokoban/" + filename);
-		while (sc.hasNextLine()) {
-			String s = preprocess(sc.nextLine());
-			if (!inside && !s.isEmpty()) {
-				currentLevelNo += 1;
-				inside = true;
-			} else if (s.isEmpty())
-				inside = false;
-		}
-		return currentLevelNo;
-	}
-
-	static ArrayList<String> loadLevelLines(String filename) {
-		int desiredLevelNo = 1;
-		if (Regex.matches(filename, "^(.*):(\\d+)$")) {
-			filename = Regex.group(1);
-			desiredLevelNo = Integer.parseInt(Regex.group(2));
-		}
-
-		ArrayList<String> lines = new ArrayList<String>();
-		int currentLevelNo = 0;
-		boolean inside = false;
-		Scanner sc = Util.scanner("data/sokoban/" + filename);
-		while (sc.hasNextLine()) {
-			String s = preprocess(sc.nextLine());
-			if (!inside && !s.isEmpty()) {
-				currentLevelNo += 1;
-				inside = true;
-			} else if (s.isEmpty())
-				inside = false;
-
-			if (inside && currentLevelNo == desiredLevelNo)
-				lines.add(s);
-		}
-		return lines;
-	}
-
-	static LowLevel load(String filename) {
-		final ArrayList<String> lines = loadLevelLines(filename);
-
+	LowLevel(char[] buffer, String name) {
 		int w = 0;
-		for (String s : lines)
-			w = Math.max(w, s.length());
-
-		int cells = lines.size() * (w + 1);
-		char[] buffer = new char[cells];
-		for (int row = 0; row < lines.size(); row++) {
-			String s = lines.get(row);
-			for (int col = 0; col < w; col++)
-				buffer[row * (w + 1) + col] = col < s.length() ? s.charAt(col) : Space;
-			buffer[row * (w + 1) + w] = '\n';
-		}
-
-		return new LowLevel(w, buffer, filename);
-	}
-
-	private LowLevel(int w, char[] buffer, String name) {
+		while (buffer[w] != '\n')
+			w++;
 		this.name = name;
 		assert buffer.length % (w + 1) == 0;
 		this.buffer = buffer;
@@ -141,7 +75,7 @@ public final class LowLevel {
 		char[] copy = buffer.clone();
 		for (int i = 0; i < new_to_old.length; i++)
 			copy[new_to_old[i]] = ch.fn(i);
-		return new LowLevel(width - 1, copy, null);
+		return new LowLevel(copy, null);
 	}
 
 	void print(IndexToChar ch) {
@@ -363,15 +297,15 @@ public final class LowLevel {
 			}
 
 			loop: while (!visitor.done()) {
-				final int s_agent = visitor.first();
-				final int s_box = visitor.second();
+				final int agent = visitor.first();
+				final int box = visitor.second();
 
 				for (int dir = 0; dir < 4; dir++) {
-					final int ap = move(s_agent, dir);
+					final int ap = move(agent, dir);
 					if (ap == Level.Bad)
 						continue;
-					if (ap != s_box) {
-						visitor.try_add(ap, s_box);
+					if (ap != box) {
+						visitor.try_add(ap, box);
 						continue;
 					}
 					final int bp = move(ap, dir);

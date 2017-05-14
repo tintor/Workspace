@@ -33,12 +33,6 @@ final class Heuristic {
 				compute_distances_from_goal(g, w++, visitor);
 	}
 
-	static int dist(int s, int[][] distance) {
-		final int s_agent = (s >> 16) & 0xFFFF;
-		final int s_box = s & 0xFFFF;
-		return distance[s_agent][s_box];
-	}
-
 	void compute_distances_from_goal(int goal, int goal_ordinal, PairVisitor visitor) {
 		int[][] distance = Array.ofInt(level.cells, level.alive, Infinity);
 		visitor.init();
@@ -67,33 +61,25 @@ final class Heuristic {
 
 	public int evaluate(StateKey s) {
 		try (AutoTimer t = timer.open()) {
-			int h = evaluate_internal(s);
-			assert h >= 0;
-			if (h == Integer.MAX_VALUE) {
+			int bc = 0;
+			for (int b = 0; b < level.alive; b++)
+				if (s.box(b)) {
+					Array.copy(distance_box[b], 0, hungarian.costs[bc], 0, level.num_boxes);
+					boxes[bc++] = b;
+				}
+			assert bc == boxes.length;
+
+			int[] result = hungarian.execute();
+			Array.for_each(result, (i, e) -> result[i] = distance_box[boxes[e]][i]);
+			if (Array.contains(result, Infinity)) {
 				deadlocks += 1;
-				return h;
+				return Integer.MAX_VALUE;
 			}
 
-			if (!optimal)
-				h *= 3;
+			int h = Array.sum(result);
+			assert h >= 0;
 			non_deadlocks += 1;
-			return h;
+			return optimal ? h : h * 3;
 		}
-	}
-
-	private int evaluate_internal(StateKey s) {
-		int bc = 0;
-		for (int b = 0; b < level.alive; b++)
-			if (s.box(b)) {
-				System.arraycopy(distance_box[b], 0, hungarian.costs[bc], 0, level.num_boxes);
-				boxes[bc++] = b;
-			}
-		assert bc == boxes.length;
-
-		int[] result = hungarian.execute();
-		Array.for_each(result, (i, e) -> result[i] = distance_box[boxes[e]][i]);
-		if (Array.contains(result, Infinity))
-			return Integer.MAX_VALUE;
-		return Array.sum(result);
 	}
 }

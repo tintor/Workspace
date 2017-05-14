@@ -10,7 +10,6 @@ import tintor.common.Bits;
 import tintor.common.PairVisitor;
 import tintor.common.Util;
 import tintor.common.Visitor;
-import tintor.common.Zobrist;
 import tintor.sokoban.LowLevel.IndexToChar;
 
 public final class Level {
@@ -36,7 +35,7 @@ public final class Level {
 	}
 
 	public static ArrayList<Level> loadAll(String filename) {
-		int count = LowLevel.numberOfLevels(filename);
+		int count = LevelLoader.numberOfLevels(filename);
 		ArrayList<Level> levels = new ArrayList<Level>();
 		for (int i = 1; i <= count; i++)
 			try {
@@ -47,7 +46,7 @@ public final class Level {
 	}
 
 	public static Level load(String filename) {
-		LowLevel low = LowLevel.load(filename);
+		LowLevel low = new LowLevel(LevelLoader.load(filename), filename);
 
 		boolean[] walkable = low.compute_walkable();
 		low.add_walls(walkable);
@@ -70,7 +69,6 @@ public final class Level {
 		low.check_boxes_and_goals();
 
 		cells = Util.count(walkable);
-		Zobrist.ensure(128 + cells);
 		if (cells > 256)
 			throw new MoreThan256CellsError();
 		alive = Util.count(is_alive);
