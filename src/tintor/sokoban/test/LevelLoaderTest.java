@@ -9,7 +9,7 @@ import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 
 import tintor.common.ParallelParameterized;
-import tintor.sokoban.CellLevel;
+import tintor.sokoban.Level;
 
 // Makes sure all levels can load quickly
 @RunWith(ParallelParameterized.class)
@@ -42,8 +42,8 @@ public class LevelLoaderTest {
 	@Test(timeout = 800)
 	public void solve() {
 		try {
-			CellLevel.load(filename);
-		} catch (CellLevel.MoreThan256CellsError e) {
+			Level.load(filename);
+		} catch (Level.MoreThan256CellsError e) {
 		}
 	}
 }

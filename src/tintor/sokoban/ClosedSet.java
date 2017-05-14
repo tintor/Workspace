@@ -10,7 +10,7 @@ public final class ClosedSet {
 	static final AutoTimer timer_add = new AutoTimer("closed.add");
 	static final AutoTimer timer_contains = new AutoTimer("closed.contains");
 
-	ClosedSet(CellLevel level) {
+	ClosedSet(Level level) {
 		this.transforms = level.transforms;
 		map = new StateMap(level.alive, level.cells.length);
 	}

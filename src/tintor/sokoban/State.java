@@ -118,7 +118,7 @@ public final class State extends StateKey {
 		this.total_dist = dist + heuristic;
 	}
 
-	StateKey prev(CellLevel level) {
+	StateKey prev(Level level) {
 		assert symmetry == 0;
 		assert prev_agent < level.cells.length;
 		if (equals(level.start))
@@ -142,7 +142,7 @@ public final class State extends StateKey {
 		return new StateKey(prev_agent, nbox);
 	}
 
-	State push(Move m, CellLevel level, boolean optimal, int moves, int prev_agent) {
+	State push(Move m, Level level, boolean optimal, int moves, int prev_agent) {
 		Cell a = m.cell;
 		Dir dir = m.dir;
 		assert symmetry == 0;
@@ -176,7 +176,7 @@ public final class State extends StateKey {
 		return s;
 	}
 
-	private boolean more_goals_than_boxes_in_room(Cell a, Cell door, CellLevel level) {
+	private boolean more_goals_than_boxes_in_room(Cell a, Cell door, Level level) {
 		assert door.moves.length == 2 && door.bottleneck;
 		Visitor visitor = level.visitor;
 		visitor.init(a.id);
@@ -194,7 +194,7 @@ public final class State extends StateKey {
 		return result > 0;
 	}
 
-	private boolean can_force_push(Cell a, Cell b, Dir dir, boolean optimal, CellLevel level) {
+	private boolean can_force_push(Cell a, Cell b, Dir dir, boolean optimal, Level level) {
 		if (b.goal)
 			return b.moves.length == 2 && b.bottleneck && !box(b.move(dir))
 					&& more_goals_than_boxes_in_room(b.move(dir), b, level);

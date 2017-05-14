@@ -4,7 +4,7 @@ import org.junit.Test;
 
 import tintor.common.Array;
 import tintor.sokoban.Cell.Dir;
-import tintor.sokoban.CellLevel;
+import tintor.sokoban.Level;
 
 public class StateTest {
 	@Test
@@ -24,7 +24,7 @@ public class StateTest {
 
 	@Test
 	public void push_macro_box_on_goal_bottleneck_tunnel() {
-		assert Array.find(CellLevel.load("test:11").cells, c -> c.xy == 11).bottleneck;
+		assert Array.find(Level.load("test:11").cells, c -> c.xy == 11).bottleneck;
 		assertMove(Dir.Right, 3, "test:11");
 	}
 
@@ -33,7 +33,7 @@ public class StateTest {
 	}
 
 	void assertMove(Dir dir, int steps, String filename, Dir exitDir) {
-		CellLevel level = CellLevel.load(filename);
+		Level level = Level.load(filename);
 
 		/*State s = level.start.move(dir, level, false);
 		Assert.assertEquals(steps, s.dist());

@@ -5,7 +5,7 @@ public final class Cell {
 		Left, Up, Right, Down
 	}
 
-	final CellLevel level;
+	final Level level;
 	final Cell[] dir = new Cell[4];
 	Move[] moves;
 	public final int xy;
@@ -48,10 +48,10 @@ public final class Cell {
 		return dir[d.ordinal() ^ 2];
 	}
 
-	Cell(CellLevel level, int xy, char ch) {
+	Cell(Level level, int xy, char ch) {
 		this.level = level;
 		this.xy = xy;
-		goal = ch == CellLevel.Goal || ch == CellLevel.AgentGoal || ch == CellLevel.BoxGoal;
-		box = ch == CellLevel.Box || ch == CellLevel.BoxGoal;
+		goal = ch == Level.Goal || ch == Level.AgentGoal || ch == Level.BoxGoal;
+		box = ch == Level.Box || ch == Level.BoxGoal;
 	}
 }

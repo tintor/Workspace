@@ -14,7 +14,7 @@ public final class AStarSolver {
 	static final AutoTimer timer_solve = new AutoTimer("solve");
 	static final AutoTimer timer_moves = new AutoTimer("moves");
 
-	final CellLevel level;
+	final Level level;
 	final boolean optimal;
 	public final OpenSet open;
 	public final ClosedSet closed;
@@ -30,7 +30,7 @@ public final class AStarSolver {
 	private int cutoff = Integer.MAX_VALUE;
 	int cutoffs = 0;
 
-	public AStarSolver(CellLevel level, boolean optimal) {
+	public AStarSolver(Level level, boolean optimal) {
 		this.level = level;
 		this.optimal = optimal;
 		open = new OpenSet(level.alive, level.cells.length);

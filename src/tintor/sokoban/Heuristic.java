@@ -6,7 +6,7 @@ import tintor.common.Hungarian;
 
 final class Heuristic {
 	private final int Infinity = Integer.MAX_VALUE / 2; // limitation due to Hungarian
-	final CellLevel level;
+	final Level level;
 	final boolean optimal;
 	final Cell[] boxes;
 	final Hungarian hungarian;
@@ -14,7 +14,7 @@ final class Heuristic {
 	int deadlocks;
 	int non_deadlocks;
 
-	Heuristic(CellLevel level, boolean optimal) {
+	Heuristic(Level level, boolean optimal) {
 		this.level = level;
 		this.optimal = optimal;
 		int num_boxes = level.num_boxes;

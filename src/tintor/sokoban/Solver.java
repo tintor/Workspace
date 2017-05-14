@@ -77,7 +77,7 @@ import tintor.common.Timer;
 // TODO: Look at the sokoban PhD for more ideas.
 
 public class Solver {
-	static void printSolution(CellLevel level, State[] solution) {
+	static void printSolution(Level level, State[] solution) {
 		for (int i = 0; i < solution.length; i++) {
 			State s = solution[i];
 			State n = i == solution.length - 1 ? null : solution[i + 1];
@@ -97,7 +97,7 @@ public class Solver {
 	}
 
 	public static void main(String[] args) throws Exception {
-		CellLevel level = CellLevel.load(args[0]);
+		Level level = Level.load(args[0]);
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells, level.alive,
 				level.num_boxes, level.state_space(), level.has_goal_rooms);
 		level.print(level.start);

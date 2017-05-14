@@ -3,7 +3,7 @@ package tintor.sokoban.test;
 import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.sokoban.AStarSolver;
-import tintor.sokoban.CellLevel;
+import tintor.sokoban.Level;
 
 public class ScanAllLevels {
 	static final int MinStateSpace = 25;
@@ -17,7 +17,7 @@ public class ScanAllLevels {
 			String[] s = prefix.split("/");
 			String name = s[s.length - 1];
 			timer.start();
-			CellLevel level = CellLevel.load(prefix + i);
+			Level level = Level.load(prefix + i);
 			timer.stop();
 			cells += level.cells.length;
 			alive += level.alive;

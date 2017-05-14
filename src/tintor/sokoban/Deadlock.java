@@ -18,7 +18,7 @@ public final class Deadlock {
 
 	public final PatternIndex patternIndex;
 	private final Visitor visitor;
-	private final CellLevel level;
+	private final Level level;
 
 	// Used by isGoalZoneDeadlock
 	private final ArrayDeque<StateKey> queue = new ArrayDeque<>();
@@ -65,7 +65,7 @@ public final class Deadlock {
 		Util.flush(is_valid_level_deadlocks_file);
 	}
 
-	public Deadlock(CellLevel level) {
+	public Deadlock(Level level) {
 		this.level = level;
 		visitor = new Visitor(level.cells.length);
 		patternIndex = new PatternIndex(level);
@@ -202,12 +202,12 @@ public final class Deadlock {
 
 			if (!level.is_valid_level(p -> {
 				if (p.id == agent)
-					return p.goal ? CellLevel.AgentGoal : CellLevel.Agent;
+					return p.goal ? Level.AgentGoal : Level.Agent;
 				if (p.alive && Bits.test(box, p.id))
-					return CellLevel.Wall;
+					return Level.Wall;
 				if (p.alive && Bits.test(original_box, p.id))
-					return p.goal ? CellLevel.BoxGoal : CellLevel.Box;
-				return p.goal ? CellLevel.Goal : CellLevel.Space;
+					return p.goal ? Level.BoxGoal : Level.Box;
+				return p.goal ? Level.Goal : Level.Space;
 			})) {
 				isvalidlevel_deadlocks += 1;
 				Util.write(is_valid_level_deadlocks_file, level.render(new StateKey(agent, original_box)));
@@ -303,7 +303,7 @@ public final class Deadlock {
 		long boxes_frozen_on_goals;
 		long unreachable_goals;
 
-		boolean match(int agent, int[] box, CellLevel level) {
+		boolean match(int agent, int[] box, Level level) {
 			/*assert box1 == 0;
 			long test_boxes_on_goals = level.goal0 & box0;
 			if (this.agent[agent] && test_boxes_on_goals == boxes_frozen_on_goals) {

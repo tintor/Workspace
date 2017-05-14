@@ -12,8 +12,8 @@ import org.junit.runners.Parameterized.Parameters;
 import tintor.common.AutoTimer;
 import tintor.common.ParallelParameterized;
 import tintor.sokoban.AStarSolver;
-import tintor.sokoban.CellLevel;
-import tintor.sokoban.CellLevel.MoreThan256CellsError;
+import tintor.sokoban.Level;
+import tintor.sokoban.Level.MoreThan256CellsError;
 import tintor.sokoban.State;
 
 @RunWith(ParallelParameterized.class)
@@ -44,7 +44,7 @@ public class SolverTest {
 	public void solve() {
 		AutoTimer.enabled = false;
 		try {
-			CellLevel level = CellLevel.load(filename);
+			Level level = Level.load(filename);
 			AStarSolver solver = new AStarSolver(level, false);
 			solver.closed_size_limit = 2500;
 			try {

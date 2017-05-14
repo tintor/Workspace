@@ -6,7 +6,7 @@ import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
 import tintor.sokoban.AStarSolver;
-import tintor.sokoban.CellLevel;
+import tintor.sokoban.Level;
 import tintor.sokoban.State;
 
 // Run all Microban levels up to a certain complexity, one at a time
@@ -16,14 +16,14 @@ public class Microban {
 
 	public static void main(String[] args) {
 		long totalDist = 0, totalClosed = 0, totalOpen = 0;
-		ArrayList<CellLevel> levels = CellLevel.loadAll("microban1");
-		levels.addAll(CellLevel.loadAll("microban2"));
-		levels.addAll(CellLevel.loadAll("microban3"));
-		levels.addAll(CellLevel.loadAll("microban4"));
-		levels.addAll(CellLevel.loadAll("microban5"));
+		ArrayList<Level> levels = Level.loadAll("microban1");
+		levels.addAll(Level.loadAll("microban2"));
+		levels.addAll(Level.loadAll("microban3"));
+		levels.addAll(Level.loadAll("microban4"));
+		levels.addAll(Level.loadAll("microban5"));
 		@SuppressWarnings("unchecked")
-		ArrayList<CellLevel>[] space = new ArrayList[110];
-		for (CellLevel level : levels) {
+		ArrayList<Level>[] space = new ArrayList[110];
+		for (Level level : levels) {
 			int s = level.state_space();
 			if (space[s] == null)
 				space[s] = new ArrayList<>();
@@ -32,7 +32,7 @@ public class Microban {
 
 		for (int i = 0; i < space.length; i++)
 			if (space[i] != null)
-				for (CellLevel level : space[i]) {
+				for (Level level : space[i]) {
 					try {
 						if (level.state_space() >= 30)
 							break;

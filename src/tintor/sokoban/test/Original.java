@@ -6,7 +6,7 @@ import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
 import tintor.sokoban.AStarSolver;
-import tintor.sokoban.CellLevel;
+import tintor.sokoban.Level;
 import tintor.sokoban.State;
 
 // Run all Original levels up to a certain complexity, one at a time
@@ -16,19 +16,19 @@ public class Original {
 
 	public static void main(String[] args) {
 		long totalDist = 0, totalClosed = 0, totalOpen = 0;
-		ArrayList<CellLevel> levels = CellLevel.loadAll("original");
+		ArrayList<Level> levels = Level.loadAll("original");
 		@SuppressWarnings("unchecked")
-		ArrayList<CellLevel>[] space = new ArrayList[110];
-		for (CellLevel level : levels) {
+		ArrayList<Level>[] space = new ArrayList[110];
+		for (Level level : levels) {
 			int s = level.state_space();
 			if (space[s] == null)
-				space[s] = new ArrayList<CellLevel>();
+				space[s] = new ArrayList<Level>();
 			space[s].add(level);
 		}
 
 		//for (int i = 0; i < space.length; i++)
 		//if (space[i] != null)
-		for (CellLevel level : levels) {
+		for (Level level : levels) {
 			try {
 				Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.name, level.cells.length, level.alive,
 						level.num_boxes, level.state_space());

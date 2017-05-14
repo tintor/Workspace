@@ -4,7 +4,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import tintor.sokoban.AStarSolver;
-import tintor.sokoban.CellLevel;
+import tintor.sokoban.Level;
 import tintor.sokoban.State;
 
 public class NonOptimalSolverTest {
@@ -49,7 +49,7 @@ public class NonOptimalSolverTest {
 	}
 
 	private void solve(String filename) {
-		CellLevel level = CellLevel.load(filename);
+		Level level = Level.load(filename);
 		AStarSolver solver = new AStarSolver(level, false);
 		State end = solver.solve();
 		Assert.assertTrue(end != null);

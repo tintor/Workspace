@@ -28,7 +28,7 @@ final class Move {
 	}
 }
 
-public final class CellLevel {
+public final class Level {
 	final static char Box = '$';
 	final static char Wall = '#';
 	final static char BoxGoal = '*';
@@ -53,23 +53,23 @@ public final class CellLevel {
 		private static final long serialVersionUID = 1L;
 	}
 
-	public static ArrayList<CellLevel> loadAll(String filename) {
+	public static ArrayList<Level> loadAll(String filename) {
 		int count = LevelLoader.numberOfLevels(filename);
-		ArrayList<CellLevel> levels = new ArrayList<CellLevel>();
+		ArrayList<Level> levels = new ArrayList<Level>();
 		for (int i = 1; i <= count; i++)
 			try {
 				String name = filename + ":" + i;
-				levels.add(new CellLevel(LevelLoader.load(name), name));
+				levels.add(new Level(LevelLoader.load(name), name));
 			} catch (MoreThan256CellsError e) {
 			}
 		return levels;
 	}
 
-	public static CellLevel load(String filename) {
-		return new CellLevel(LevelLoader.load(filename), filename);
+	public static Level load(String filename) {
+		return new Level(LevelLoader.load(filename), filename);
 	}
 
-	CellLevel(char[] buffer, String name) {
+	Level(char[] buffer, String name) {
 		int w = 0;
 		while (buffer[w] != '\n')
 			w++;
@@ -545,7 +545,7 @@ public final class CellLevel {
 
 	public boolean is_valid_level(CellToChar op) {
 		try (AutoTimer t = timer_isvalidlevel.open()) {
-			CellLevel clone = new CellLevel(render(op), null);
+			Level clone = new Level(render(op), null);
 			if (Array.count(clone.cells, c -> c.box) != Array.count(clone.cells, c -> c.goal))
 				return false;
 

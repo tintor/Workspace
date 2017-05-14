@@ -7,7 +7,7 @@ import tintor.common.Util;
 import tintor.sokoban.Cell.Dir;
 
 final class CellLevelTransforms {
-	CellLevelTransforms(CellLevel level, int width, int height, Cell[] grid) {
+	CellLevelTransforms(Level level, int width, int height, Cell[] grid) {
 		this.level = level;
 		this.width = width;
 		this.height = height;
@@ -128,7 +128,7 @@ final class CellLevelTransforms {
 		return true;
 	}
 
-	private final CellLevel level;
+	private final Level level;
 	private final int width, height;
 
 	// For all the level symmetries

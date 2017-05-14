@@ -3,7 +3,7 @@ package tintor.sokoban;
 import java.util.ArrayDeque;
 
 public final class IterativeDeepeningAStar {
-	State solve(CellLevel level) {
+	State solve(Level level) {
 		Heuristic heuristic = new Heuristic(level, false);
 		if (level.is_solved_fast(level.start.box))
 			return level.start;

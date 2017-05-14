@@ -111,7 +111,7 @@ public final class PatternIndex {
 	private final PatternList[] pattern_index_near;
 	private final PatternList[] pattern_index_new;
 	private final FileWriter pattern_file;
-	private final CellLevel level;
+	private final Level level;
 	private final int box_length;
 	int[] histogram;
 	private final OpenAddressingIntArrayHashSet patterns;
@@ -119,7 +119,7 @@ public final class PatternIndex {
 	private static final AutoTimer timer_add = new AutoTimer("pattern.add");
 	private static final AutoTimer timer_match = new AutoTimer("pattern.match");
 
-	public PatternIndex(CellLevel level) {
+	public PatternIndex(Level level) {
 		this.level = level;
 		box_length = (level.alive + 31) / 32;
 		pattern_index = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive));

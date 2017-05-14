@@ -5,7 +5,7 @@ import tintor.common.Visitor;
 import tintor.sokoban.Cell.Dir;
 
 class LevelUtil {
-	static boolean is_reversible_push(State s, CellLevel level) {
+	static boolean is_reversible_push(State s, Level level) {
 		Cell agent = level.cells[s.agent];
 		Dir dir = Dir.values()[s.dir];
 		Cell b = agent.move(dir);
