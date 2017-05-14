@@ -2,36 +2,38 @@ package tintor.sokoban.test;
 
 import org.junit.Test;
 
-import tintor.sokoban.Level;
+import tintor.common.Array;
+import tintor.sokoban.Cell.Dir;
+import tintor.sokoban.CellLevel;
 
 public class StateTest {
 	@Test
 	public void move_macro() {
-		assertMove(Level.Down, 8, "test:8", Level.Up);
+		assertMove(Dir.Down, 8, "test:8", Dir.Up);
 	}
 
 	@Test
 	public void push_macro_simple() {
-		assertMove(Level.Right, 5, "test:9");
+		assertMove(Dir.Right, 5, "test:9");
 	}
 
 	@Test
 	public void push_macro_box_on_degree3_bottleneck() {
-		assertMove(Level.Up, 4, "test:10");
+		assertMove(Dir.Up, 4, "test:10");
 	}
 
 	@Test
 	public void push_macro_box_on_goal_bottleneck_tunnel() {
-		assert Level.load("test:11").bottleneck[1];
-		assertMove(Level.Right, 3, "test:11");
+		assert Array.find(CellLevel.load("test:11").cells, c -> c.xy == 11).bottleneck;
+		assertMove(Dir.Right, 3, "test:11");
 	}
 
-	void assertMove(int dir, int steps, String filename) {
+	void assertMove(Dir dir, int steps, String filename) {
 		assertMove(dir, steps, filename, dir);
 	}
 
-	void assertMove(int dir, int steps, String filename, int exitDir) {
-		Level level = Level.load(filename);
+	void assertMove(Dir dir, int steps, String filename, Dir exitDir) {
+		CellLevel level = CellLevel.load(filename);
 
 		/*State s = level.start.move(dir, level, false);
 		Assert.assertEquals(steps, s.dist());

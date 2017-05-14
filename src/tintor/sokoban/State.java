@@ -4,13 +4,13 @@ import java.util.Arrays;
 
 import tintor.common.Bits;
 import tintor.common.Visitor;
+import tintor.sokoban.Cell.Dir;
 
 class StateKey {
 	final int agent;
 	final int[] box;
 
 	public StateKey(int agent, int[] box) {
-		assert 0 <= agent : agent;
 		this.agent = agent;
 		assert box != null && box.length > 0;
 		this.box = box;
@@ -21,6 +21,10 @@ class StateKey {
 	public final boolean box(int i) {
 		assert i >= 0;
 		return i < box.length * 32 && Bits.test(box, i);
+	}
+
+	public final boolean box(Cell a) {
+		return a.id < box.length * 32 && Bits.test(box, a.id);
 	}
 
 	public final boolean equals(StateKey s) {
@@ -56,7 +60,6 @@ public final class State extends StateKey {
 		assert pushes >= 0;
 		this.pushes = pushes;
 
-		assert 0 <= prev_agent;
 		this.prev_agent = prev_agent;
 	}
 
@@ -115,107 +118,99 @@ public final class State extends StateKey {
 		this.total_dist = dist + heuristic;
 	}
 
-	StateKey prev(Level level) {
+	StateKey prev(CellLevel level) {
 		assert symmetry == 0;
-		assert prev_agent < level.cells;
+		assert prev_agent < level.cells.length;
 		if (equals(level.start))
 			return null;
-		assert dist > level.low.dist;
-		int a = level.rmove(agent, dir);
-		assert 0 <= a && a < level.cells;
-		assert 0 <= dir && dir < 4;
-		int b = agent;
-		assert 0 <= b && b < level.alive;
+		Cell b = level.cells[agent];
+		assert b.alive;
 		assert !box(b);
 		for (int i = 0; i < pushes - 1; i++) {
-			b = level.rmove(b, dir);
-			assert 0 <= b && b < level.alive;
+			b = b.rmove(Dir.values()[dir]);
+			assert b.alive;
 			assert !box(b);
 		}
 
-		int c = level.move(agent, dir);
-		assert 0 <= c && c < level.alive;
+		Cell c = level.cells[agent].dir[dir];
+		assert c.alive;
 		assert box(c);
 
 		int[] nbox = box.clone();
-		Bits.clear(nbox, c);
-		Bits.set(nbox, b);
+		Bits.clear(nbox, c.id);
+		Bits.set(nbox, b.id);
 		return new StateKey(prev_agent, nbox);
 	}
 
-	State push(int a, int dir, Level level, boolean optimal, int moves, int prev_agent) {
+	State push(Move m, CellLevel level, boolean optimal, int moves, int prev_agent) {
+		Cell a = m.cell;
+		Dir dir = m.dir;
 		assert symmetry == 0;
-		assert 0 <= prev_agent && prev_agent < level.cells;
-		assert !box(prev_agent);
-		assert box(a);
-		assert !box(level.rmove(a, dir));
+		assert box(a.id);
+		assert !box(a.rmove(dir).id);
 
-		int b = level.move(a, dir);
-		if (b == -1 || b >= level.alive || box(b))
+		Cell b = a.move(dir);
+		if (b == null || !b.alive || box(b))
 			return null;
 
 		int[] nbox = box.clone();
-		Bits.clear(nbox, a);
-		Bits.set(nbox, b);
-		int pushes = 1;
+		Bits.clear(nbox, a.id);
+		Bits.set(nbox, b.id);
+		int pushes = m.dist;
 
 		// keep pushing box until the end of tunnel
-		while (pushes < 15 && can_force_push(a, b, level, optimal)) {
+		while (pushes < 15 && can_force_push(a, b, dir, optimal, level)) {
 			// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
-			int c = level.move(b, dir);
-			if (c == -1 || c >= level.alive || box(c))
+			Cell c = b.move(dir);
+			if (c == null || !c.alive || box(c))
 				return null;
 			a = b;
 			b = c;
-			assert dir == level.delta[a][b];
-			Bits.clear(nbox, a);
-			Bits.set(nbox, b);
-			pushes += 1;
+			Bits.clear(nbox, a.id);
+			Bits.set(nbox, b.id);
+			pushes += b.dist(dir);
 		}
 
-		State s = new State(a, nbox, 0, dist + moves + pushes, dir, pushes, prev_agent);
+		State s = new State(a.id, nbox, 0, dist + moves + pushes, dir.ordinal(), pushes, prev_agent);
 		assert s.prev(level).equals(this);
 		return s;
 	}
 
-	private boolean more_goals_than_boxes_in_room(int a, int door, Level level) {
-		assert level.degree(door) == 2 && level.bottleneck[door];
+	private boolean more_goals_than_boxes_in_room(Cell a, Cell door, CellLevel level) {
+		assert door.moves.length == 2 && door.bottleneck;
 		Visitor visitor = level.visitor;
-		visitor.init(a);
-		visitor.visited()[door] = true;
+		visitor.init(a.id);
+		visitor.visited()[door.id] = true;
 		int result = 0;
 		while (!visitor.done()) {
-			int b = visitor.next();
-			if (level.goal(b))
+			Cell b = level.cells[visitor.next()];
+			if (b.goal)
 				result += 1;
 			if (box(b))
 				result -= 1;
-			for (int c : level.moves[b])
-				if (!visitor.visited(c))
-					visitor.add(c);
+			for (Move c : b.moves)
+				visitor.try_add(c.cell.id);
 		}
 		return result > 0;
 	}
 
-	private boolean can_force_push(int a, int b, Level level, boolean optimal) {
-		int dir = level.delta[a][b];
-
-		if (level.goal(b))
-			return level.degree(b) == 2 && level.bottleneck[b] && !box(level.move(b, dir))
-					&& more_goals_than_boxes_in_room(level.move(b, dir), b, level);
+	private boolean can_force_push(Cell a, Cell b, Dir dir, boolean optimal, CellLevel level) {
+		if (b.goal)
+			return b.moves.length == 2 && b.bottleneck && !box(b.move(dir))
+					&& more_goals_than_boxes_in_room(b.move(dir), b, level);
 
 		// push through non-bottleneck tunnel
-		if (level.degree(a) == 2 && level.degree(b) == 2)
+		if (a.moves.length == 2 && b.moves.length == 2)
 			return true;
 
 		// push through bottleneck tunnel (until agent can reach the other side)
-		if (level.degree(a) == 2 && level.bottleneck[a] && level.bottleneck[b])
+		if (a.moves.length == 2 && a.bottleneck && b.bottleneck)
 			return true;
 
-		if (!optimal && level.bottleneck[b] && level.degree(b) == 3 && level.move(b, dir) != Level.Bad)
+		if (!optimal && b.bottleneck && b.moves.length == 3 && b.move(dir) != null)
 			return true;
 
-		if (!optimal && level.bottleneck[b] && level.degree(b) == 2)
+		if (!optimal && b.bottleneck && b.moves.length == 2)
 			return true;
 
 		return false;

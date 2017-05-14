@@ -77,11 +77,11 @@ import tintor.common.Timer;
 // TODO: Look at the sokoban PhD for more ideas.
 
 public class Solver {
-	static void printSolution(Level level, State[] solution) {
+	static void printSolution(CellLevel level, State[] solution) {
 		for (int i = 0; i < solution.length; i++) {
 			State s = solution[i];
 			State n = i == solution.length - 1 ? null : solution[i + 1];
-			if (i == solution.length - 1 || level.move(s.agent, s.dir) != n.agent || s.dir != n.dir) {
+			if (i == solution.length - 1 || level.cells[s.agent].dir[s.dir].id != n.agent || s.dir != n.dir) {
 				System.out.printf("dist:%s heur:%s\n", s.dist, s.total_dist - s.dist);
 				level.print(s);
 			}
@@ -97,16 +97,16 @@ public class Solver {
 	}
 
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load(args[0]);
+		CellLevel level = CellLevel.load(args[0]);
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells, level.alive,
 				level.num_boxes, level.state_space(), level.has_goal_rooms);
 		level.print(level.start);
 		Log.raw("alive");
-		level.low.print(p -> p < level.alive ? '.' : ' ');
+		level.print(p -> p.alive ? '.' : ' ');
 		Log.raw("tunnels");
-		level.low.print(p -> level.tunnel(p) ? '.' : ' ');
+		level.print(p -> p.moves.length == 2 ? '.' : ' ');
 		Log.raw("rooms");
-		level.low.print(p -> level.room[p] == -1 ? 'x' : hex(level.room[p]));
+		level.print(p -> p.room == -1 ? 'x' : hex(p.room));
 		AStarSolver solver = new AStarSolver(level, false);
 		solver.trace = 2;
 

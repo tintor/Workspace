@@ -176,6 +176,13 @@ public final class Util {
 		return true;
 	}
 
+	public static boolean all(int start, int end, IntPredicate fn) {
+		for (int i = start; i < end; i++)
+			if (!fn.test(i))
+				return false;
+		return true;
+	}
+
 	public static boolean any(int range, IntPredicate fn) {
 		for (int i = 0; i < range; i++)
 			if (fn.test(i))

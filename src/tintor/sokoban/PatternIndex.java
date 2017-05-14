@@ -7,6 +7,7 @@ import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.Bits;
 import tintor.common.Util;
+import tintor.sokoban.Cell.Dir;
 
 final class PatternList {
 	public long[] array_box = Array.EmptyLongArray;
@@ -110,7 +111,7 @@ public final class PatternIndex {
 	private final PatternList[] pattern_index_near;
 	private final PatternList[] pattern_index_new;
 	private final FileWriter pattern_file;
-	private final Level level;
+	private final CellLevel level;
 	private final int box_length;
 	int[] histogram;
 	private final OpenAddressingIntArrayHashSet patterns;
@@ -118,15 +119,15 @@ public final class PatternIndex {
 	private static final AutoTimer timer_add = new AutoTimer("pattern.add");
 	private static final AutoTimer timer_match = new AutoTimer("pattern.match");
 
-	public PatternIndex(Level level) {
+	public PatternIndex(CellLevel level) {
 		this.level = level;
 		box_length = (level.alive + 31) / 32;
-		pattern_index = Array.make(level.cells, i -> new PatternList(level.num_boxes, level.alive));
-		pattern_index_near = Array.make(level.cells, i -> new PatternList(level.num_boxes, level.alive));
-		pattern_index_new = Array.make(level.cells, i -> new PatternList(level.num_boxes, level.alive));
+		pattern_index = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive));
+		pattern_index_near = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive));
+		pattern_index_new = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive));
 		histogram = new int[level.num_boxes - 1];
 		pattern_file = Util.openWriter("patterns.txt");
-		patterns = new OpenAddressingIntArrayHashSet((level.cells + 31) / 32 + box_length);
+		patterns = new OpenAddressingIntArrayHashSet((level.cells.length + 31) / 32 + box_length);
 	}
 
 	public void load(String file) {
@@ -149,10 +150,10 @@ public final class PatternIndex {
 			histogram[num_boxes - 2] += 1;
 			for (int b = 0; b < level.alive; b++)
 				if (Bits.test(box, b))
-					for (int a : level.moves[b])
-						if (agent[a])
-							pattern_index_near[a].add(box, num_boxes);
-			for (int a = 0; a < level.cells; a++)
+					for (Move a : level.cells[b].moves)
+						if (agent[a.cell.id])
+							pattern_index_near[a.cell.id].add(box, num_boxes);
+			for (int a = 0; a < level.cells.length; a++)
 				if (agent[a]) {
 					pattern_index[a].add(box, num_boxes);
 					pattern_index_new[a].add(box, num_boxes);
@@ -161,25 +162,24 @@ public final class PatternIndex {
 	}
 
 	private void addToFile(boolean[] agent, int[] box) {
-		char[] buffer = level.low.render(p -> {
-			if (p < box.length * 32 && Bits.test(box, p))
+		Util.write(pattern_file, level.render(p -> {
+			if (p.id < box.length * 32 && Bits.test(box, p.id))
 				return '$';
-			if (agent[p])
+			if (agent[p.id])
 				return ' ';
 			return '.';
-		});
-		Util.write(pattern_file, buffer);
+		}));
 		Util.flush(pattern_file);
 	}
 
-	private boolean looksLikeAPush(int agent, int[] box, int offset) {
-		for (int dir = 0; dir < 4; dir++) {
+	private boolean looksLikeAPush(Cell agent, int[] box, int offset) {
+		for (Dir dir : Dir.values()) {
 			// if B is box
-			int b = level.move(agent, dir);
-			if (b != -1 && b < level.alive && Bits.test(box, offset, box_length, b)) {
+			Cell b = agent.move(dir);
+			if (b != null && b.alive && Bits.test(box, offset, box_length, b.id)) {
 				// and if S (opposite from B) is empty
-				int s = level.rmove(agent, dir);
-				if (s != -1 && (s >= level.alive || !Bits.test(box, offset, box_length, s)))
+				Cell s = agent.rmove(dir);
+				if (s != null && (!s.alive || !Bits.test(box, offset, box_length, s.id)))
 					return true;
 			}
 		}
@@ -188,14 +188,14 @@ public final class PatternIndex {
 
 	public boolean matches(int agent, int[] box, int offset, int num_boxes, boolean incremental) {
 		try (AutoTimer t = timer_match.open()) {
-			assert looksLikeAPush(agent, box, offset);
+			assert looksLikeAPush(level.cells[agent], box, offset);
 			return (incremental ? pattern_index_near : pattern_index)[agent].matches(box, offset, num_boxes);
 		}
 	}
 
 	public boolean matchesNew(int agent, int[] box, int offset, int num_boxes) {
 		try (AutoTimer t = timer_match.open()) {
-			assert looksLikeAPush(agent, box, offset);
+			assert looksLikeAPush(level.cells[agent], box, offset);
 			return pattern_index_new[agent].matches(box, offset, num_boxes);
 		}
 	}

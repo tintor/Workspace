@@ -11,6 +11,13 @@ public final class Array {
 	private Array() {
 	}
 
+	public static <T> T find(T[] array, Predicate<T> fn) {
+		for (T e : array)
+			if (fn.test(e))
+				return e;
+		return null;
+	}
+
 	public static <T> boolean all(T[] array, Predicate<T> fn) {
 		for (T e : array)
 			if (!fn.test(e))

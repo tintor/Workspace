@@ -18,7 +18,7 @@ public final class Deadlock {
 
 	public final PatternIndex patternIndex;
 	private final Visitor visitor;
-	private final Level level;
+	private final CellLevel level;
 
 	// Used by isGoalZoneDeadlock
 	private final ArrayDeque<StateKey> queue = new ArrayDeque<>();
@@ -65,9 +65,9 @@ public final class Deadlock {
 		Util.flush(is_valid_level_deadlocks_file);
 	}
 
-	public Deadlock(Level level) {
+	public Deadlock(CellLevel level) {
 		this.level = level;
-		visitor = new Visitor(level.cells);
+		visitor = new Visitor(level.cells.length);
 		patternIndex = new PatternIndex(level);
 	}
 
@@ -78,7 +78,7 @@ public final class Deadlock {
 		// remove all boxes not on goals
 		int[] box = s.box.clone();
 		for (int b = 0; b < level.alive; b++)
-			if (Bits.test(box, b) && !level.goal(b))
+			if (Bits.test(box, b) && !level.cells[b].goal)
 				Bits.clear(box, b);
 		if (Bits.count(box) == 0)
 			return false;
@@ -86,7 +86,7 @@ public final class Deadlock {
 		// move agent and try to push remaining boxes
 		// TODO assume at most 32 goals and represent boxes with a single int (+ agent position)
 		if (explored == null)
-			explored = new StateSet(level.alive, level.cells);
+			explored = new StateSet(level.alive, level.cells.length);
 		queue.clear();
 		explored.clear();
 		queue.addLast(new StateKey(s.agent, box));
@@ -98,39 +98,39 @@ public final class Deadlock {
 			// TODO configure visitor so that in case of a single goal room agent doesn't have to go outside all the time
 			// TODO in case of multiple goal rooms do it for each room separately
 			while (!visitor.done()) {
-				int a = visitor.next();
-				if (level.goal(a)) {
+				Cell a = level.cells[visitor.next()];
+				if (a.goal) {
 					reachableGoals += 1;
 					assert boxesOnGoals + reachableGoals <= level.num_boxes;
 					if (boxesOnGoals + reachableGoals == level.num_boxes)
 						return false;
 				}
-				for (int b : level.moves[a]) {
-					if (b >= level.alive || !Bits.test(q.box, b)) {
-						if (!visitor.visited(b))
-							visitor.add(b);
+				for (Move e : a.moves) {
+					Cell b = e.cell;
+					if (!b.alive || !Bits.test(q.box, b.id)) {
+						visitor.try_add(b.id);
 						continue;
 					}
-					int c = level.move(b, level.delta[a][b]);
-					if (c == -1)
+					Cell c = b.move(e.dir);
+					if (c == null)
 						continue;
-					if (!level.goal(c)) {
+					if (!c.goal) {
 						// box is removed
 						if (--boxesOnGoals == 0)
 							return false;
-						Bits.clear(q.box, b);
-						visitor.add(b);
+						Bits.clear(q.box, b.id);
+						visitor.add(b.id);
 						continue;
 					}
-					if (!Bits.test(q.box, c)) {
+					if (!Bits.test(q.box, c.id)) {
 						// push box to c
 						box = q.box.clone();
-						Bits.clear(box, b);
-						Bits.set(box, c);
-						StateKey e = new StateKey(b, box);
-						if (!explored.contains(e)) {
-							explored.insert(e);
-							queue.addLast(e);
+						Bits.clear(box, b.id);
+						Bits.set(box, c.id);
+						StateKey m = new StateKey(b.id, box);
+						if (!explored.contains(m)) {
+							explored.insert(m);
+							queue.addLast(m);
 						}
 						continue;
 					}
@@ -157,26 +157,26 @@ public final class Deadlock {
 			visitor.init(agent);
 			while (!visitor.done()) {
 				int a = visitor.next();
-				for (int b : level.moves[a]) {
-					if (visitor.visited(b))
+				for (Move e : level.cells[a].moves) {
+					Cell b = e.cell;
+					if (visitor.visited(b.id))
 						continue;
-					if (b >= level.alive || !Bits.test(box, b)) {
+					if (!b.alive || !Bits.test(box, b.id)) {
 						// agent moves to B
-						visitor.add(b);
+						visitor.add(b.id);
 						continue;
 					}
 
-					int dir = level.delta[a][b];
-					int c = level.move(b, dir);
-					if (c == -1 || c >= level.alive || Bits.test(box, c))
+					Cell c = b.move(e.dir);
+					if (c == null || !c.alive || Bits.test(box, c.id))
 						continue;
 
-					Bits.clear(box, b);
-					Bits.set(box, c);
-					boolean m = patternIndex.matches(b, box, 0, num_boxes, true);
-					Bits.clear(box, c);
+					Bits.clear(box, b.id);
+					Bits.set(box, c.id);
+					boolean m = patternIndex.matches(b.id, box, 0, num_boxes, true);
+					Bits.clear(box, c.id);
 					if (m) {
-						Bits.set(box, b);
+						Bits.set(box, b.id);
 						continue;
 					}
 
@@ -184,7 +184,7 @@ public final class Deadlock {
 					if (--num_boxes == 1)
 						return Result.NotFrozen;
 					pushed_boxes += 1;
-					visitor.init(b);
+					visitor.init(b.id);
 					break;
 				}
 			}
@@ -195,19 +195,19 @@ public final class Deadlock {
 			// check that agent can reach all goals without boxes on them
 			int reachable_free_goals = 0;
 			for (int a = 0; a < level.alive; a++)
-				if (level.goal(a) && visitor.visited(a))
+				if (level.cells[a].goal && visitor.visited(a))
 					reachable_free_goals += 1;
 			if (reachable_free_goals < pushed_boxes)
 				return Result.GoalZoneDeadlock;
 
 			if (!level.is_valid_level(p -> {
-				if (p == agent)
-					return level.goal(p) ? LowLevel.AgentGoal : LowLevel.Agent;
-				if (p < level.alive && Bits.test(box, p))
-					return LowLevel.Wall;
-				if (p < level.alive && Bits.test(original_box, p))
-					return level.goal(p) ? LowLevel.BoxGoal : LowLevel.Box;
-				return level.goal(p) ? LowLevel.Goal : LowLevel.Space;
+				if (p.id == agent)
+					return p.goal ? CellLevel.AgentGoal : CellLevel.Agent;
+				if (p.alive && Bits.test(box, p.id))
+					return CellLevel.Wall;
+				if (p.alive && Bits.test(original_box, p.id))
+					return p.goal ? CellLevel.BoxGoal : CellLevel.Box;
+				return p.goal ? CellLevel.Goal : CellLevel.Space;
 			})) {
 				isvalidlevel_deadlocks += 1;
 				Util.write(is_valid_level_deadlocks_file, level.render(new StateKey(agent, original_box)));
@@ -244,20 +244,20 @@ public final class Deadlock {
 			if (goal_zone_crap) {
 				long unreachable_goals = 0;
 				for (int a = 0; a < level.alive; a++)
-					if (level.goal(a) && !visitor.visited(a))
+					if (level.cells[a].goal && !visitor.visited(a))
 						unreachable_goals |= Bits.mask(a);
 				assert box[1] == 0; // TODO
 				final GoalZonePattern z = new GoalZonePattern();
 				z.agent = visitor.visited().clone();
 				z.boxes_frozen_on_goals = box[0];
 				z.unreachable_goals = unreachable_goals & ~box[0];
-				level.low.print(i -> {
+				level.print(i -> {
 					int e = 0;
-					if (!level.goal(i))
+					if (!i.goal)
 						return ' ';
-					if (Bits.test(z.boxes_frozen_on_goals, i))
+					if (Bits.test(z.boxes_frozen_on_goals, i.id))
 						e += 1;
-					if (Bits.test(z.unreachable_goals, i))
+					if (Bits.test(z.unreachable_goals, i.id))
 						e += 2;
 					if (e == 0)
 						return ' ';
@@ -274,20 +274,20 @@ public final class Deadlock {
 		// TODO there could be more than one minimal pattern from box
 		try (AutoTimer t = timer_minimize.open()) {
 			// try to removing boxes to generalize the pattern
-			for (int i = 0; i < level.alive; i++)
-				if (Bits.test(box, i) && !level.is_solved(box)) {
+			for (Cell i : level.cells)
+				if (i.alive && Bits.test(box, i.id) && !level.is_solved(box)) {
 					int[] box_copy = box.clone();
-					Bits.clear(box_copy, i);
+					Bits.clear(box_copy, i.id);
 					if (containsFrozenBoxes(s.agent, box_copy, num_boxes - 1) == Result.Deadlock) {
-						Bits.clear(box, i);
+						Bits.clear(box, i.id);
 						num_boxes -= 1;
-						for (int z : level.moves[i])
-							if (agent[z])
-								agent[i] = true;
+						for (Move z : i.moves)
+							if (agent[z.cell.id])
+								agent[i.id] = true;
 					}
 				}
 			// try moving agent to unreachable cells to generalize the pattern
-			for (int i = 0; i < level.cells; i++)
+			for (int i = 0; i < level.cells.length; i++)
 				if (!agent[i] && (i >= level.alive || !Bits.test(box, i))
 						&& containsFrozenBoxes(i, box.clone(), num_boxes) == Result.Deadlock)
 					Util.updateOr(agent, visitor.visited());
@@ -303,7 +303,7 @@ public final class Deadlock {
 		long boxes_frozen_on_goals;
 		long unreachable_goals;
 
-		boolean match(int agent, int[] box, Level level) {
+		boolean match(int agent, int[] box, CellLevel level) {
 			/*assert box1 == 0;
 			long test_boxes_on_goals = level.goal0 & box0;
 			if (this.agent[agent] && test_boxes_on_goals == boxes_frozen_on_goals) {

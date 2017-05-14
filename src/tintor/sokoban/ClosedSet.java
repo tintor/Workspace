@@ -6,13 +6,13 @@ import tintor.common.Util;
 
 public final class ClosedSet {
 	final StateMap map;
-	final LevelTransforms transforms;
+	final CellLevelTransforms transforms;
 	static final AutoTimer timer_add = new AutoTimer("closed.add");
 	static final AutoTimer timer_contains = new AutoTimer("closed.contains");
 
-	ClosedSet(Level level) {
+	ClosedSet(CellLevel level) {
 		this.transforms = level.transforms;
-		map = new StateMap(level.alive, level.cells);
+		map = new StateMap(level.alive, level.cells.length);
 	}
 
 	public int size() {

@@ -2,60 +2,63 @@ package tintor.sokoban;
 
 import tintor.common.Bits;
 import tintor.common.Visitor;
+import tintor.sokoban.Cell.Dir;
 
 class LevelUtil {
-	static boolean is_reversible_push(State s, Level level) {
-		int b = level.move(s.agent, s.dir);
+	static boolean is_reversible_push(State s, CellLevel level) {
+		Cell agent = level.cells[s.agent];
+		Dir dir = Dir.values()[s.dir];
+		Cell b = agent.move(dir);
 		assert s.box(b);
-		int c = level.move(b, s.dir);
-		if (c == -1 || s.box(c))
+		Cell c = b.move(dir);
+		if (c == null || s.box(c))
 			return false;
 
-		if (around(s.agent, 1, s, level) != -1 || around(s.agent, 3, s, level) != -1
-				|| is_cell_reachable(c, s, level)) {
+		if (around(agent, 1, s) != null || around(agent, 3, s) != null || is_cell_reachable(c, s)) {
 			int[] box = s.box.clone();
-			Bits.clear(box, b);
+			Bits.clear(box, b.id);
 			Bits.set(box, s.agent);
-			State s2 = new State(b, box, 0, s.dist, (s.dir + 2) % 4, 1, c);
+			State s2 = new State(b.id, box, 0, s.dist, (s.dir + 2) % 4, 1, c.id);
+			Cell agent2 = level.cells[s2.agent];
+			Dir dir2 = Dir.values()[s2.dir];
 
-			int b2 = level.move(s2.agent, s2.dir);
-			assert b2 == s.agent;
+			Cell b2 = agent2.move(dir2);
+			assert b2 == agent;
 			assert s2.box(b2);
-			int c2 = level.move(b2, s2.dir);
-			if (c2 == -1 || s.box(c2))
+			Cell c2 = b2.move(dir2);
+			if (c2 == null || s.box(c2))
 				return false;
 
-			return around(s2.agent, 1, s2, level) != -1 || around(s2.agent, 3, s2, level) != -1
-					|| is_cell_reachable(c2, s2, level);
+			return around(agent2, 1, s2) != null || around(agent2, 3, s2) != null || is_cell_reachable(c2, s2);
 		}
 		return false;
 	}
 
-	static int around(int z, int side, State s, Level level) {
-		z = level.move(z, (s.dir + side) % 4);
-		if (z == -1 || s.box(z))
-			return -1;
-		z = level.move(z, s.dir);
-		if (z == -1 || s.box(z))
-			return -1;
-		z = level.move(z, s.dir);
-		if (z == -1 || s.box(z))
-			return -1;
+	static Cell around(Cell z, int side, State s) {
+		z = z.move(Dir.values()[(s.dir + side) % 4]);
+		if (z == null || s.box(z))
+			return null;
+		z = z.move(Dir.values()[s.dir]);
+		if (z == null || s.box(z))
+			return null;
+		z = z.move(Dir.values()[s.dir]);
+		if (z == null || s.box(z))
+			return null;
 		return z;
 	}
 
 	// can agent move to C without pushing any box?
-	static boolean is_cell_reachable(int c, StateKey s, Level level) {
-		Visitor visitor = level.visitor;
-		level.visitor.init(s.agent);
+	static boolean is_cell_reachable(Cell c, StateKey s) {
+		Visitor visitor = c.level.visitor;
+		c.level.visitor.init(s.agent);
 		while (!visitor.done()) {
-			int a = visitor.next();
-			for (int b : level.moves[a]) {
-				if (visitor.visited(b) || s.box(b))
+			Cell a = c.level.cells[visitor.next()];
+			for (Move e : a.moves) {
+				if (visitor.visited(e.cell.id) || s.box(e.cell))
 					continue;
-				if (b == c)
+				if (e.cell == c)
 					return true;
-				visitor.add(b);
+				visitor.add(e.cell.id);
 			}
 		}
 		return false;

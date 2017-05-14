@@ -3,13 +3,13 @@ package tintor.sokoban.test;
 import org.junit.Assert;
 import org.junit.Test;
 
+import tintor.sokoban.CellLevel;
 import tintor.sokoban.Deadlock;
-import tintor.sokoban.Level;
 
 public class DeadlockTest {
 	@Test
 	public void test() {
-		Level level = Level.load("frozen_boxes.test");
+		CellLevel level = CellLevel.load("frozen_boxes.test");
 		Deadlock d = new Deadlock(level);
 		Assert.assertTrue(d.checkFull(level.start));
 		Assert.assertEquals(1, d.patternIndex.size());
@@ -18,7 +18,7 @@ public class DeadlockTest {
 
 	@Test
 	public void deadlockWithBoxesFrozenOnGoal() {
-		Level level = Level.load("test:12");
+		CellLevel level = CellLevel.load("test:12");
 		Deadlock d = new Deadlock(level);
 		Assert.assertTrue(d.checkFull(level.start));
 	}

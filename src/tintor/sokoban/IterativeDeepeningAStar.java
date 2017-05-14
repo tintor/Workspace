@@ -3,7 +3,7 @@ package tintor.sokoban;
 import java.util.ArrayDeque;
 
 public final class IterativeDeepeningAStar {
-	State solve(Level level) {
+	State solve(CellLevel level) {
 		Heuristic heuristic = new Heuristic(level, false);
 		if (level.is_solved_fast(level.start.box))
 			return level.start;
@@ -17,7 +17,7 @@ public final class IterativeDeepeningAStar {
 			int total_dist_cutoff_min = Integer.MAX_VALUE;
 			while (!stack.isEmpty()) {
 				State a = stack.pop();
-				for (int dir : level.dirs[a.agent]) {
+				for (Move e : level.cells[a.agent].moves) {
 					State b = null; // a.move(dir, level, context.optimal_macro_moves);
 					if (b == null)
 						break;

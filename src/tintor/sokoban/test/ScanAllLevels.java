@@ -1,7 +1,9 @@
-package tintor.sokoban;
+package tintor.sokoban.test;
 
 import tintor.common.Log;
 import tintor.common.Timer;
+import tintor.sokoban.AStarSolver;
+import tintor.sokoban.CellLevel;
 
 public class ScanAllLevels {
 	static final int MinStateSpace = 25;
@@ -15,16 +17,16 @@ public class ScanAllLevels {
 			String[] s = prefix.split("/");
 			String name = s[s.length - 1];
 			timer.start();
-			Level level = Level.load(prefix + i);
+			CellLevel level = CellLevel.load(prefix + i);
 			timer.stop();
-			cells += level.cells;
+			cells += level.cells.length;
 			alive += level.alive;
 			int state_space = level.state_space();
 			Log.info("%s%d cells:%d alive:%d boxes:%d state_space:%s time:%s", name, i, level.cells, level.alive,
 					level.num_boxes, state_space, timer.human());
 			level.print(level.start);
 			Log.info("bottleneck");
-			level.low.print(p -> level.bottleneck[p] ? '.' : ' ');
+			level.print(p -> p.bottleneck ? '.' : ' ');
 			if (MinStateSpace <= state_space && state_space <= MaxStateSpace) {
 				AStarSolver solver = new AStarSolver(level, false);
 				solver.trace = 1;

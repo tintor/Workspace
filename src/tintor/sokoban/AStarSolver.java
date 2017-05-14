@@ -14,7 +14,7 @@ public final class AStarSolver {
 	static final AutoTimer timer_solve = new AutoTimer("solve");
 	static final AutoTimer timer_moves = new AutoTimer("moves");
 
-	final Level level;
+	final CellLevel level;
 	final boolean optimal;
 	public final OpenSet open;
 	public final ClosedSet closed;
@@ -30,16 +30,16 @@ public final class AStarSolver {
 	private int cutoff = Integer.MAX_VALUE;
 	int cutoffs = 0;
 
-	public AStarSolver(Level level, boolean optimal) {
+	public AStarSolver(CellLevel level, boolean optimal) {
 		this.level = level;
 		this.optimal = optimal;
-		open = new OpenSet(level.alive, level.cells);
+		open = new OpenSet(level.alive, level.cells.length);
 		closed = new ClosedSet(level);
 		heuristic = new Heuristic(level, optimal);
 		deadlock = new Deadlock(level);
 
-		visitor = new Visitor(level.cells);
-		moves = new int[level.cells];
+		visitor = new Visitor(level.cells.length);
+		moves = new int[level.cells.length];
 		deadlock.closed = closed;
 		deadlock.open = open;
 	}
@@ -90,15 +90,15 @@ public final class AStarSolver {
 			// TODO stop the loop early after we reach all sides of all boxes
 			// TODO prioritize cells closer to untouched sides of boxes
 			int agent = visitor.next();
-			for (int p : level.moves[agent]) {
-				if (!a.box(p)) {
-					if (visitor.try_add(p))
-						moves[p] = moves[agent] + 1;
+			for (Move p : level.cells[agent].moves) {
+				if (!a.box(p.cell.id)) {
+					if (visitor.try_add(p.cell.id))
+						moves[p.cell.id] = moves[agent] + 1;
 					continue;
 				}
 
 				timer_moves.open();
-				State b = a.push(p, level.delta[agent][p], level, optimal, moves[agent], a.agent);
+				State b = a.push(p, level, optimal, moves[agent], a.agent);
 				timer_moves.close();
 				if (b == null || closed.contains(b))
 					continue;

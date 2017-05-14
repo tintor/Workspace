@@ -63,7 +63,7 @@ class LevelLoader {
 		for (int row = 0; row < lines.size(); row++) {
 			String s = lines.get(row);
 			for (int col = 0; col < w; col++)
-				buffer[row * (w + 1) + col] = col < s.length() ? s.charAt(col) : LowLevel.Space;
+				buffer[row * (w + 1) + col] = col < s.length() ? s.charAt(col) : CellLevel.Space;
 			buffer[row * (w + 1) + w] = '\n';
 		}
 		return buffer;
