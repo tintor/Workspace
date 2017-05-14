@@ -97,7 +97,7 @@ public class Solver {
 	}
 
 	public static void main(String[] args) throws Exception {
-		Level level = Level.load(args[1]);
+		Level level = Level.load(args[0]);
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells, level.alive,
 				level.num_boxes, level.state_space(), level.has_goal_rooms);
 		level.print(level.start);
