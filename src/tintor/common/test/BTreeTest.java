@@ -1,10 +1,12 @@
-package tintor.common;
+package tintor.common.test;
 
 import java.util.HashSet;
 import java.util.Random;
 
 import org.junit.Assert;
 import org.junit.Test;
+
+import tintor.common.ExternalBTree;
 
 public class BTreeTest {
 	static class BTree {

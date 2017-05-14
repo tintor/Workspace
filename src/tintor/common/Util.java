@@ -1,6 +1,7 @@
 package tintor.common;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -182,6 +183,18 @@ public final class Util {
 		return false;
 	}
 
+	public static FileWriter openWriter(String file) {
+		return Util.checkIOException(() -> new FileWriter(file, false));
+	}
+
+	public static void write(FileWriter writer, char[] buffer) {
+		Util.checkIOException(() -> writer.write(buffer, 0, buffer.length));
+	}
+
+	public static void flush(FileWriter writer) {
+		Util.checkIOException(() -> writer.flush());
+	}
+
 	public static interface IOExceptionFunction<T> {
 		T call() throws IOException;
 	}
@@ -213,6 +226,18 @@ public final class Util {
 		v |= v >> 4;
 		v |= v >> 8;
 		v |= v >> 16;
+		v++;
+		return v;
+	}
+
+	public static long roundUpPowerOf2(long v) {
+		v--;
+		v |= v >> 1;
+		v |= v >> 2;
+		v |= v >> 4;
+		v |= v >> 8;
+		v |= v >> 16;
+		v |= v >> 32;
 		v++;
 		return v;
 	}

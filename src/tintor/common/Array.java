@@ -10,6 +10,17 @@ public final class Array {
 	private Array() {
 	}
 
+	public static int[] concat(int[] a, int[] b) {
+		int[] c = new int[a.length + b.length];
+		copy(a, 0, c, 0, a.length);
+		copy(b, 0, c, a.length, b.length);
+		return c;
+	}
+
+	public static void copy(Object src, int srcPos, Object dest, int destPos, int length) {
+		System.arraycopy(src, srcPos, dest, destPos, length);
+	}
+
 	public interface ForEachInt {
 		void call(int index, int element);
 	}
@@ -105,8 +116,8 @@ public final class Array {
 
 	public static Object[] expand(Object[] array, int pos, int length) {
 		Object[] narray = new Object[array.length + length];
-		System.arraycopy(array, 0, narray, 0, pos);
-		System.arraycopy(array, pos, narray, pos + length, array.length - pos);
+		copy(array, 0, narray, 0, pos);
+		copy(array, pos, narray, pos + length, array.length - pos);
 		return narray;
 	}
 
@@ -114,15 +125,15 @@ public final class Array {
 		if (array.length == length)
 			return EmptyObjectArray;
 		Object[] narray = new Object[array.length - length];
-		System.arraycopy(array, 0, narray, 0, pos);
-		System.arraycopy(array, pos + length, narray, pos, array.length - pos - length);
+		copy(array, 0, narray, 0, pos);
+		copy(array, pos + length, narray, pos, array.length - pos - length);
 		return narray;
 	}
 
 	public static int[] expand(int[] array, int pos, int length) {
 		int[] narray = new int[array.length + length];
-		System.arraycopy(array, 0, narray, 0, pos);
-		System.arraycopy(array, pos, narray, pos + length, array.length - pos);
+		copy(array, 0, narray, 0, pos);
+		copy(array, pos, narray, pos + length, array.length - pos);
 		return narray;
 	}
 
@@ -130,15 +141,15 @@ public final class Array {
 		if (array.length == length)
 			return EmptyIntArray;
 		int[] narray = new int[array.length - length];
-		System.arraycopy(array, 0, narray, 0, pos);
-		System.arraycopy(array, pos + length, narray, pos, array.length - pos - length);
+		copy(array, 0, narray, 0, pos);
+		copy(array, pos + length, narray, pos, array.length - pos - length);
 		return narray;
 	}
 
 	public static byte[] expand(byte[] array, int pos, int length) {
 		byte[] narray = new byte[array.length + length];
-		System.arraycopy(array, 0, narray, 0, pos);
-		System.arraycopy(array, pos, narray, pos + length, array.length - pos);
+		copy(array, 0, narray, 0, pos);
+		copy(array, pos, narray, pos + length, array.length - pos);
 		return narray;
 	}
 

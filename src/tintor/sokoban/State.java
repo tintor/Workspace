@@ -33,10 +33,10 @@ class StateKey {
 	}
 }
 
-final class State extends StateKey {
+public final class State extends StateKey {
 	final int symmetry;
 	final int dir; // direction of move from previous state
-	final int dist;
+	public final int dist;
 	final int pushes; // number of box pushes from single call to State.move()
 	int total_dist; // = distance from start + heuristic to goal
 	final int prev_agent;
@@ -173,7 +173,9 @@ final class State extends StateKey {
 			pushes += 1;
 		}
 
-		return new State(a, nbox, 0, dist + moves + pushes, dir, pushes, prev_agent);
+		State s = new State(a, nbox, 0, dist + moves + pushes, dir, pushes, prev_agent);
+		assert s.prev(level).equals(this);
+		return s;
 	}
 
 	private boolean more_goals_than_boxes_in_room(int a, int door, Level level) {

@@ -7,21 +7,45 @@ import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
 
 // Set of all States for which we found some path from the start (not sure if optimal yet)
-class OpenSet {
+public final class OpenSet {
 	private final StateMap map;
 	private StateArray[] queue = new StateArray[0];
 	private int min = Integer.MAX_VALUE;
+	private int garbage, cleanup, cleanup_iter;
 
 	private static final AutoTimer timer_get = new AutoTimer("open.get");
 	private static final AutoTimer timer_update = new AutoTimer("open.update");
 	private static final AutoTimer timer_add = new AutoTimer("open.add");
 	private static final AutoTimer timer_remove_min = new AutoTimer("open.remove_min");
+	private static final AutoTimer timer_cleanup = new AutoTimer("open.cleanup");
 
-	OpenSet(int alive) {
-		map = new StateMap(alive);
+	OpenSet(int alive, int cells) {
+		map = new StateMap(alive, cells);
+	}
+
+	void do_some_cleanup() {
+		int s = garbage;
+		while (true)
+			try (AutoTimer t = timer_cleanup.openExclusive()) {
+				cleanup_iter = min;
+				while (cleanup_iter < queue.length) {
+					StateArray q = queue[cleanup_iter++];
+					if (q != null && q.garbage > 0) {
+						q.remove_if((agent, box, offset) -> !map.contains(agent, box, offset));
+						cleanup += q.garbage;
+						garbage -= q.garbage;
+						q.garbage = 0;
+						if (garbage <= s / 4 * 3)
+							return;
+					}
+				}
+			}
 	}
 
 	void report() {
+		if (garbage > 0)
+			do_some_cleanup();
+
 		StringBuilder sb = new StringBuilder();
 		int size = 0;
 		for (int p = min; p < queue.length; p += 1) {
@@ -41,8 +65,8 @@ class OpenSet {
 			if (queue[i] != null && queue[i].size() == 0)
 				queue[i] = null;
 
-		System.out.printf("open:%s memory_map:%s memory_queue:%s\n", Util.human(size), deep_size(map),
-				deep_size(queue));
+		System.out.printf("open:%s memory_map:%s memory_queue:%s garbage:%s cleanup:%s\n", Util.human(size),
+				deep_size(map), deep_size(queue), Util.human(garbage), Util.human(cleanup));
 		if (sb.length() > 0)
 			System.out.printf("  %s\n", sb);
 	}
@@ -78,6 +102,8 @@ class OpenSet {
 			if (b.total_dist < min)
 				min = b.total_dist;
 			queue(b.total_dist).push(b);
+			queue(v_total_dist).garbage += 1;
+			garbage += 1;
 		}
 	}
 
@@ -94,6 +120,8 @@ class OpenSet {
 	// O(1)
 	public State remove_min() {
 		try (AutoTimer t = timer_remove_min.open()) {
+			if (min >= queue.length)
+				return null;
 			while (true) {
 				while (true) {
 					if (min == queue.length)
@@ -104,10 +132,13 @@ class OpenSet {
 				}
 				StateKey k = queue(min).pop();
 				State s = map.get(k);
-				if (s != null) {
-					map.remove(k);
-					return s;
+				if (s == null) {
+					garbage -= 1;
+					continue;
 				}
+				map.remove(k);
+				assert !s.is_initial();
+				return s;
 			}
 		}
 	}

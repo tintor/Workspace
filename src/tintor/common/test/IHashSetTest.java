@@ -1,4 +1,4 @@
-package tintor.common;
+package tintor.common.test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -13,6 +13,18 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
+
+import tintor.common.ArrayChainingHashSet;
+import tintor.common.CompactHashMap;
+import tintor.common.CompactHashMap4;
+import tintor.common.IHashSet;
+import tintor.common.InstrumentationAgent;
+import tintor.common.IteratorInt;
+import tintor.common.Log;
+import tintor.common.MurmurHash3;
+import tintor.common.OpenAddressingHashSet;
+import tintor.common.OpenAddressingHashSetInt;
+import tintor.common.Util;
 
 final class JavaHashSet<T> implements IHashSet<T> {
 	HashSet<T> set = new HashSet<T>();

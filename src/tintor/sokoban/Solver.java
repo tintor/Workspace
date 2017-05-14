@@ -1,12 +1,7 @@
 package tintor.sokoban;
 
-import java.util.ArrayDeque;
-
-import tintor.common.AutoTimer;
 import tintor.common.Log;
 import tintor.common.Timer;
-import tintor.common.Util;
-import tintor.common.Visitor;
 
 // Solved
 // 1:3, 6:8, 17
@@ -16,42 +11,35 @@ import tintor.common.Visitor;
 
 // TODO push macro:
 // - if box is pushed inside a tunnel with a box already inside (on goal) then keep pushing the box all the way through
+// TODO goal cut:
+// - if there are multiple pushes from a given State and some of them reduce the number of unreachable goal cells (by pushing into unreachable goal cell) then cut all other pushes
 // TODO: separate Timer for partial deadlock.match inside frozenboxes from the global one
-// TODO: 95% of time is spend inside remove_if pattern matching
 
 // Performance:
 // TODO: at the start greedily find order to fill goal nodes using matching from Heuristic (and trigger goal macros during search)
 // TODO: specialization of OpenAddressingIntArrayHashMap with long[] instead of int[]
-// TODO: faster search mode that doesn't keep track of previous State. Values in StateMap can be int instead of long.
-//       Used to find the distance of a solution instead of the entire path.
-// TODO: accumulate disk writes of values into a list of [index:value] and write them to disk from a background thread
 // TODO: add timer for growth operation (separate for disk and memory)
 // TODO: tweak load factor of OpenAddressingHashMap for max perf
-// TODO: once every 10s do cleanups: deadlock.cleanup (instead of immediately) and stale OpenSet.queue elements
 // TODO: try –XX:+UseG1GC
 // TODO: keep counter of how many times each deadlock pattern was triggered
 // TODO: load patterns.txt at startup
 // TODO: remove timers for code sections < 1%
-// TODO: extract deadlock pattern database into a separate class and provide multiple indexes:
-//       - all patterns for specific agent position
-//       - all patterns for specific agent position and near agent
 // TODO: web handler for Solver to be able to probe manually into the internals (or just observe search with better UI)
 //       - also be able to switch flags as search is running
+//       - be able to skip solving a current level (if very slow)
+//       - render level in different ways (colors / layers)
+//       - browse through deadlock patterns / closed set / open set / each state (all fields + link to prev state)
 // TODO: speed up hungarian matching by starting from a good initial match (from the previous state)
 // TODO: record all Microban performance runs (also with snapshot of all the code, git branch / tag?)
 // TODO: how to teach solver to park boxes in rooms with single entrance (and to find out maximum parking space)?
-// TODO: don't run solver from Eclipse to avoid crashing it
-// TODO: force entire java heap to be allocated upfront to avoid freezing system later
 // TODO: be able to save Solver state and resume it later
 
-// TODO: general level loader class, knows only about wall cells, compresses level to only walkable interior cells
 // TODO: store extra data for every level: boxes, alive, cells, state_space,
 //       optimal_solution (steps and compute time), some_solution (steps and compute time)
 
 // Misc:
 // TODO: move unused common classes into a separate package 
 // TODO: move tests into a separate package
-// TODO: unit tests should be bounded by cpu time, not wall time (to avoid flaky timeouts)
 
 // Deadlock:
 // TODO: Take every 2 and 3 box subset from start position and initialize deadlock DB
@@ -61,7 +49,7 @@ import tintor.common.Visitor;
 //       Will reduce number of live cells and make deadlock checking and heuristic faster and more accurate.
 // TODO: can avoid calling matchesPattern() inside containsFrozenBoxes() if box push can be reversed
 //       (can do a very cheap check here, just try to go around the box)
-// TODO: --- store deadlock patterns from deadlocks found by Heuristic
+// TODO: pre-populate PatternIndex with level-independent deadlocks
 
 // Search space reduction:
 // TODO: +++ (FIXME) Take advantage of symmetry
@@ -71,6 +59,7 @@ import tintor.common.Visitor;
 
 // Memory:
 // TODO: +++ when a new deadlock pattern is found with >=3 boxes scan Closed and Open with new pattern to trim them
+// TODO: general level loader class, knows only about wall cells, compresses level to only walkable interior cells
 
 // Heuristic:
 // TODO: +++ if level has a goal room with single entrance ==> speed up matching by matching from the goal room entrance
@@ -84,209 +73,6 @@ import tintor.common.Visitor;
 //       - parallel pattern search
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
 // TODO: Look at the sokoban PhD for more ideas.
-
-class AStarSolver {
-	static class ClosedSizeLimitError extends Error {
-		private static final long serialVersionUID = 1L;
-	};
-
-	static final AutoTimer timer_solve = new AutoTimer("solve");
-	static final AutoTimer timer_moves = new AutoTimer("moves");
-
-	final Level level;
-	final boolean optimal;
-	final OpenSet open;
-	final ClosedSet closed;
-	final Heuristic heuristic;
-	final Deadlock deadlock;
-
-	int closed_size_limit;
-	int trace; // 0 to turn off any tracing
-	State[] valid;
-
-	private Visitor visitor;
-	private int[] moves;
-
-	private int cutoff = Integer.MAX_VALUE;
-	int cutoffs = 0;
-
-	AStarSolver(Level level, boolean optimal) {
-		this.level = level;
-		this.optimal = optimal;
-		open = new OpenSet(level.alive);
-		closed = new ClosedSet(level);
-		heuristic = new Heuristic(level, optimal);
-		deadlock = new Deadlock(level);
-
-		visitor = new Visitor(level.cells);
-		moves = new int[level.cells];
-		deadlock.closed = closed;
-		deadlock.open = open;
-	}
-
-	State solve() {
-		int h = heuristic.evaluate(level.start);
-		if (h == Integer.MAX_VALUE)
-			return null;
-		level.start.set_heuristic(h);
-		if (level.is_solved_fast(level.start.box))
-			return level.start;
-
-		AutoTimer.reset();
-		long next_report = 20 * AutoTimer.Second;
-		explore(level.start);
-		State a = null;
-		while (true) {
-			try (AutoTimer t = timer_solve.open()) {
-				a = open.remove_min();
-				if (deadlock.check(a))
-					continue;
-				if (a == null || level.is_solved_fast(a.box))
-					break;
-				closed.add(a);
-				if (closed_size_limit != 0 && closed.size() >= closed_size_limit)
-					throw new ClosedSizeLimitError();
-
-				explore(a);
-			}
-
-			if (trace > 1 && AutoTimer.total() >= next_report) {
-				report();
-				AutoTimer.report();
-				level.print(a);
-				next_report += 20 * AutoTimer.Second;
-			}
-		}
-		if (trace > 1)
-			report();
-		if (trace > 0)
-			AutoTimer.report();
-		return a;
-	}
-
-	void explore(State a) {
-		visitor.init(a.agent);
-		moves[a.agent] = 0; // TODO merge moves to visitor (into set)
-		while (!visitor.done()) {
-			// TODO stop the loop early after we reach all sides of all boxes
-			// TODO prioritize cells closer to untouched sides of boxes
-			int agent = visitor.next();
-			for (int p : level.moves[agent]) {
-				if (!a.box(p)) {
-					if (visitor.visited(p))
-						continue;
-					visitor.add(p);
-					moves[p] = moves[agent] + 1;
-					continue;
-				}
-
-				timer_moves.open();
-				State b = a.push(p, level.delta[agent][p], level, optimal, moves[agent], a.agent);
-				timer_moves.close();
-				if (b == null || closed.contains(b))
-					continue;
-
-				int v_total_dist = open.get_total_dist(b);
-				if (v_total_dist == 0 && deadlock.check(b))
-					continue;
-
-				int h = heuristic.evaluate(b);
-				if (h >= cutoff) {
-					cutoffs += 1;
-					continue;
-				}
-				b.set_heuristic(h);
-
-				if (v_total_dist == 0) {
-					if (level.is_solved_fast(b.box)) {
-						open.remove_all_ge(b.total_dist);
-						cutoff = b.total_dist;
-					}
-					open.add(b);
-					continue;
-				}
-				if (b.total_dist < v_total_dist)
-					open.update(v_total_dist, b);
-			}
-		}
-	}
-
-	State[] extractPath(State end) {
-		ArrayDeque<State> path = new ArrayDeque<State>();
-		State start = level.normalize(level.start);
-		while (true) {
-			path.addFirst(end);
-			StateKey p = end.prev(level);
-			if (level.normalize(p).equals(start))
-				break;
-			end = closed.get(end.prev(level));
-		}
-		return path.toArray(new State[path.size()]);
-	}
-
-	private long prev_time = 0;
-	private int prev_open = 0;
-	private int prev_closed = 0;
-	private double speed = 0;
-
-	private void report() {
-		long delta_time = AutoTimer.total() - prev_time;
-		int delta_closed = closed.size() - prev_closed;
-		int delta_open = open.size() - prev_open;
-		prev_time = AutoTimer.total();
-		prev_closed = closed.size();
-		prev_open = open.size();
-
-		speed = (speed + 1e9 * delta_closed / delta_time) / 2;
-
-		closed.report();
-		open.report();
-		deadlock.report();
-		System.out.printf("cutoff:%s dead:%s live:%s ", Util.human(cutoffs), Util.human(heuristic.deadlocks),
-				Util.human(heuristic.non_deadlocks));
-		System.out.printf("time:%s ", Util.human(AutoTimer.total() / AutoTimer.Second));
-		System.out.printf("speed:%s ", Util.human((int) speed));
-		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
-	}
-}
-
-class IterativeDeepeningAStar {
-	State solve(Level level) {
-		Heuristic heuristic = new Heuristic(level, false);
-		if (level.is_solved_fast(level.start.box))
-			return level.start;
-
-		ArrayDeque<State> stack = new ArrayDeque<State>();
-		int total_dist_max = heuristic.evaluate(level.start);
-		while (true) {
-			assert stack.isEmpty();
-			stack.push(level.start);
-
-			int total_dist_cutoff_min = Integer.MAX_VALUE;
-			while (!stack.isEmpty()) {
-				State a = stack.pop();
-				for (int dir : level.dirs[a.agent]) {
-					State b = null; // a.move(dir, level, context.optimal_macro_moves);
-					if (b == null)
-						break;
-					// TODO cut move if possible
-
-					b.set_heuristic(heuristic.evaluate(b));
-					if (b.total_dist > total_dist_max) {
-						total_dist_cutoff_min = Math.min(total_dist_cutoff_min, b.total_dist);
-						continue;
-					}
-					stack.push(b);
-				}
-				// TODO reorder moves
-			}
-			if (total_dist_cutoff_min == Integer.MAX_VALUE)
-				break;
-			total_dist_max = total_dist_cutoff_min;
-		}
-		return null;
-	}
-}
 
 public class Solver {
 	static void printSolution(Level level, State[] solution) {
@@ -302,12 +88,24 @@ public class Solver {
 
 	static Timer timer = new Timer();
 
+	static char hex(int a) {
+		if (a >= 26 || a < 0)
+			return '?';
+		return (char) (a < 10 ? '0' + a : 'a' + a - 10);
+	}
+
 	public static void main(String[] args) throws Exception {
 		//Level level = Level.load("microban2:115");
-		Level level = Level.load("original:17");
-		Log.info("cells:%d alive:%d boxes:%d state_space:%s", level.cells, level.alive, level.num_boxes,
-				level.state_space());
+		Level level = Level.load("microban3:58");
+		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells, level.alive,
+				level.num_boxes, level.state_space(), level.has_goal_rooms);
 		level.print(level.start);
+		Log.raw("alive");
+		level.low.print(p -> p < level.alive ? '.' : ' ');
+		Log.raw("tunnels");
+		level.low.print(p -> level.tunnel(p) ? '.' : ' ');
+		Log.raw("rooms");
+		level.low.print(p -> level.room[p] == -1 ? 'x' : hex(level.room[p]));
 		AStarSolver solver = new AStarSolver(level, false);
 		solver.trace = 2;
 
@@ -319,7 +117,7 @@ public class Solver {
 		} else {
 			State[] solution = solver.extractPath(end);
 			for (State s : solution)
-				if (solver.deadlock.check(s)) {
+				if (solver.deadlock.checkFull(s)) {
 					level.print(s);
 					throw new Error();
 				}

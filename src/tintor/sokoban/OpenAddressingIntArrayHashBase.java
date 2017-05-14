@@ -1,7 +1,6 @@
 package tintor.sokoban;
 
 import java.util.Arrays;
-import java.util.function.Predicate;
 
 import tintor.common.MurmurHash3;
 import tintor.common.OnlineEstimator;
@@ -54,6 +53,17 @@ class OpenAddressingIntArrayHashBase {
 		}
 	}
 
+	public final boolean contains(int[] k, int offset) {
+		int a = hash(k, offset) & mask;
+		while (true) {
+			if (empty(a))
+				return false;
+			if (equal(a, k, offset))
+				return true;
+			a = (a + 1) & mask;
+		}
+	}
+
 	// TODO get_unsafe?
 	protected final int get_internal(int[] k) {
 		int a = hash(k) & mask;
@@ -73,8 +83,7 @@ class OpenAddressingIntArrayHashBase {
 			a = (a + 1) & mask;
 		}
 		set(a, k);
-		if (empty(a))
-			throw new Error();
+		assert !empty(a);
 		return a;
 	}
 
@@ -173,15 +182,14 @@ class OpenAddressingIntArrayHashBase {
 		return a;
 	}
 
-	public final void remove_if(Predicate<int[]> fn) {
-		int[] key_copy = new int[N];
+	interface KeyPredicate {
+		boolean test(int[] key, int offset);
+	}
+
+	public final void remove_if(KeyPredicate fn) {
 		for (int a = mask; a >= 0; a--)
-			if (!empty(a)) {
-				// TODO avoid copying
-				System.arraycopy(key, a * N, key_copy, 0, N);
-				if (fn.test(key_copy))
-					remove_unsafe_internal(a, a);
-			}
+			if (!empty(a) && fn.test(key, a * N))
+				remove_unsafe_internal(a, a);
 	}
 
 	protected final boolean empty(int a) {
@@ -198,6 +206,13 @@ class OpenAddressingIntArrayHashBase {
 	protected final boolean equal(int a, int[] k) {
 		for (int i = 0; i < N; i++)
 			if (key[N * a + i] != k[i])
+				return false;
+		return true;
+	}
+
+	protected final boolean equal(int a, int[] k, int offset) {
+		for (int i = 0; i < N; i++)
+			if (key[N * a + i] != k[i + offset])
 				return false;
 		return true;
 	}
@@ -229,6 +244,13 @@ class OpenAddressingIntArrayHashBase {
 		int h = 0;
 		for (int d : k)
 			h = MurmurHash3.step(h, d);
+		return MurmurHash3.fmix(h); // no length
+	}
+
+	protected int hash(int[] k, int offset) {
+		int h = 0;
+		for (int i = 0; i < N; i++)
+			h = MurmurHash3.step(h, k[offset + i]);
 		return MurmurHash3.fmix(h); // no length
 	}
 }

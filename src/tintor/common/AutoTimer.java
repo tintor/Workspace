@@ -9,6 +9,7 @@ public final class AutoTimer implements AutoCloseable {
 	private final String name;
 	private long total;
 	private AutoTimer parent;
+	private boolean exclusive;
 
 	private AutoTimer() {
 		name = null;
@@ -22,8 +23,9 @@ public final class AutoTimer implements AutoCloseable {
 		}
 	}
 
-	public AutoTimer open() {
-		if (enabled) {
+	private AutoTimer openInternal(boolean exclusive) {
+		if (enabled && !current.exclusive) {
+			this.exclusive = exclusive;
 			assert parent == null;
 			long now = System.nanoTime();
 			current.total += now;
@@ -34,8 +36,17 @@ public final class AutoTimer implements AutoCloseable {
 		return this;
 	}
 
+	public AutoTimer open() {
+		return openInternal(false);
+	}
+
+	public AutoTimer openExclusive() {
+		return openInternal(true);
+	}
+
 	public void close() {
-		if (enabled) {
+		if (enabled && this == current) {
+			exclusive = false;
 			assert parent != null;
 			long now = System.nanoTime();
 			total += now;

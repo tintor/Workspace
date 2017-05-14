@@ -1,20 +1,13 @@
-package tintor.sokoban;
+package tintor.sokoban.test;
 
 import java.util.ArrayList;
 
 import tintor.common.Log;
 import tintor.common.Timer;
 import tintor.common.Util;
-
-// [20, 23]: 105.5s for 68 levels (with AreAllGoalsReachable.run)
-// [20, 23]: 57.1s for 68 levels
-
-// [27]: 12s for 5 levels
-// [28]: 41s for 10 levels
-// [29]: 123s for 6 levels
-// [30]: 138s for 8 levels
-
-// TODO: print cumulative timer breakdown for all levels
+import tintor.sokoban.AStarSolver;
+import tintor.sokoban.Level;
+import tintor.sokoban.State;
 
 // Run all Microban levels up to a certain complexity, one at a time
 public class Microban {

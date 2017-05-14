@@ -1,0 +1,8 @@
+.DS_Store
+.classpath
+.project
+.settings/
+bin/
+*.txt
+src/tintor/*/*.class
+src/tintor/arena/

@@ -42,7 +42,7 @@ public class ScanAllLevels {
 	}
 
 	public static void main(String[] args) {
-		Log.raw = true;
+		Log.mode_raw = true;
 		scan("microban:", 155);
 		scan("original:", 90);
 		for (int i = 1; i <= 11; i++)

@@ -17,9 +17,8 @@ final class StateMapDisk {
 
 	void remove_if(StateKeyPredicate fn) {
 		for (int agent = 0; agent < map.length; agent++) {
-			OpenAddressingIntArrayHashMapDisk m = map[agent];
 			final int a = agent;
-			m.remove_if(key -> fn.test(a, key));
+			map[agent].remove_if((box, offset) -> fn.test(a, box, offset));
 		}
 	}
 

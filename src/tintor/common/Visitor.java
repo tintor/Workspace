@@ -9,6 +9,14 @@ public final class Visitor implements Iterable<Integer> {
 		set = new boolean[size];
 	}
 
+	public boolean try_add(int a) {
+		if (set[a])
+			return false;
+		set[a] = true;
+		queue[tail++] = a;
+		return true;
+	}
+
 	public void add(int a) {
 		assert !set[a];
 		set[a] = true;

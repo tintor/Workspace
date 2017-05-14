@@ -1,10 +1,9 @@
 package tintor.sokoban;
 
 import tintor.common.Array;
-import tintor.common.ArrayDequeInt;
 import tintor.common.AutoTimer;
-import tintor.common.BitMatrix;
 import tintor.common.Hungarian;
+import tintor.common.PairVisitor;
 
 final class Heuristic {
 	private final int Infinity = Integer.MAX_VALUE / 2; // limitation due to Hungarian
@@ -28,19 +27,10 @@ final class Heuristic {
 
 		distance_box = Array.ofInt(level.alive, num_goals, Infinity);
 		int w = 0;
-		ArrayDequeInt deque = new ArrayDequeInt(level.cells);
-		BitMatrix visited = new BitMatrix(level.cells, level.alive);
-		for (int g = 0; g < level.alive; g++) {
-			if (!level.goal(g))
-				continue;
-			compute_distances_from_goal(g, w++, deque, visited);
-		}
-	}
-
-	private static int make_pair(int a, int b) {
-		assert 0 <= a && a < 65536;
-		assert 0 <= b && b < 65536;
-		return (a << 16) | b;
+		PairVisitor visitor = new PairVisitor(level.cells, level.alive);
+		for (int g = 0; g < level.alive; g++)
+			if (level.goal(g))
+				compute_distances_from_goal(g, w++, visitor);
 	}
 
 	static int dist(int s, int[][] distance) {
@@ -49,36 +39,28 @@ final class Heuristic {
 		return distance[s_agent][s_box];
 	}
 
-	void compute_distances_from_goal(int goal, int goal_ordinal, ArrayDequeInt deque, BitMatrix visited) {
+	void compute_distances_from_goal(int goal, int goal_ordinal, PairVisitor visitor) {
 		int[][] distance = Array.ofInt(level.cells, level.alive, Infinity);
-		deque.clear();
-		visited.clear();
-
+		visitor.init();
 		for (int a : level.moves[goal]) {
-			deque.addFirst(make_pair(a, goal));
+			visitor.add(a, goal);
 			distance[a][goal] = 0;
 		}
 		distance_box[goal][goal_ordinal] = 0;
 
-		while (!deque.isEmpty()) {
-			final int s = deque.removeFirst();
-			final int s_agent = (s >> 16) & 0xFFFF;
-			final int s_box = s & 0xFFFF;
-			assert distance[s_agent][s_box] >= 0;
-			assert distance[s_agent][s_box] != Infinity;
-			distance_box[s_box][goal_ordinal] = Math.min(distance_box[s_box][goal_ordinal], distance[s_agent][s_box]);
+		while (!visitor.done()) {
+			final int agent = visitor.first();
+			final int box = visitor.second();
+			assert distance[agent][box] >= 0;
+			assert distance[agent][box] != Infinity;
+			distance_box[box][goal_ordinal] = Math.min(distance_box[box][goal_ordinal], distance[agent][box]);
 
-			for (int c : level.moves[s_agent]) {
-				if (c != s_box && distance[c][s_box] == Infinity) {
-					// TODO moves included only if ! optimal
-					distance[c][s_box] = distance[s_agent][s_box] + 1;
-					deque.addLast(make_pair(c, s_box));
-				}
-				if (s_agent < level.alive && level.move(s_agent, level.delta[c][s_agent]) == s_box
-						&& distance[c][s_agent] == Infinity) {
-					distance[c][s_agent] = distance[s_agent][s_box] + 1;
-					deque.addLast(make_pair(c, s_agent));
-				}
+			for (int c : level.moves[agent]) {
+				// TODO moves included only if ! optimal
+				if (c != box && visitor.try_add(c, box))
+					distance[c][box] = distance[agent][box] + 1;
+				if (agent < level.alive && level.move(agent, level.delta[c][agent]) == box && visitor.try_add(c, agent))
+					distance[c][agent] = distance[agent][box] + 1;
 			}
 		}
 	}

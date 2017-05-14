@@ -68,6 +68,11 @@ public class Bits {
 		return test(bits[index / 32], index % 32);
 	}
 
+	public static boolean test(int[] bits, int offset, int length, int index) {
+		assert 0 <= index && index < length * 32;
+		return test(bits[offset + index / 32], index % 32);
+	}
+
 	public static boolean test(long[] bits, int index) {
 		assert 0 <= index && index < bits.length * 64;
 		return test(bits[index / 64], index % 64);

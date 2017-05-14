@@ -5,28 +5,27 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import tintor.common.Array;
-import tintor.common.ArrayDequeInt;
 import tintor.common.AutoTimer;
-import tintor.common.BitMatrix;
 import tintor.common.Bits;
+import tintor.common.PairVisitor;
 import tintor.common.Util;
 import tintor.common.Visitor;
 import tintor.common.Zobrist;
 import tintor.sokoban.LowLevel.IndexToChar;
 
-final class Level {
+public final class Level {
 	// Note: could easily increase this limit
-	static class MoreThan256CellsError extends Error {
+	public static class MoreThan256CellsError extends Error {
 		private static final long serialVersionUID = 1L;
 	}
 
-	final LowLevel low;
+	public final LowLevel low;
 
 	// direction
-	final static int Left = 0;
-	final static int Up = 1;
-	final static int Right = 2;
-	final static int Down = 3;
+	public final static int Left = 0;
+	public final static int Up = 1;
+	public final static int Right = 2;
+	public final static int Down = 3;
 
 	// Used by move() to signal invalid move
 	final static int Bad = -1;
@@ -36,7 +35,7 @@ final class Level {
 		return dir ^ 2;
 	}
 
-	static ArrayList<Level> loadAll(String filename) {
+	public static ArrayList<Level> loadAll(String filename) {
 		int count = LowLevel.numberOfLevels(filename);
 		ArrayList<Level> levels = new ArrayList<Level>();
 		for (int i = 1; i <= count; i++)
@@ -47,7 +46,7 @@ final class Level {
 		return levels;
 	}
 
-	static Level load(String filename) {
+	public static Level load(String filename) {
 		LowLevel low = LowLevel.load(filename);
 
 		boolean[] walkable = low.compute_walkable();
@@ -58,11 +57,10 @@ final class Level {
 
 		walkable = low.minimize(walkable);
 
-		ArrayDequeInt deque = new ArrayDequeInt(low.cells());
-		BitMatrix visited = new BitMatrix(low.cells(), low.cells()); // TODO this is huge, as cells is raw buffer size
-		if (!low.new AreAllGoalsReachable().run(visited))
+		PairVisitor visitor = new PairVisitor(low.cells(), low.cells());
+		if (!low.are_all_goals_reachable_full(visitor))
 			throw new IllegalArgumentException("level contains unreachable goal");
-		final boolean[] is_alive = low.compute_alive(deque, visited, walkable);
+		final boolean[] is_alive = low.compute_alive(visitor, walkable);
 
 		return new Level(low, walkable, is_alive);
 	}
@@ -117,48 +115,7 @@ final class Level {
 		num_boxes = Util.count(box);
 		assert num_boxes == Util.count(goalb);
 
-		transforms = new int[7][];
-		inv_transforms = new int[7][];
-		dir_transforms = new int[7][];
-		inv_dir_transforms = new int[7][];
-		int w = 0;
-		for (int symmetry = 1; symmetry <= 7; symmetry += 1)
-			if (low.is_symmetric(walkable, symmetry)) {
-				int[] mapping = new int[cells];
-				int[] inv_mapping = new int[cells];
-				for (int i = 0; i < low.cells(); i++)
-					if (walkable[i]) {
-						int a = old_to_new[i];
-						int c = old_to_new[low.transform(i, symmetry)];
-						mapping[c] = a;
-						inv_mapping[a] = c;
-					}
-				transforms[w] = mapping;
-				inv_transforms[w] = inv_mapping;
-
-				for (int i = 0; i < alive; i++)
-					assert 0 <= mapping[i] && mapping[i] < alive;
-				for (int i = alive; i < cells; i++)
-					assert alive <= mapping[i] && mapping[i] < cells;
-				assert Util.all(cells, i -> inv_mapping[mapping[i]] == i);
-				assert Util.sum(cells, i -> i - mapping[i]) == 0;
-
-				dir_transforms[w] = new int[4];
-				inv_dir_transforms[w] = new int[4];
-				for (int a = 0; a < 4; a++) {
-					int c = low.transform_dir(a, symmetry, false);
-					dir_transforms[w][c] = a;
-					inv_dir_transforms[w][a] = c;
-				}
-
-				w += 1;
-			}
-		transforms = Arrays.copyOf(transforms, w);
-		transforms = new int[0][];
-		inv_transforms = Arrays.copyOf(inv_transforms, w);
-		inv_transforms = new int[0][];
-		dir_transforms = Arrays.copyOf(dir_transforms, w);
-		inv_dir_transforms = Arrays.copyOf(inv_dir_transforms, w);
+		transforms = new LevelTransforms(this, walkable, old_to_new);
 
 		visitor = new Visitor(cells);
 		moves = new int[cells][];
@@ -171,151 +128,64 @@ final class Level {
 		compute_delta();
 		compute_agent_distance();
 		find_bottlenecks(0, new int[cells], -1, new int[1]);
+
+		room = new int[cells];
+		has_goal_rooms = has_goal_rooms();
+		has_goal_zone = has_goal_zone();
 	}
 
-	// For all the level symmetries
-	private int[][] transforms;
-	private int[][] inv_transforms;
+	public final boolean has_goal_zone; // at least two goals that are next to each other
 
-	private int[][] dir_transforms;
-	private int[][] inv_dir_transforms;
-
-	private int[] transform(int[] box, int[] mapping) {
-		int[] out = new int[box.length];
-		for (int i = 0; i < alive; i++)
-			if (Bits.test(box, i))
-				Bits.set(out, mapping[i]);
-		return out;
+	private boolean has_goal_zone() {
+		for (int a = 0; a < alive; a++)
+			if (goal(a))
+				for (int b : moves[a])
+					if (goal(b))
+						return true;
+		return false;
 	}
 
-	/*	private int[] transform(int nbox0, int[] box, int[] mapping) {
-			int[] out = new int[box.length];
-			out[0] = nbox0;
-			for (int i = 32; i < alive; i++)
-				if (Bits.test(box, mapping[i]))
-					Bits.set(out, i);
-			return out;
-		}
-	
-		private int transform_one(int[] box, int[] mapping) {
-			int out = 0;
-			for (int i = 0; i < Math.min(32, alive); i++)
-				if (Bits.test(box, mapping[i]))
-					out = Bits.set(out, i);
-			return out;
-		}*/
+	public final LevelTransforms transforms;
 
-	private static int compare(int[] a, int[] b) {
-		assert a.length == b.length;
-		for (int i = 0; i < a.length; i++) {
-			if (a[i] < b[i])
-				return -1;
-			if (a[i] > b[i])
-				return 1;
-		}
-		return 0;
-	}
+	private boolean has_goal_rooms() {
+		if (Util.all(cells, p -> !bottleneck_tunnel(p)))
+			return false;
 
-	StateKey normalize(StateKey k) {
-		if (transforms.length == 0)
-			return k;
-
-		int agent = k.agent;
-		int[] box = k.box;
-
-		for (int[] map : transforms) {
-			int nagent = map[k.agent];
-			if (nagent < agent) {
-				agent = nagent;
-				box = transform(k.box, map);
+		Arrays.fill(room, -1);
+		int room_count = 0;
+		for (int a = 0; a < cells; a++) {
+			if (bottleneck_tunnel(a) || room[a] != -1)
 				continue;
+			visitor.init(a);
+			while (!visitor.done()) {
+				int b = visitor.next();
+				room[b] = room_count;
+				for (int c : moves[b])
+					if (!bottleneck_tunnel(c))
+						visitor.try_add(c);
+			}
+			room_count += 1;
+		}
+
+		int[] goals = new int[room_count];
+
+		// count goals in each room
+		for (int a = 0; a < alive; a++)
+			if (goal(a)) {
+				if (room[a] == -1)
+					return false;
+				goals[room[a]] += 1;
 			}
 
-			if (nagent > agent)
-				continue;
-
-			//int nbox0 = transform_one(k.box, map);
-			//if (nbox0 > box[0])
-			//	continue;
-
-			int[] nbox = transform(/*nbox0, */k.box, map);
-			assert Arrays.equals(nbox, transform(k.box, map));
-			if (compare(nbox, box) < 0) {
-				agent = nagent;
-				box = nbox;
-			}
-		}
-		return box == k.box ? k : new StateKey(agent, box);
+		// check that all boxes are outside of goal rooms
+		for (int a = 0; a < alive; a++)
+			if (start.box(a) && room[a] != -1 && goals[room[a]] > 0)
+				return false;
+		return true;
 	}
 
-	State normalize(State s) {
-		if (s == null || transforms.length == 0)
-			return s;
-		assert s.symmetry == 0;
-
-		int agent = s.agent;
-		int[] box = s.box;
-		int symmetry = 0;
-		int dir = s.dir;
-		int prev_agent = s.prev_agent;
-
-		for (int i = 0; i < transforms.length; i++) {
-			int[] map = transforms[i];
-			int[] dmap = dir_transforms[i];
-
-			int nagent = map[s.agent];
-			if (nagent < agent) {
-				agent = nagent;
-				box = transform(s.box, map);
-				symmetry = i + 1;
-				dir = dmap[s.dir];
-				prev_agent = map[s.prev_agent];
-				continue;
-			}
-
-			if (nagent > agent)
-				continue;
-
-			//int nbox0 = transform_one(s.box, map);
-			//if (nbox0 > box[0])
-			//	continue;
-
-			int[] nbox = transform(/*nbox0, */s.box, map);
-			assert Arrays.equals(nbox, transform(s.box, map));
-			if (compare(nbox, box) < 0) {
-				agent = nagent;
-				box = nbox;
-				symmetry = i + 1;
-				dir = dmap[s.dir];
-				prev_agent = map[s.prev_agent];
-			}
-		}
-		State q = s;
-		if (box != s.box) {
-			q = new State(agent, box, symmetry, s.dist, dir, s.pushes, prev_agent);
-			q.set_heuristic(s.total_dist - s.dist);
-		}
-		assert ((StateKey) q).equals(normalize((StateKey) s));
-		assert Arrays.equals(denormalize(q).box, s.box);
-		assert denormalize(q).agent == s.agent;
-		assert denormalize(q).pushes == s.pushes;
-		assert denormalize(q).dist == s.dist;
-		assert denormalize(q).total_dist == s.total_dist;
-		assert denormalize(q).prev_agent == s.prev_agent;
-		assert denormalize(q).dir == s.dir : denormalize(q).dir + " " + q.dir + " " + s.dir + " " + q.symmetry;
-		assert denormalize(q).equals(s);
-		return q;
-	}
-
-	State denormalize(State s) {
-		if (s == null || s.symmetry == 0)
-			return s;
-		int[] map = inv_transforms[s.symmetry - 1];
-		int[] dmap = inv_dir_transforms[s.symmetry - 1];
-		State q = new State(map[s.agent], transform(s.box, map), 0, s.dist, dmap[s.dir], s.pushes, map[s.prev_agent]);
-		q.set_heuristic(s.total_dist - s.dist);
-		return q;
-	}
+	final boolean has_goal_rooms;
+	final int[] room;
 
 	private int find_bottlenecks(int a, int[] discovery, int parent, int[] time) {
 		int children = 0;
@@ -373,7 +243,7 @@ final class Level {
 				assert agent_distance[i][j] == agent_distance[j][i];
 	}
 
-	int state_space() {
+	public int state_space() {
 		BigInteger agent_positions = BigInteger.valueOf(cells - num_boxes);
 		return Util.combinations(alive, num_boxes).multiply(agent_positions).bitLength();
 	}
@@ -398,8 +268,24 @@ final class Level {
 		});
 	}
 
+	char[] render(IndexToBool agent, IndexToBool box) {
+		return low.render(p -> {
+			if (box.fn(p))
+				return goal(p) ? LowLevel.BoxGoal : LowLevel.Box;
+			if (agent.fn(p))
+				return goal(p) ? LowLevel.AgentGoal : LowLevel.Agent;
+			if (goal(p))
+				return LowLevel.Goal;
+			return ' ';
+		});
+	}
+
 	void print(StateKey s) {
 		print(p -> s.agent == p, p -> s.box(p));
+	}
+
+	char[] render(StateKey s) {
+		return render(p -> s.agent == p, p -> s.box(p));
 	}
 
 	static final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
@@ -410,8 +296,9 @@ final class Level {
 			low_clone.compute_walkable();
 			if (!low_clone.check_boxes_and_goals_silent())
 				return false;
-			BitMatrix visited = new BitMatrix(low_clone.cells(), low_clone.cells()); // TODO this is huge, as cells is raw buffer size
-			return low_clone.new AreAllGoalsReachable().run(visited);
+			PairVisitor visitor = new PairVisitor(low_clone.cells(), low_clone.cells());
+			return has_goal_rooms ? low_clone.are_all_goals_reachable_quick(visitor)
+					: low_clone.are_all_goals_reachable_full(visitor);
 		}
 	}
 
@@ -453,17 +340,21 @@ final class Level {
 		return (move(pos, Left) == -1 && move(pos, Right) == -1) || (move(pos, Up) == -1 && move(pos, Down) == -1);
 	}
 
+	boolean bottleneck_tunnel(int pos) {
+		return bottleneck[pos] && tunnel(pos);
+	}
+
 	final int[][] moves; // TODO make also box_moves which doesn't include dead cells
 	final int[][] dirs;
 	final int[][] delta;
 	final int[][] agent_distance;
-	final boolean[] bottleneck;
+	public final boolean[] bottleneck;
 	final Visitor visitor;
 
-	final int alive; // number of cells that can contain boxes
-	final int cells; // number of cells agent can walk on
-	final int num_boxes;
-	final State start;
+	public final int alive; // number of cells that can contain boxes
+	public final int cells; // number of cells agent can walk on
+	public final int num_boxes;
+	public final State start;
 	final int[] goal;
 
 	// index, direction => index * 4 + direction

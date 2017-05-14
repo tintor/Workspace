@@ -8,6 +8,7 @@ final class StateArray {
 	private short[] agent_array = Array.EmptyShortArray;
 	private int[] boxes_array = Array.EmptyIntArray;
 	private int size;
+	int garbage;
 
 	int size() {
 		return size;
@@ -33,5 +34,16 @@ final class StateArray {
 		for (int i = 0; i < N; i++)
 			box[i] = boxes_array[size * N + i];
 		return new StateKey(((int) agent_array[size]) & 0xFFFF, box);
+	}
+
+	void remove_if(StateKeyPredicate fn) {
+		int N = boxes_array.length / agent_array.length;
+		for (int i = 0; i < size; i++)
+			if (fn.test(agent_array[i], boxes_array, i * N)) {
+				size -= 1;
+				agent_array[i] = agent_array[size];
+				Array.copy(boxes_array, size * N, boxes_array, i * N, N);
+				i -= 1;
+			}
 	}
 }

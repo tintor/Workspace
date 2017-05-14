@@ -4,14 +4,13 @@ import java.util.ArrayList;
 import java.util.Scanner;
 
 import tintor.common.Array;
-import tintor.common.ArrayDequeInt;
-import tintor.common.BinaryHeapInt;
-import tintor.common.BitMatrix;
+import tintor.common.BipartiteMatching;
+import tintor.common.PairVisitor;
 import tintor.common.Regex;
 import tintor.common.Util;
 import tintor.common.Visitor;
 
-class LowLevel {
+public final class LowLevel {
 	private static String preprocess(String line) {
 		if (line.startsWith("'") || line.startsWith(";") || line.trim().isEmpty() || Regex.matches(line, "^Level\\s+"))
 			return "";
@@ -265,106 +264,88 @@ class LowLevel {
 		return false;
 	}
 
-	class AreAllGoalsReachable {
-		int num_goals;
-		int[] goals;
-		boolean[] reached = new boolean[cells()];
-
-		int manhattan_dist(int a, int b) {
-			int ax = a % width, ay = a / width;
-			int bx = b % width, by = b / width;
-			return Math.abs(ax - bx) + Math.abs(ay - by);
-		}
-
-		int min_manhattan_dist_to_goal(int a) {
-			int d = Integer.MAX_VALUE;
-			for (int e : goals)
-				if (!reached[e])
-					d = Math.min(d, manhattan_dist(a, e));
-			return d;
-		}
-
-		int make_pair(int a, int b) {
-			int dist = manhattan_dist(a, b) + min_manhattan_dist_to_goal(b);
-			assert 0 <= dist && dist < (1 << 8);
-			dist -= 128;
-			assert -128 <= dist && dist <= 127;
-			assert !(dist < 0) || ((dist << 24) < 0);
-			assert !(dist >= 0) || ((dist << 24) >= 0);
-
-			assert 0 <= a && a < (1 << 12);
-			assert 0 <= b && b < (1 << 12);
-			return (dist << 24) | (a << 12) | b;
-		}
-
-		int update_pair(int pair) {
-			return make_pair((pair >> 12) & 0xFFF, pair & 0xFFF);
-		}
-
-		void init_goals_without_boxes() {
-			num_goals = 0;
-			for (int i = 0; i < cells(); i++)
-				if (goal(i) && !box(i))
-					num_goals += 1;
-			goals = new int[num_goals];
-			int w = 0;
-			for (int i = 0; i < cells(); i++)
-				if (goal(i) && !box(i))
-					goals[w++] = i;
-		}
-
-		// is every goal reachable by some box
-		boolean run(BitMatrix visited) {
-			BinaryHeapInt queue = new BinaryHeapInt();
-			init_goals_without_boxes();
-			int num_goals = goals.length;
-			if (num_goals == 0)
-				return true;
-			final int agent = agent();
-			for (int i = 0; i < cells(); i++)
-				if (box(i))
-					queue.add(make_pair(agent, i));
-
-			while (queue.size() > 0) {
-				final int s = queue.removeMin();
-				final int s_agent = (s >> 12) & 0xFFF;
-				final int s_box = s & 0xFFF;
-
+	public boolean are_all_goals_reachable_quick(PairVisitor visitor) {
+		// TODO assert original level is single_goal_room
+		main: for (int g = 0; g < cells(); g++) {
+			if (!goal(g) || box(g))
+				continue;
+			visitor.init();
+			for (int dir = 0; dir < 4; dir++) {
+				int a = move(g, dir);
+				if (a == Level.Bad)
+					continue;
+				visitor.add(a, g);
+			}
+			while (!visitor.done()) {
+				final int a = visitor.first();
+				final int b = visitor.second();
 				for (int dir = 0; dir < 4; dir++) {
-					final int ap = move(s_agent, dir);
-					if (ap == Level.Bad)
+					int c = move(a, dir);
+					if (c == Level.Bad || c == b)
 						continue;
-					if (ap != s_box) {
-						if (visited.try_set(ap, s_box))
-							queue.add(make_pair(ap, s_box));
-						continue;
-					}
-					final int bp = move(ap, dir);
-					if (bp != Level.Bad && visited.try_set(ap, bp)) {
-						if (goal(bp) && !reached[bp]) {
-							reached[bp] = true;
-							if (--num_goals == 0)
-								return true;
-							for (int i = 0; i < queue.size(); i++)
-								queue.set(i, update_pair(queue.get(i)));
-							queue.heapify();
-						}
-						queue.add(make_pair(ap, bp));
-					}
+					visitor.try_add(c, b);
+					if (move(a, Level.reverseDir(dir)) == b && visitor.try_add(c, a))
+						if (box(a) && !goal(a) && !goal(c))
+							continue main;
 				}
 			}
 			return false;
 		}
+		return true;
 	}
 
-	private static int make_pair(int a, int b) {
-		assert 0 <= a && a < (1 << 12);
-		assert 0 <= b && b < (1 << 12);
-		return (a << 12) | b;
+	// TODO what deadlocks are found by are_all_goals_reachable_full, but not by are_all_goals_reachable_quick
+	public boolean are_all_goals_reachable_full(PairVisitor visitor) {
+		int[] num = new int[2];
+		int[] box_ordinal = Array.ofInt(cells(), p -> box(p) ? num[0]++ : -1);
+		int[] goal_ordinal = Array.ofInt(cells(), p -> goal(p) ? num[1]++ : -1);
+		if (num[0] != num[1])
+			return false;
+		int num_boxes = num[0];
+		if (num_boxes == 0)
+			return true;
+
+		boolean[][] can_reach = new boolean[num_boxes][num_boxes];
+		main: for (int g = 0; g < cells(); g++) {
+			if (!goal(g))
+				continue;
+			int count = 0;
+			if (box(g)) {
+				can_reach[box_ordinal[g]][goal_ordinal[g]] = true;
+				if (++count == num_boxes)
+					continue main;
+			}
+			visitor.init();
+			for (int dir = 0; dir < 4; dir++) {
+				int a = move(g, dir);
+				if (a == Level.Bad)
+					continue;
+				visitor.add(a, g);
+			}
+			while (!visitor.done()) {
+				final int a = visitor.first();
+				final int b = visitor.second();
+				for (int dir = 0; dir < 4; dir++) {
+					int c = move(a, dir);
+					if (c == Level.Bad || c == b)
+						continue;
+					visitor.try_add(c, b);
+					if (move(a, Level.reverseDir(dir)) == b && visitor.try_add(c, a))
+						if (box(a) && !can_reach[box_ordinal[a]][goal_ordinal[g]]) {
+							can_reach[box_ordinal[a]][goal_ordinal[g]] = true;
+							if (++count == num_boxes)
+								continue main;
+						}
+				}
+			}
+			if (count == 0)
+				return false;
+		}
+		return BipartiteMatching.maxBPM(can_reach) == num_boxes;
 	}
 
 	// TODO instead of searching forward N times => search backward once from every goal
-	boolean[] compute_alive(ArrayDequeInt deque, BitMatrix visited, boolean[] walkable) {
+	boolean[] compute_alive(PairVisitor visitor, boolean[] walkable) {
 		boolean[] alive = new boolean[cells()];
 		for (int b = 0; b < cells(); b++) {
 			if (!walkable[b])
@@ -374,28 +355,23 @@ class LowLevel {
 				continue;
 			}
 
-			deque.clear();
-			visited.clear();
+			visitor.init();
 			for (int dir = 0; dir < 4; dir++) {
 				int a = move(b, dir);
-				if (a != Level.Bad) {
-					deque.addLast(make_pair(a, b));
-					visited.set(a, b);
-				}
+				if (a != Level.Bad)
+					visitor.add(a, b);
 			}
 
-			while (!deque.isEmpty()) {
-				final int s = deque.removeFirst();
-				final int s_agent = (s >> 12) & 0xFFF;
-				final int s_box = s & 0xFFF;
+			loop: while (!visitor.done()) {
+				final int s_agent = visitor.first();
+				final int s_box = visitor.second();
 
 				for (int dir = 0; dir < 4; dir++) {
 					final int ap = move(s_agent, dir);
 					if (ap == Level.Bad)
 						continue;
 					if (ap != s_box) {
-						if (visited.try_set(ap, s_box))
-							deque.addLast(make_pair(ap, s_box));
+						visitor.try_add(ap, s_box);
 						continue;
 					}
 					final int bp = move(ap, dir);
@@ -403,11 +379,9 @@ class LowLevel {
 						continue;
 					if (goal(bp)) {
 						alive[b] = true;
-						deque.clear();
-						break;
+						break loop;
 					}
-					if (visited.try_set(ap, bp))
-						deque.addLast(make_pair(ap, bp));
+					visitor.try_add(ap, bp);
 				}
 			}
 		}
@@ -546,5 +520,5 @@ class LowLevel {
 	final int dist; // initial distance of agent
 	char[] buffer;
 	protected int[] new_to_old;
-	final String name;
+	public final String name;
 }

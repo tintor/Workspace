@@ -4,12 +4,6 @@ import java.util.Arrays;
 
 import tintor.common.IHashSet.Remover;
 
-interface IteratorInt {
-	boolean hasNext();
-
-	int next();
-}
-
 public final class OpenAddressingHashSetInt {
 	private int[] array;
 	private int size;

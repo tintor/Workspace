@@ -1,7 +1,9 @@
-package tintor.common;
+package tintor.common.test;
 
 import org.junit.Assert;
 import org.junit.Test;
+
+import tintor.common.BinaryHeap;
 
 public class BinaryHeapTest {
 	@Test

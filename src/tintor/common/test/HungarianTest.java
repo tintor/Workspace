@@ -1,6 +1,10 @@
-package tintor.common;
+package tintor.common.test;
 
 import java.util.Random;
+
+import tintor.common.Hungarian;
+import tintor.common.Log;
+import tintor.common.Timer;
 
 public class HungarianTest {
 	static Timer timer = new Timer();

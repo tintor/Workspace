@@ -4,18 +4,18 @@ import tintor.common.AutoTimer;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
 
-final class ClosedSet {
+public final class ClosedSet {
 	final StateMap map;
-	final Level level;
+	final LevelTransforms transforms;
 	static final AutoTimer timer_add = new AutoTimer("closed.add");
 	static final AutoTimer timer_contains = new AutoTimer("closed.contains");
 
 	ClosedSet(Level level) {
-		this.level = level;
-		map = new StateMap(level.alive);
+		this.transforms = level.transforms;
+		map = new StateMap(level.alive, level.cells);
 	}
 
-	int size() {
+	public int size() {
 		return map.size();
 	}
 
@@ -30,7 +30,7 @@ final class ClosedSet {
 
 	void add(State s) {
 		try (AutoTimer t = timer_add.open()) {
-			State a = level.normalize(s);
+			State a = transforms.normalize(s);
 			assert !map.contains(a);
 			map.insert(a);
 		}
@@ -38,11 +38,11 @@ final class ClosedSet {
 
 	boolean contains(StateKey s) {
 		try (AutoTimer t = timer_contains.open()) {
-			return map.contains(level.normalize(s));
+			return map.contains(transforms.normalize(s));
 		}
 	}
 
 	State get(StateKey s) {
-		return level.denormalize(map.get(level.normalize(s)));
+		return transforms.denormalize(map.get(transforms.normalize(s)));
 	}
 }

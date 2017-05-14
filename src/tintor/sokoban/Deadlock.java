@@ -3,9 +3,7 @@ package tintor.sokoban;
 import java.io.FileWriter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.Bits;
 import tintor.common.InstrumentationAgent;
@@ -14,139 +12,69 @@ import tintor.common.Visitor;
 
 // TODO: new int[] + System.arraycopy() might be faster than clone() (or maybe even Arrays.copyOf(array, array.length))
 
-final class Deadlock {
-	final static class Patterns {
-		public long[] array_box = new long[0];
-
-		public int size;
-		public int[] end;
-
-		public Patterns(int level_num_boxes, int level_alive) {
-			end = new int[level_num_boxes + 1];
-		}
-
-		public void add(int[] box, int num_boxes) {
-			if (matches(box, num_boxes))
-				return;
-
-			final int N = (box.length + 1) / 2;
-			if (array_box.length == size * N)
-				array_box = Arrays.copyOf(array_box, Math.max(N, array_box.length * 2));
-
-			int x = end[num_boxes];
-			System.arraycopy(array_box, x * N, array_box, (x + 1) * N, (size - x) * N);
-			for (int i = 0; i < N; i++) {
-				long b = intLow(box[i * 2]);
-				if (box.length > i * 2 + 1)
-					b |= intHigh(box[i * 2 + 1]);
-				array_box[x * N + i] = b;
-			}
-			size += 1;
-			for (int i = num_boxes; i < end.length; i++)
-				end[i] += 1;
-		}
-
-		static long intLow(int a) {
-			return a & 0xFFFFFFFFl;
-		}
-
-		static long intHigh(int a) {
-			return ((long) a) << 32;
-		}
-
-		public boolean matches(int[] box, int num_boxes) {
-			return matches_internal(box, num_boxes) != -1;
-		}
-
-		public int matches_internal(int[] box, int num_boxes) {
-			final int N = (box.length + 1) / 2;
-
-			long box0 = intLow(box[0]);
-			if (box.length > 1)
-				box0 |= intHigh(box[1]);
-			if (N == 1) {
-				for (int i = 0; i < end[num_boxes]; i++)
-					if ((box0 | array_box[i]) == box0)
-						return i;
-				return -1;
-			}
-
-			long box1 = intLow(box[2]);
-			if (box.length > 3)
-				box1 |= intHigh(box[3]);
-			if (N == 2) {
-				for (int i = 0; i < end[num_boxes]; i++)
-					if ((box0 | array_box[i * 2]) == box0 && (box1 | array_box[i * 2 + 1]) == box1)
-						return i;
-				return -1;
-			}
-
-			long[] lbox = new long[N];
-			lbox[0] = box0;
-			lbox[1] = box1;
-			for (int i = 2; i < N; i++) {
-				long b = intLow(box[i * 2]);
-				if (box.length > i * 2 + 1)
-					b |= intHigh(box[i * 2 + 1]);
-				lbox[i] = b;
-			}
-			for (int i = 0; i < end[num_boxes]; i++)
-				if (matches_one(i, lbox))
-					return i;
-			return -1;
-		}
-
-		private boolean matches_one(int index, long[] box) {
-			for (int i = 0; i < box.length; i++)
-				if ((box[i] | array_box[index * box.length + i]) != box[i])
-					return false;
-			return true;
-		}
-	}
-
+public final class Deadlock {
 	ClosedSet closed;
 	OpenSet open;
 
+	public final PatternIndex patternIndex;
 	private final Visitor visitor;
-	private final Patterns[] pattern_index;
-	int patterns;
-	int[] histogram;
 	private final Level level;
-	private FileWriter pattern_file;
+
+	// Used by isGoalZoneDeadlock
+	private final ArrayDeque<StateKey> queue = new ArrayDeque<>();
+	private StateSet explored;
+
+	private FileWriter goal_zone_deadlocks_file = Util.openWriter("goalzone_deadlocks.txt");
+	private FileWriter is_valid_level_deadlocks_file = Util.openWriter("isvalidlevel_deadlocks.txt");
 
 	private static final AutoTimer timer = new AutoTimer("deadlock");
 	private static final AutoTimer timer_frozen = new AutoTimer("deadlock.frozen");
-	private static final AutoTimer timer_match = new AutoTimer("deadlock.match");
-	private static final AutoTimer timer_add = new AutoTimer("deadlock.add");
 	private static final AutoTimer timer_minimize = new AutoTimer("deadlock.minimize");
-	private static final AutoTimer timer_cleanup = new AutoTimer("deadlock.cleanup");
 	private static final AutoTimer timer_goalzone = new AutoTimer("deadlock.goalzone");
+	private static final AutoTimer timer_cleanup = new AutoTimer("deadlock.cleanup");
 
 	private int deadlocks = 0;
 	private int non_deadlocks = 0;
 	private int trivial = 0;
 	private int goalzone_deadlocks = 0;
 	private int isvalidlevel_deadlocks = 0;
+	private int cleanup_count = 0;
+
+	private boolean should_cleanup(int agent, int[] box, int offset) {
+		if (!patternIndex.matchesNew(agent, box, offset, level.num_boxes))
+			return false;
+		cleanup_count += 1;
+		return true;
+	}
 
 	void report() {
-		System.out.printf("dead:%s live:%s rev:%s goaldead:%s ivldead:%s db:%s db2:%s memory:%s\n",
+		if (patternIndex.hasNew()) {
+			try (AutoTimer t = timer_cleanup.openExclusive()) {
+				open.remove_if(this::should_cleanup);
+				closed.remove_if(this::should_cleanup);
+			}
+			patternIndex.clearNew();
+		}
+
+		System.out.printf("dead:%s live:%s rev:%s goaldead:%s ivldead:%s db:%s db2:%s\n  memory:%s cleanup:%s\n",
 				Util.human(deadlocks), Util.human(non_deadlocks), Util.human(trivial), Util.human(goalzone_deadlocks),
-				Util.human(isvalidlevel_deadlocks), Util.human(patterns), Util.human(goal_zone_patterns.size()),
-				Util.human(InstrumentationAgent.deepSizeOf(pattern_index)));
+				Util.human(isvalidlevel_deadlocks), Util.human(patternIndex.size()),
+				Util.human(goal_zone_patterns.size()), Util.human(InstrumentationAgent.deepSizeOf(patternIndex)),
+				Util.human(cleanup_count));
+		Util.flush(goal_zone_deadlocks_file);
+		Util.flush(is_valid_level_deadlocks_file);
 	}
 
-	Deadlock(Level level) {
+	public Deadlock(Level level) {
 		this.level = level;
 		visitor = new Visitor(level.cells);
-		pattern_index = Array.make(level.cells, i -> new Patterns(level.num_boxes, level.alive));
-		histogram = new int[level.num_boxes - 1];
-		pattern_file = Util.checkIOException(() -> new FileWriter("patterns.txt", false));
+		patternIndex = new PatternIndex(level);
 	}
 
-	private final ArrayDeque<StateKey> queue = new ArrayDeque<>();
-	private StateSet explored;
-
 	private boolean isGoalZoneDeadlock(StateKey s) {
+		if (!level.has_goal_zone)
+			return false;
+
 		// remove all boxes not on goals
 		int[] box = s.box.clone();
 		for (int b = 0; b < level.alive; b++)
@@ -168,6 +96,7 @@ final class Deadlock {
 			int reachableGoals = 0;
 			int boxesOnGoals = Bits.count(q.box);
 			// TODO configure visitor so that in case of a single goal room agent doesn't have to go outside all the time
+			// TODO in case of multiple goal rooms do it for each room separately
 			while (!visitor.done()) {
 				int a = visitor.next();
 				if (level.goal(a)) {
@@ -209,26 +138,8 @@ final class Deadlock {
 			}
 		}
 		goalzone_deadlocks += 1;
+		Util.write(goal_zone_deadlocks_file, level.render(s));
 		return true;
-	}
-
-	private boolean looksLikeAPush(int agent, int[] box) {
-		for (int dir = 0; dir < 4; dir++) {
-			int b = level.move(agent, dir);
-			if (b == -1 || b >= level.alive || !Bits.test(box, b))
-				continue;
-			int s = level.rmove(agent, dir);
-			if (s != -1 && (s >= level.alive || !Bits.test(box, s)))
-				return true;
-		}
-		return false;
-	}
-
-	private boolean matchesPattern(int agent, int[] box, int num_boxes) {
-		try (AutoTimer t = timer_match.open()) {
-			assert looksLikeAPush(agent, box);
-			return pattern_index[agent].matches(box, num_boxes);
-		}
 	}
 
 	static enum Result {
@@ -236,7 +147,7 @@ final class Deadlock {
 	}
 
 	// Note: modifies input array!
-	private Result containsFrozenBoxes(int agent, int[] box, int num_boxes) {
+	private Result containsFrozenBoxes(final int agent, int[] box, int num_boxes) {
 		try (AutoTimer t = timer_frozen.open()) {
 			if (num_boxes < 2)
 				return Result.NotFrozen;
@@ -262,7 +173,7 @@ final class Deadlock {
 
 					Bits.clear(box, b);
 					Bits.set(box, c);
-					boolean m = matchesPattern(b, box, num_boxes);
+					boolean m = patternIndex.matches(b, box, 0, num_boxes, true);
 					Bits.clear(box, c);
 					if (m) {
 						Bits.set(box, b);
@@ -299,6 +210,7 @@ final class Deadlock {
 				return level.goal(p) ? LowLevel.Goal : LowLevel.Space;
 			})) {
 				isvalidlevel_deadlocks += 1;
+				Util.write(is_valid_level_deadlocks_file, level.render(new StateKey(agent, original_box)));
 				return Result.GoalZoneDeadlock;
 			}
 
@@ -309,11 +221,13 @@ final class Deadlock {
 	// Looks for boxes not on goal that can't be moved
 	// return true - means it is definitely a deadlock
 	// return false - not sure if it is a deadlock
-	private boolean checkInternal(State s, int num_boxes) {
+	private boolean checkInternal(State s, int num_boxes, boolean incremental) {
 		// TODO do we really need this?
 		if (level.is_solved_fast(s.box))
 			return false;
-		if (matchesPattern(s.agent, s.box, num_boxes) || matchesGoalZonePattern(s.agent, s.box))
+		if (patternIndex.matches(s.agent, s.box, 0, num_boxes, incremental))
+			return true;
+		if (matchesGoalZonePattern(s.agent, s.box))
 			return true;
 		try (AutoTimer t = timer_goalzone.open()) {
 			if (isGoalZoneDeadlock(s))
@@ -380,36 +294,8 @@ final class Deadlock {
 		}
 
 		// Save remaining state as a new deadlock pattern
-		try (AutoTimer t = timer_add.open()) {
-			addPatternToFile(agent, box);
-			histogram[num_boxes - 2] += 1;
-			for (int b = 0; b < level.alive; b++)
-				if (Bits.test(box, b))
-					for (int a = 0; a < level.cells; a++)
-						if (agent[a])
-							pattern_index[a].add(box, num_boxes);
-			patterns += 1;
-		}
-
-		try (AutoTimer t = timer_cleanup.open()) {
-			StateKeyPredicate predicate = (s_agent, s_box) -> matchesPattern(s_agent, s_box, level.num_boxes);
-			open.remove_if(predicate);
-			closed.remove_if(predicate);
-		}
+		patternIndex.add(agent, box, num_boxes);
 		return true;
-
-	}
-
-	private void addPatternToFile(boolean[] agent, int[] box) {
-		char[] buffer = level.low.render(p -> {
-			if (p < box.length * 32 && Bits.test(box, p))
-				return '$';
-			if (agent[p])
-				return ' ';
-			return '.';
-		});
-		Util.checkIOException(() -> pattern_file.write(buffer, 0, buffer.length));
-		Util.checkIOException(() -> pattern_file.flush());
 	}
 
 	static class GoalZonePattern {
@@ -442,14 +328,26 @@ final class Deadlock {
 
 	private final static boolean goal_zone_crap = false;
 
-	boolean check(State s) {
+	public boolean checkIncremental(State s) {
 		try (AutoTimer t = timer.open()) {
 			assert !s.is_initial();
 			if (LevelUtil.is_reversible_push(s, level)) {
 				trivial += 1;
 				return false;
 			}
-			if (checkInternal(s, level.num_boxes)) {
+			if (checkInternal(s, level.num_boxes, true)) {
+				deadlocks += 1;
+				return true;
+			}
+			non_deadlocks += 1;
+			return false;
+		}
+	}
+
+	public boolean checkFull(State s) {
+		try (AutoTimer t = timer.open()) {
+			assert !s.is_initial();
+			if (checkInternal(s, level.num_boxes, false)) {
 				deadlocks += 1;
 				return true;
 			}

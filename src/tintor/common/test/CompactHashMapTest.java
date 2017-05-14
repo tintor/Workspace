@@ -1,4 +1,4 @@
-package tintor.common;
+package tintor.common.test;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -8,6 +8,12 @@ import java.util.Iterator;
 import java.util.Random;
 
 import org.junit.Test;
+
+import tintor.common.CompactHashMap;
+import tintor.common.InstrumentationAgent;
+import tintor.common.Log;
+import tintor.common.Measurer;
+import tintor.common.Util;
 
 public class CompactHashMapTest {
 	static byte[] make(int a) {

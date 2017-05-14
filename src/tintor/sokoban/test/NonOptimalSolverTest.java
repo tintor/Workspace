@@ -1,7 +1,11 @@
-package tintor.sokoban;
+package tintor.sokoban.test;
 
 import org.junit.Assert;
 import org.junit.Test;
+
+import tintor.sokoban.AStarSolver;
+import tintor.sokoban.Level;
+import tintor.sokoban.State;
 
 public class NonOptimalSolverTest {
 	@Test

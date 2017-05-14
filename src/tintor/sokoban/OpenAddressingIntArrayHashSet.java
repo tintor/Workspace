@@ -10,4 +10,12 @@ final class OpenAddressingIntArrayHashSet extends OpenAddressingIntArrayHashBase
 		insert_unsafe_internal(k);
 		grow();
 	}
+
+	public boolean insert(int[] k) {
+		int a = insert_or_update_internal(k);
+		if (a < 0)
+			return false;
+		grow();
+		return true;
+	}
 }

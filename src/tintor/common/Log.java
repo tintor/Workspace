@@ -10,13 +10,13 @@ public class Log {
 
 	private static long start_millis = System.currentTimeMillis();
 	public static Level level = Level.ALL;
-	public static boolean raw = false;
+	public static boolean mode_raw = false;
 
 	private static void log(Level level, String format, Object... args) {
 		if (Log.level.ordinal() > level.ordinal())
 			return;
 
-		if (raw) {
+		if (mode_raw) {
 			System.out.printf(format + "\n", args);
 			return;
 		}

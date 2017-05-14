@@ -1,6 +1,8 @@
-package tintor.sokoban;
+package tintor.sokoban.test;
 
 import org.junit.Test;
+
+import tintor.sokoban.Level;
 
 public class StateTest {
 	@Test

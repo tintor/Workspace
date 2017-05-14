@@ -1,4 +1,4 @@
-package tintor.sokoban;
+package tintor.sokoban.test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -9,6 +9,7 @@ import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 
 import tintor.common.ParallelParameterized;
+import tintor.sokoban.Level;
 
 // Makes sure all levels can load quickly
 @RunWith(ParallelParameterized.class)

@@ -1,9 +1,10 @@
-package tintor.sokoban;
+package tintor.sokoban.test;
 
 import org.junit.Assert;
 import org.junit.Test;
 
 import tintor.common.Util;
+import tintor.sokoban.Level;
 
 public class LevelTest {
 	@Test
