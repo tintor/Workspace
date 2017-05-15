@@ -2,8 +2,8 @@ package tintor.sokoban;
 
 import java.util.Arrays;
 
+import tintor.common.Array;
 import tintor.common.Bits;
-import tintor.common.Visitor;
 import tintor.sokoban.Cell.Dir;
 
 class StateKey {
@@ -127,16 +127,16 @@ public final class State extends StateKey {
 		assert b.alive;
 		assert !box(b);
 		for (int i = 0; i < pushes - 1; i++) {
-			b = b.rmove(Dir.values()[dir]);
+			b = b.rmove(Dir.values()[dir]).cell;
 			assert b.alive;
 			assert !box(b);
 		}
 
-		Cell c = level.cells[agent].dir[dir];
+		Cell c = level.cells[agent].dir[dir].cell;
 		assert c.alive;
 		assert box(c);
 
-		int[] nbox = box.clone();
+		int[] nbox = Array.clone(box);
 		Bits.clear(nbox, c.id);
 		Bits.set(nbox, b.id);
 		return new StateKey(prev_agent, nbox);
@@ -147,57 +147,58 @@ public final class State extends StateKey {
 		Dir dir = m.dir;
 		assert symmetry == 0;
 		assert box(a.id);
-		assert !box(a.rmove(dir).id);
+		assert !box(a.rmove(dir).cell.id);
 
-		Cell b = a.move(dir);
-		if (b == null || !b.alive || box(b))
+		Move b = a.move(dir);
+		if (b == null || !b.alive || box(b.cell))
 			return null;
 
-		int[] nbox = box.clone();
+		int[] nbox = Array.clone(box);
 		Bits.clear(nbox, a.id);
-		Bits.set(nbox, b.id);
-		int pushes = m.dist;
+		Bits.set(nbox, b.cell.id);
+		int pushes = b.dist;
 
+		// TODO increase push limit
 		// keep pushing box until the end of tunnel
-		while (pushes < 15 && can_force_push(a, b, dir, optimal, level)) {
+		while (pushes < 15 && can_force_push(a, b.cell, dir, optimal, level)) {
 			// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
-			Cell c = b.move(dir);
-			if (c == null || !c.alive || box(c))
+			Move c = b.cell.move(dir);
+			if (c == null || !c.alive || box(c.cell))
 				return null;
-			a = b;
+			a = b.cell;
 			b = c;
 			Bits.clear(nbox, a.id);
-			Bits.set(nbox, b.id);
-			pushes += b.dist(dir);
+			Bits.set(nbox, b.cell.id);
+			pushes += c.dist;
 		}
 
-		State s = new State(a.id, nbox, 0, dist + moves + pushes, dir.ordinal(), pushes, prev_agent);
+		State s = new State(a.id, nbox, 0, dist + moves + m.dist - 1 + pushes, dir.ordinal(), pushes, prev_agent);
 		assert s.prev(level).equals(this);
 		return s;
 	}
 
 	private boolean more_goals_than_boxes_in_room(Cell a, Cell door, Level level) {
 		assert door.moves.length == 2 && door.bottleneck;
-		Visitor visitor = level.visitor;
-		visitor.init(a.id);
-		visitor.visited()[door.id] = true;
 		int result = 0;
-		while (!visitor.done()) {
-			Cell b = level.cells[visitor.next()];
+		for (Cell b : level.visitor.init(a).markVisited(door)) {
 			if (b.goal)
 				result += 1;
 			if (box(b))
 				result -= 1;
 			for (Move c : b.moves)
-				visitor.try_add(c.cell.id);
+				level.visitor.try_add(c.cell);
 		}
 		return result > 0;
 	}
 
 	private boolean can_force_push(Cell a, Cell b, Dir dir, boolean optimal, Level level) {
-		if (b.goal)
-			return b.moves.length == 2 && b.bottleneck && !box(b.move(dir))
-					&& more_goals_than_boxes_in_room(b.move(dir), b, level);
+		if (b.goal) {
+			// TODO if a box is pushed inside a tunnel with a box already inside (on goal) and a goal in between,
+			// then keep pushing the box all the way through to that goal
+
+			return b.moves.length == 2 && b.bottleneck && !box(b.move(dir).cell)
+					&& more_goals_than_boxes_in_room(b.move(dir).cell, b, level);
+		}
 
 		// push through non-bottleneck tunnel
 		if (a.moves.length == 2 && b.moves.length == 2)

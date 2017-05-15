@@ -8,23 +8,25 @@ import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.BipartiteMatching;
 import tintor.common.Bits;
+import tintor.common.For;
 import tintor.common.PairVisitor;
 import tintor.common.Util;
-import tintor.common.Visitor;
 import tintor.sokoban.Cell.Dir;
 
 final class Move {
 	final Cell cell;
 	final Dir dir;
 	final int dist;
+	boolean alive;
 
-	Move(Cell cell, Dir dir, int dist) {
+	Move(Cell cell, Dir dir, int dist, boolean alive) {
 		assert cell != null;
 		assert dir != null;
 		assert dist > 0;
 		this.cell = cell;
 		this.dir = dir;
 		this.dist = dist;
+		this.alive = alive;
 	}
 }
 
@@ -38,16 +40,16 @@ public final class Level {
 	final static char Space = ' ';
 
 	public final String name;
-	final char[] buffer;
-	public final Cell[] cells;
-	public final int alive;
+	private final char[] buffer;
+	public Cell[] cells;
+	public int alive;
 	public final int num_boxes;
-	final Visitor visitor;
+	public final CellVisitor visitor;
 	public final State start;
 	final int[] goal;
-	final CellLevelTransforms transforms;
-	final boolean has_goal_rooms;
-	final boolean has_goal_zone;
+	public final CellLevelTransforms transforms;
+	public final boolean has_goal_rooms;
+	public final boolean has_goal_zone;
 
 	public static class MoreThan256CellsError extends Error {
 		private static final long serialVersionUID = 1L;
@@ -69,7 +71,7 @@ public final class Level {
 		return new Level(LevelLoader.load(filename), filename);
 	}
 
-	Level(char[] buffer, String name) {
+	private Level(char[] buffer, String name) {
 		int w = 0;
 		while (buffer[w] != '\n')
 			w++;
@@ -90,10 +92,8 @@ public final class Level {
 				int p = 0;
 				for (Dir dir : Dir.values()) {
 					int xy = move(c.xy, dir, w + 1, buffer.length);
-					if (grid[xy] != null) {
-						c.dir[dir.ordinal()] = grid[xy];
-						m[p++] = new Move(grid[xy], dir, 1);
-					}
+					if (grid[xy] != null)
+						c.dir[dir.ordinal()] = m[p++] = new Move(grid[xy], dir, 1, true);
 				}
 				c.moves = Arrays.copyOf(m, p);
 			}
@@ -130,11 +130,11 @@ public final class Level {
 			}
 
 		// Remove non-reachable cells
-		visitor = new Visitor(buffer.length);
-		visitor.add(agent.xy);
-		while (!visitor.done())
-			for (Move e : grid[visitor.next()].moves)
-				visitor.try_add(e.cell.xy);
+		visitor = new CellVisitor(buffer.length);
+		visitor.try_add(agent, agent.xy);
+		for (Cell a : visitor)
+			for (Move e : grid[a.xy].moves)
+				visitor.try_add(e.cell, e.cell.xy);
 		for (int i = 0; i < grid.length; i++)
 			if (grid[i] != null && !visitor.visited(grid[i].xy))
 				grid[i] = null;
@@ -203,19 +203,27 @@ public final class Level {
 				a = b;
 			}
 
+		// Set alive of all Moves
+		for (Cell a : cells)
+			for (Move e : a.moves)
+				e.alive = a.alive && e.cell.alive;
+
 		// Compress dead tunnels
 		if (compress_tunnels)
 			for (Cell a : cells)
 				if (!a.alive && a.tunnel_entrance()) {
-					Cell b = a.moves[0].cell.moves.length != 2 ? a.moves[1].cell : a.moves[0].cell;
-					while (b.moves.length == 2 && b.moves[0].cell.moves.length == 2
-							&& b.moves[1].cell.moves.length == 2) {
+					Move e = Array.find(a.moves, p -> p.cell.moves.length == 2);
+					Cell b = e.cell;
+					dist = e.dist;
+					while (!b.alive && b.tunnel_interior()) {
 						Cell c = cells[b.moves[0].cell.id ^ b.moves[1].cell.id ^ b.id];
-						// TODO delete b
+						cells[b.id] = null;
+						buffer[b.xy] = 'o';
 						detach(a, b);
-						//attach(a, c);
+						attach(a, new Move(c, e.dir, ++dist, false));
 						detach(c, b);
-						//attach(c, a);
+						// TODO second direction might be different if tunnel isn't straight
+						attach(c, new Move(a, e.dir.reverse(), dist, false));
 						b = c;
 					}
 				}
@@ -224,34 +232,53 @@ public final class Level {
 		if (compress_tunnels)
 			for (Cell a : cells)
 				if (a.alive && a.tunnel_entrance()) {
-					Cell b = a.moves[0].cell.moves.length != 2 ? a.moves[1].cell : a.moves[0].cell;
-					while (b.tunnel_interior()) {
+					Move e = Array.find(a.moves, p -> p.cell.moves.length == 2);
+					Cell b = e.cell;
+					dist = e.dist;
+					boolean is_alive = b.alive;
+					while (b.tunnel_interior() && !b.goal) {
 						Cell c = cells[b.moves[0].cell.id ^ b.moves[1].cell.id ^ b.id];
-						// TODO delete b
+						is_alive = is_alive && c.alive;
+						cells[b.id] = null;
+						buffer[b.xy] = 'o';
 						detach(a, b);
-						//attach(a, c);
+						attach(a, new Move(c, e.dir, ++dist, is_alive));
 						detach(c, b);
-						//attach(c, a);
+						// TODO second direction might be different if tunnel isn't straight
+						attach(c, new Move(c, e.dir.reverse(), dist, is_alive));
+						alive -= 1;
 						b = c;
 					}
 				}
 
-		// Put alive cells in front of dead cells
-		int a = 0, b = cells.length - 1;
-		while (true) {
-			while (a < b && cells[a].alive)
-				a += 1;
-			while (a < b && !cells[b].alive)
-				b -= 1;
-			if (a >= b)
-				break;
-			Cell q = cells[a];
-			cells[a] = cells[b];
-			cells[b] = q;
-			cells[a].id = a++;
-			cells[b].id = b--;
+		// Compress cell IDs
+		if (compress_tunnels) {
+			id = 0;
+			for (i = 0; i < cells.length; i++)
+				if (cells[i] != null)
+					cells[id++] = cells[i];
+			cells = Arrays.copyOf(cells, id);
+			for (i = 0; i < cells.length; i++)
+				cells[i].id = i;
+			assert alive == cells.length || !cells[alive].alive;
 		}
-		alive = cells[a].alive ? a + 1 : a;
+
+		// Put alive cells in front of dead cells
+		int p = 0, q = cells.length - 1;
+		while (true) {
+			while (p < q && cells[p].alive)
+				p += 1;
+			while (p < q && !cells[q].alive)
+				q -= 1;
+			if (p >= q)
+				break;
+			Cell e = cells[p];
+			cells[p] = cells[q];
+			cells[q] = e;
+			cells[p].id = p++;
+			cells[q].id = q--;
+		}
+		alive = cells[p].alive ? p + 1 : p;
 		assert Util.all(alive, e -> cells[e].alive);
 		assert Util.all(alive, cells.length, e -> !cells[e].alive);
 
@@ -275,55 +302,39 @@ public final class Level {
 		// Compute bottlenecks
 		find_bottlenecks(agent, new int[cells.length], null, new int[1]);
 
-		// Compute goal rooms
-		has_goal_rooms = has_goal_rooms();
-		has_goal_zone = has_goal_zone();
-	}
-
-	private static final boolean compress_tunnels = false;
-
-	private boolean has_goal_zone() {
-		for (Cell a : cells)
-			if (a.goal)
-				for (Move e : a.moves)
-					if (e.cell.goal)
-						return true;
-		return false;
-	}
-
-	private boolean has_goal_rooms() {
+		// Compute rooms
 		int room_count = 0;
 		for (Cell a : cells) {
-			if (a.bottleneck_tunnel() || a.room != -1)
+			if (a.bottleneck_tunnel() || a.room > 0)
 				continue;
-			visitor.init(a.id);
-			while (!visitor.done()) {
-				Cell b = cells[visitor.next()];
-				b.room = room_count;
+			for (Cell b : visitor.init(a)) {
+				b.room = room_count + 1;
 				for (Move e : b.moves)
 					if (!e.cell.bottleneck_tunnel())
-						visitor.try_add(e.cell.id);
+						visitor.try_add(e.cell);
 			}
 			room_count += 1;
 		}
 
-		if (Array.all(cells, c -> !c.bottleneck_tunnel()))
+		// Compute has_goal_rooms
+		has_goal_rooms = has_goal_rooms(room_count);
+
+		// Compute has_goal_zone
+		has_goal_zone = For.any(cells, a -> a.goal && For.any(a.moves, e -> e.cell.goal));
+	}
+
+	private static final boolean compress_tunnels = false;
+
+	private boolean has_goal_rooms(int room_count) {
+		if (For.any(cells, a -> a.goal && a.room == 0))
 			return false;
 
 		// count goals in each room
-		int[] goals_in_room = new int[room_count];
-		for (Cell a : cells)
-			if (a.goal) {
-				if (a.room == -1)
-					return false;
-				goals_in_room[a.room] += 1;
-			}
+		int[] goals_in_room = new int[room_count + 1];
+		For.each(cells, a -> goals_in_room[a.room] += a.goal ? 1 : 0);
 
 		// check that all boxes are outside of goal rooms
-		for (Cell a : cells)
-			if (a.box && a.room != -1 && goals_in_room[a.room] > 0)
-				return false;
-		return true;
+		return For.all(cells, a -> !a.box || goals_in_room[a.room] == 0);
 	}
 
 	public int state_space() {
@@ -348,16 +359,15 @@ public final class Level {
 		return low_a;
 	}
 
-	void compute_distances_to_each_goal(int goals, PairVisitor pair_visitor) {
-		for (Cell g : cells)
-			g.distance_box = Array.ofInt(goals, Cell.Infinity);
+	private void compute_distances_to_each_goal(int goals, PairVisitor pair_visitor) {
+		For.each(cells, g -> g.distance_box = Array.ofInt(goals, Cell.Infinity));
 		int[][] distance = Array.ofInt(cells.length, alive, Cell.Infinity);
 		for (Cell g : cells)
 			if (g.goal) {
 				pair_visitor.init();
 				for (Move e : g.moves) {
 					pair_visitor.add(e.cell.id, g.id);
-					distance[e.cell.id][g.id] = 0;
+					distance[e.cell.id][g.id] = e.dist - 1;
 				}
 				g.distance_box[g.goal_ordinal] = 0;
 
@@ -374,7 +384,8 @@ public final class Level {
 						Cell c = e.cell;
 						if (c != box && pair_visitor.try_add(c.id, box.id))
 							distance[c.id][box.id] = distance[agent.id][box.id] + e.dist;
-						if (agent.alive && agent.rmove(e.dir) == box && pair_visitor.try_add(c.id, agent.id))
+						Move m = agent.rmove(e.dir);
+						if (agent.alive && m != null && m.cell == box && pair_visitor.try_add(c.id, agent.id))
 							distance[c.id][agent.id] = distance[agent.id][box.id] + e.dist;
 					}
 				}
@@ -409,8 +420,8 @@ public final class Level {
 					if (c.id == b)
 						continue;
 					visitor.try_add(c.id, b);
-					Cell m = cells[a].rmove(e.dir);
-					if (m != null && m.id == b && visitor.try_add(c.id, a))
+					Move m = cells[a].rmove(e.dir);
+					if (m != null && m.cell.id == b && visitor.try_add(c.id, a))
 						if (cells[a].box && !can_reach[box_ordinal[a]][g.goal_ordinal]) {
 							can_reach[box_ordinal[a]][g.goal_ordinal] = true;
 							if (++count == num_boxes)
@@ -445,14 +456,14 @@ public final class Level {
 						visitor.try_add(e.cell.id, box.id);
 						continue;
 					}
-					final Cell q = e.cell.move(e.dir);
+					final Move q = e.cell.move(e.dir);
 					if (q == null)
 						continue;
-					if (q.goal) {
+					if (q.cell.goal) {
 						b.alive = true;
 						break loop;
 					}
-					visitor.try_add(e.cell.id, q.id);
+					visitor.try_add(e.cell.id, q.cell.id);
 				}
 			}
 		}
@@ -498,18 +509,23 @@ public final class Level {
 		for (int i = 0; i < a.moves.length; i++)
 			if (a.moves[i].cell == b) {
 				a.dir[a.moves[i].dir.ordinal()] = null;
-				a.moves[i] = a.moves[a.moves.length - 1];
-				a.moves = Arrays.copyOf(a.moves, a.moves.length - 1);
+				a.moves = Array.remove(a.moves, i);
+				return;
 			}
+		throw new Error();
+	}
+
+	private static void attach(Cell a, Move m) {
+		assert a.dir[m.dir.ordinal()] == null;
+		a.dir[m.dir.ordinal()] = m;
+		a.moves = Array.append(a.moves, m);
 	}
 
 	public char[] render(CellToChar ch) {
-		for (Cell c : cells) {
-			if (buffer[c.xy] == Wall || buffer[c.xy] == '\n')
-				throw new Error();
-			buffer[c.xy] = ch.fn(c);
-		}
-		return buffer;
+		char[] copy = buffer.clone();
+		for (Cell c : cells)
+			copy[c.xy] = ch.fn(c);
+		return copy;
 	}
 
 	public char[] render(StateKey s) {
@@ -570,7 +586,8 @@ public final class Level {
 					if (e.cell == b)
 						continue;
 					visitor.try_add(e.cell.id, b.id);
-					if (a.rmove(e.dir) == b && visitor.try_add(e.cell.id, a.id))
+					Move m = a.rmove(e.dir);
+					if (m != null && m.cell == b && visitor.try_add(e.cell.id, a.id))
 						if (a.box && !a.goal && !e.cell.goal)
 							continue main;
 				}

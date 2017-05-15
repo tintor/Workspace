@@ -2,6 +2,7 @@ package tintor.sokoban;
 
 import tintor.common.Array;
 import tintor.common.AutoTimer;
+import tintor.common.For;
 import tintor.common.Hungarian;
 
 final class Heuristic {
@@ -33,7 +34,7 @@ final class Heuristic {
 			assert bc == boxes.length;
 
 			int[] result = hungarian.execute();
-			Array.for_each(result, (i, e) -> result[i] = boxes[e].distance_box[i]);
+			For.each(result, (i, e) -> result[i] = boxes[e].distance_box[i]);
 			if (Array.contains(result, Infinity)) {
 				deadlocks += 1;
 				return Integer.MAX_VALUE;

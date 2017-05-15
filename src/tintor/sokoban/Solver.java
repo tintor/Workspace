@@ -9,7 +9,6 @@ import tintor.common.Timer;
 // Unsolved
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
 
-// TODO remove dead cells that don't border with alive cell
 // TODO push macro:
 // - if box is pushed inside a tunnel with a box already inside (on goal) then keep pushing the box all the way through
 // TODO goal cut:
@@ -35,13 +34,15 @@ import tintor.common.Timer;
 // TODO: record all Microban performance runs (also with snapshot of all the code, git branch / tag?)
 // TODO: how to teach solver to park boxes in rooms with single entrance (and to find out maximum parking space)?
 // TODO: be able to save Solver state and resume it later
+// TODO: +++ how to cut same distance (or worse) moves?
+// TODO: +++ how to cut low influence moves?
+// TODO: +++ be better at detecting deadlocks in far parts of the level
 
 // TODO: store extra data for every level: boxes, alive, cells, state_space,
 //       optimal_solution (steps and compute time), some_solution (steps and compute time)
 
 // Misc:
 // TODO: move unused common classes into a separate package 
-// TODO: move tests into a separate package
 
 // Deadlock:
 // TODO: Take every 2 and 3 box subset from start position and initialize deadlock DB
@@ -81,7 +82,8 @@ public class Solver {
 		for (int i = 0; i < solution.length; i++) {
 			State s = solution[i];
 			State n = i == solution.length - 1 ? null : solution[i + 1];
-			if (i == solution.length - 1 || level.cells[s.agent].dir[s.dir].id != n.agent || s.dir != n.dir) {
+			Cell agent = level.cells[s.agent];
+			if (i == solution.length - 1 || agent.dir[s.dir].cell.id != n.agent || s.dir != n.dir) {
 				System.out.printf("dist:%s heur:%s\n", s.dist, s.total_dist - s.dist);
 				level.print(s);
 			}
@@ -104,7 +106,7 @@ public class Solver {
 		Log.raw("alive");
 		level.print(p -> p.alive ? '.' : ' ');
 		Log.raw("tunnels");
-		level.print(p -> p.moves.length == 2 ? '.' : ' ');
+		level.print(p -> p.tunnel_entrance() || p.tunnel_interior() ? '.' : ' ');
 		Log.raw("rooms");
 		level.print(p -> p.room == -1 ? 'x' : hex(p.room));
 		AStarSolver solver = new AStarSolver(level, false);

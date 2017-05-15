@@ -11,18 +11,23 @@ public final class Array {
 	private Array() {
 	}
 
+	public static int[] clone(int[] array) {
+		int[] narray = new int[array.length];
+		copy(array, 0, narray, 0, array.length);
+		return narray;
+	}
+
+	public static <T> T[] append(T[] array, T m) {
+		array = Arrays.copyOf(array, array.length + 1);
+		array[array.length - 1] = m;
+		return array;
+	}
+
 	public static <T> T find(T[] array, Predicate<T> fn) {
 		for (T e : array)
 			if (fn.test(e))
 				return e;
 		return null;
-	}
-
-	public static <T> boolean all(T[] array, Predicate<T> fn) {
-		for (T e : array)
-			if (!fn.test(e))
-				return false;
-		return true;
 	}
 
 	public static <T> int count(T[] array, Predicate<T> fn) {
@@ -42,15 +47,6 @@ public final class Array {
 
 	public static void copy(Object src, int srcPos, Object dest, int destPos, int length) {
 		System.arraycopy(src, srcPos, dest, destPos, length);
-	}
-
-	public interface ForEachInt {
-		void call(int index, int element);
-	}
-
-	public static void for_each(int[] array, ForEachInt fn) {
-		for (int i = 0; i < array.length; i++)
-			fn.call(i, array[i]);
 	}
 
 	public static boolean contains(int[] array, int value) {
@@ -144,10 +140,17 @@ public final class Array {
 		return narray;
 	}
 
-	public static Object[] remove(Object[] array, int pos, int length) {
-		if (array.length == length)
-			return EmptyObjectArray;
-		Object[] narray = new Object[array.length - length];
+	@SuppressWarnings("unchecked")
+	public static <T> T[] create(T[] array, int length) {
+		return (T[]) java.lang.reflect.Array.newInstance(array.getClass().getComponentType(), length);
+	}
+
+	public static <T> T[] remove(T[] array, int pos) {
+		return remove(array, pos, 1);
+	}
+
+	public static <T> T[] remove(T[] array, int pos, int length) {
+		T[] narray = create(array, array.length - length);
 		copy(array, 0, narray, 0, pos);
 		copy(array, pos + length, narray, pos, array.length - pos - length);
 		return narray;

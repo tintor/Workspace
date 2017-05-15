@@ -111,10 +111,10 @@ public final class Deadlock {
 						visitor.try_add(b.id);
 						continue;
 					}
-					Cell c = b.move(e.dir);
+					Move c = b.move(e.dir);
 					if (c == null)
 						continue;
-					if (!c.goal) {
+					if (!c.cell.goal) {
 						// box is removed
 						if (--boxesOnGoals == 0)
 							return false;
@@ -122,11 +122,11 @@ public final class Deadlock {
 						visitor.add(b.id);
 						continue;
 					}
-					if (!Bits.test(q.box, c.id)) {
+					if (!Bits.test(q.box, c.cell.id)) {
 						// push box to c
 						box = q.box.clone();
 						Bits.clear(box, b.id);
-						Bits.set(box, c.id);
+						Bits.set(box, c.cell.id);
 						StateKey m = new StateKey(b.id, box);
 						if (!explored.contains(m)) {
 							explored.insert(m);
@@ -156,8 +156,8 @@ public final class Deadlock {
 
 			visitor.init(agent);
 			while (!visitor.done()) {
-				int a = visitor.next();
-				for (Move e : level.cells[a].moves) {
+				Cell a = level.cells[visitor.next()];
+				for (Move e : a.moves) {
 					Cell b = e.cell;
 					if (visitor.visited(b.id))
 						continue;
@@ -167,14 +167,14 @@ public final class Deadlock {
 						continue;
 					}
 
-					Cell c = b.move(e.dir);
-					if (c == null || !c.alive || Bits.test(box, c.id))
+					Move c = b.move(e.dir);
+					if (c == null || !c.alive || Bits.test(box, c.cell.id))
 						continue;
 
 					Bits.clear(box, b.id);
-					Bits.set(box, c.id);
+					Bits.set(box, c.cell.id);
 					boolean m = patternIndex.matches(b.id, box, 0, num_boxes, true);
-					Bits.clear(box, c.id);
+					Bits.clear(box, c.cell.id);
 					if (m) {
 						Bits.set(box, b.id);
 						continue;

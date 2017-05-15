@@ -4,7 +4,6 @@ import java.util.ArrayDeque;
 
 import tintor.common.AutoTimer;
 import tintor.common.Util;
-import tintor.common.Visitor;
 
 public final class AStarSolver {
 	public static class ClosedSizeLimitError extends Error {
@@ -24,7 +23,7 @@ public final class AStarSolver {
 	public int closed_size_limit = Integer.MAX_VALUE;
 	public int trace; // 0 to turn off any tracing
 
-	private Visitor visitor;
+	private CellVisitor visitor;
 	private int[] moves;
 
 	private int cutoff = Integer.MAX_VALUE;
@@ -38,7 +37,7 @@ public final class AStarSolver {
 		heuristic = new Heuristic(level, optimal);
 		deadlock = new Deadlock(level);
 
-		visitor = new Visitor(level.cells.length);
+		visitor = new CellVisitor(level.cells.length);
 		moves = new int[level.cells.length];
 		deadlock.closed = closed;
 		deadlock.open = open;
@@ -84,21 +83,19 @@ public final class AStarSolver {
 		if (closed.size() >= closed_size_limit)
 			throw new ClosedSizeLimitError();
 
-		visitor.init(a.agent);
 		moves[a.agent] = 0; // TODO merge moves to visitor (into set)
-		while (!visitor.done()) {
-			// TODO stop the loop early after we reach all sides of all boxes
-			// TODO prioritize cells closer to untouched sides of boxes
-			int agent = visitor.next();
-			for (Move p : level.cells[agent].moves) {
+		// TODO stop the loop early after we reach all sides of all boxes
+		// TODO prioritize cells closer to untouched sides of boxes
+		for (Cell agent : visitor.init(level.cells[a.agent]))
+			for (Move p : agent.moves) {
 				if (!a.box(p.cell.id)) {
-					if (visitor.try_add(p.cell.id))
-						moves[p.cell.id] = moves[agent] + 1;
+					if (visitor.try_add(p.cell))
+						moves[p.cell.id] = moves[agent.id] + p.dist;
 					continue;
 				}
 
 				timer_moves.open();
-				State b = a.push(p, level, optimal, moves[agent], a.agent);
+				State b = a.push(p, level, optimal, moves[agent.id], a.agent);
 				timer_moves.close();
 				if (b == null || closed.contains(b))
 					continue;
@@ -125,7 +122,6 @@ public final class AStarSolver {
 				if (b.total_dist < v_total_dist)
 					open.update(v_total_dist, b);
 			}
-		}
 	}
 
 	public State[] extractPath(State end) {

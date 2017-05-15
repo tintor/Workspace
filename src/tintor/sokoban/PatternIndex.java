@@ -175,11 +175,11 @@ public final class PatternIndex {
 	private boolean looksLikeAPush(Cell agent, int[] box, int offset) {
 		for (Dir dir : Dir.values()) {
 			// if B is box
-			Cell b = agent.move(dir);
-			if (b != null && b.alive && Bits.test(box, offset, box_length, b.id)) {
+			Move b = agent.move(dir);
+			if (b != null && b.alive && Bits.test(box, offset, box_length, b.cell.id)) {
 				// and if S (opposite from B) is empty
-				Cell s = agent.rmove(dir);
-				if (s != null && (!s.alive || !Bits.test(box, offset, box_length, s.id)))
+				Move s = agent.rmove(dir);
+				if (s != null && (!s.alive || !Bits.test(box, offset, box_length, s.cell.id)))
 					return true;
 			}
 		}

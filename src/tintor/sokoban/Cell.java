@@ -2,11 +2,15 @@ package tintor.sokoban;
 
 public final class Cell {
 	public static enum Dir {
-		Left, Up, Right, Down
+		Left, Up, Right, Down;
+
+		Dir reverse() {
+			return Dir.values()[ordinal() ^ 2];
+		}
 	}
 
 	final Level level;
-	final Cell[] dir = new Cell[4];
+	final Move[] dir = new Move[4];
 	Move[] moves;
 	public final int xy;
 	final boolean goal;
@@ -15,7 +19,7 @@ public final class Cell {
 	int id;
 	boolean alive;
 	public boolean bottleneck;
-	int room = -1;
+	int room; // 0 means door between rooms
 
 	static final int Infinity = Integer.MAX_VALUE / 2; // limitation due to Hungarian
 	int[] distance_box; // distance[goal_orginal]
@@ -39,12 +43,12 @@ public final class Cell {
 		throw new Error();
 	}
 
-	Cell move(Dir d) {
+	Move move(Dir d) {
 		return dir[d.ordinal()];
 	}
 
 	// move in reverse direction
-	Cell rmove(Dir d) {
+	Move rmove(Dir d) {
 		return dir[d.ordinal() ^ 2];
 	}
 
