@@ -22,7 +22,7 @@ final class StateArray {
 		}
 		for (int i = 0; i < N; i++)
 			boxes_array[size * N + i] = s.box[i];
-		assert s.agent <= 65536;
+		assert s.agent < 65536;
 		agent_array[size] = (short) s.agent;
 		size += 1;
 	}
@@ -33,7 +33,7 @@ final class StateArray {
 		int[] box = new int[N];
 		for (int i = 0; i < N; i++)
 			box[i] = boxes_array[size * N + i];
-		return new StateKey(((int) agent_array[size]) & 0xFFFF, box);
+		return new StateKey((int) agent_array[size] & 0xFFFF, box);
 	}
 
 	void remove_if(StateKeyPredicate fn) {

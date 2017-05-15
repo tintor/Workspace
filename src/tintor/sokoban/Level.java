@@ -60,8 +60,7 @@ public final class Level {
 		ArrayList<Level> levels = new ArrayList<Level>();
 		for (int i = 1; i <= count; i++)
 			try {
-				String name = filename + ":" + i;
-				levels.add(new Level(LevelLoader.load(name), name));
+				levels.add(load(filename + ":" + i));
 			} catch (MoreThan256CellsError e) {
 			}
 		return levels;

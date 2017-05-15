@@ -10,6 +10,12 @@ class LevelLoader {
 	private static String preprocess(String line) {
 		if (line.startsWith("'") || line.startsWith(";") || line.trim().isEmpty() || Regex.matches(line, "^Level\\s+"))
 			return "";
+		for (int i = 0; i < line.length(); i++) {
+			char c = line.charAt(i);
+			if (c != Level.Box && c != Level.Space && c != Level.Wall && c != Level.BoxGoal && c != Level.AgentGoal
+					&& c != Level.Goal && c != Level.Agent)
+				return "";
+		}
 		return line;
 	}
 

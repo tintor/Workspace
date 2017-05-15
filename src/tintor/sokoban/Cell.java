@@ -7,6 +7,10 @@ public final class Cell {
 		Dir reverse() {
 			return Dir.values()[ordinal() ^ 2];
 		}
+
+		Dir cw() {
+			return Dir.values()[(ordinal() + 1) % 4];
+		}
 	}
 
 	final Level level;
@@ -28,8 +32,17 @@ public final class Cell {
 		return bottleneck && moves.length == 2;
 	}
 
+	boolean real_tunnel() {
+		return moves.length == 2 && moves[0].dir == moves[1].dir.reverse();
+	}
+
+	boolean tunnel() {
+		return real_tunnel() || (moves.length == 2 && (moves[0].cell.real_tunnel() || moves[1].cell.real_tunnel()));
+	}
+
 	boolean tunnel_entrance() {
-		return moves.length == 2 && (moves[0].cell.moves.length != 2 || moves[1].cell.moves.length != 2);
+		return moves.length == 2 && ((moves[0].cell.moves.length == 2 && moves[1].cell.moves.length != 2)
+				|| (moves[0].cell.moves.length != 2 && moves[1].cell.moves.length == 2));
 	}
 
 	boolean tunnel_interior() {
@@ -41,6 +54,10 @@ public final class Cell {
 			if (m.dir == d)
 				return m.dist;
 		throw new Error();
+	}
+
+	Move move(int d) {
+		return dir[d];
 	}
 
 	Move move(Dir d) {

@@ -1,10 +1,53 @@
 package tintor.sokoban;
 
+import tintor.common.Array;
 import tintor.common.Bits;
 import tintor.sokoban.Cell.Dir;
 
 class LevelUtil {
-	static boolean is_reversible_push(State s, Level level) {
+	// number of free goals that agent can't move to without pushing any box
+	public static int count_unreachable_goals(StateKey s, Level level) {
+		int count = Array.count(level.cells, a -> a.goal && !s.box(a));
+		CellVisitor visitor = level.visitor;
+		for (Cell a : visitor.init(level.cells[s.agent])) {
+			if (a.goal)
+				count -= 1;
+			for (Move e : a.moves)
+				if (!s.box(e.cell))
+					visitor.try_add(e.cell);
+		}
+		return count;
+	}
+
+	private static boolean free(Move a, StateKey s) {
+		return a != null && !s.box(a.cell);
+	}
+
+	public static boolean is_2x2_frozen(Cell box, StateKey s) {
+		for (Dir dir : Dir.values()) {
+			Move a = box.move(dir);
+			if (free(a, s))
+				continue;
+			Move b = box.move(dir.cw());
+			if (free(b, s))
+				continue;
+			if (a == null && b == null)
+				return !box.goal;
+			if (a != null) {
+				Move c = a.cell.move(dir.cw());
+				if (!free(c, s))
+					return !(box.goal && a.cell.goal && (b == null || b.cell.goal) && (c == null || c.cell.goal));
+			}
+			if (b != null) {
+				Move c = b.cell.move(dir);
+				if (!free(c, s))
+					return !(box.goal && b.cell.goal && (a == null || a.cell.goal) && (c == null || c.cell.goal));
+			}
+		}
+		return false;
+	}
+
+	public static boolean is_reversible_push(State s, Level level) {
 		Cell agent = level.cells[s.agent];
 		Dir dir = Dir.values()[s.dir];
 		Move b = agent.move(dir);
@@ -33,7 +76,7 @@ class LevelUtil {
 		return false;
 	}
 
-	static Cell around(Cell z, int side, State s) {
+	private static Cell around(Cell z, int side, State s) {
 		Move m = z.move(Dir.values()[(s.dir + side) % 4]);
 		if (m == null || s.box(m.cell))
 			return null;
@@ -47,7 +90,7 @@ class LevelUtil {
 	}
 
 	// can agent move to C without pushing any box?
-	static boolean is_cell_reachable(Cell c, StateKey s) {
+	public static boolean is_cell_reachable(Cell c, StateKey s) {
 		CellVisitor visitor = c.level.visitor;
 		for (Cell a : visitor.init(c.level.cells[s.agent]))
 			for (Move e : a.moves) {

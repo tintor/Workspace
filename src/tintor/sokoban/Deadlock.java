@@ -225,6 +225,9 @@ public final class Deadlock {
 		// TODO do we really need this?
 		if (level.is_solved_fast(s.box))
 			return false;
+		if (incremental && LevelUtil.is_2x2_frozen(level.cells[s.agent].move(s.dir).cell, s)) {
+			return true;
+		}
 		if (patternIndex.matches(s.agent, s.box, 0, num_boxes, incremental))
 			return true;
 		if (matchesGoalZonePattern(s.agent, s.box))

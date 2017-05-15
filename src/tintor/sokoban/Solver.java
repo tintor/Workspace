@@ -100,13 +100,19 @@ public class Solver {
 
 	public static void main(String[] args) throws Exception {
 		Level level = Level.load(args[0]);
-		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells, level.alive,
+		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells.length, level.alive,
 				level.num_boxes, level.state_space(), level.has_goal_rooms);
 		level.print(level.start);
 		Log.raw("alive");
 		level.print(p -> p.alive ? '.' : ' ');
-		Log.raw("tunnels");
-		level.print(p -> p.tunnel_entrance() || p.tunnel_interior() ? '.' : ' ');
+		Log.raw("bottleneck");
+		level.print(p -> p.bottleneck ? '.' : ' ');
+		Log.raw("tunnel");
+		level.print(p -> p.tunnel() ? '.' : ' ');
+		Log.raw("tunnel_entrance");
+		level.print(p -> p.tunnel_entrance() ? '.' : ' ');
+		Log.raw("tunnel_interior");
+		level.print(p -> p.tunnel_interior() ? '.' : ' ');
 		Log.raw("rooms");
 		level.print(p -> p.room == -1 ? 'x' : hex(p.room));
 		AStarSolver solver = new AStarSolver(level, false);
