@@ -28,13 +28,13 @@ class LevelUtil {
 			Move a = box.move(dir);
 			if (free(a, s))
 				continue;
-			Move b = box.move(dir.cw());
+			Move b = box.move(dir.next);
 			if (free(b, s))
 				continue;
 			if (a == null && b == null)
 				return !box.goal;
 			if (a != null) {
-				Move c = a.cell.move(dir.cw());
+				Move c = a.cell.move(dir.next);
 				if (!free(c, s))
 					return !(box.goal && a.cell.goal && (b == null || b.cell.goal) && (c == null || c.cell.goal));
 			}

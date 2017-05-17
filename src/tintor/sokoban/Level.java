@@ -229,7 +229,7 @@ public final class Level {
 						attach(a, new Move(c, e.dir, ++dist, false));
 						detach(c, b);
 						// TODO second direction might be different if tunnel isn't straight
-						attach(c, new Move(a, e.dir.reverse(), dist, false));
+						attach(c, new Move(a, e.dir.reverse, dist, false));
 						b = c;
 					}
 				}
@@ -251,7 +251,7 @@ public final class Level {
 						attach(a, new Move(c, e.dir, ++dist, is_alive));
 						detach(c, b);
 						// TODO second direction might be different if tunnel isn't straight
-						attach(c, new Move(c, e.dir.reverse(), dist, is_alive));
+						attach(c, new Move(c, e.dir.reverse, dist, is_alive));
 						alive -= 1;
 						b = c;
 					}

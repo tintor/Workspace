@@ -4,12 +4,14 @@ public final class Cell {
 	public static enum Dir {
 		Left, Up, Right, Down;
 
-		Dir reverse() {
-			return Dir.values()[ordinal() ^ 2];
-		}
+		Dir reverse;
+		Dir next;
 
-		Dir cw() {
-			return Dir.values()[(ordinal() + 1) % 4];
+		static {
+			for (Dir d : Dir.values()) {
+				d.reverse = Dir.values()[d.ordinal() ^ 2];
+				d.next = Dir.values()[(d.ordinal() + 1) % 4];
+			}
 		}
 	}
 
