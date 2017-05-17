@@ -3,6 +3,8 @@ package tintor.sokoban;
 import java.io.FileWriter;
 import java.util.Arrays;
 
+import lombok.Cleanup;
+import lombok.val;
 import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.Bits;
@@ -139,26 +141,25 @@ public final class PatternIndex {
 	}
 
 	public void add(boolean[] agent, int[] box, int num_boxes) {
-		try (AutoTimer t = timer_add.open()) {
-			int[] p = Array.concat(Util.compressToIntArray(agent), box);
-			if (!patterns.insert(p))
-				return;
+		@Cleanup val t = timer_add.open();
+		int[] p = Array.concat(Util.compressToIntArray(agent), box);
+		if (!patterns.insert(p))
+			return;
 
-			// TODO use level transforms and add all pattern variations
+		// TODO use level transforms and add all pattern variations
 
-			addToFile(agent, box);
-			histogram[num_boxes - 2] += 1;
-			for (int b = 0; b < level.alive; b++)
-				if (Bits.test(box, b))
-					for (Move a : level.cells[b].moves)
-						if (agent[a.cell.id])
-							pattern_index_near[a.cell.id].add(box, num_boxes);
-			for (int a = 0; a < level.cells.length; a++)
-				if (agent[a]) {
-					pattern_index[a].add(box, num_boxes);
-					pattern_index_new[a].add(box, num_boxes);
-				}
-		}
+		addToFile(agent, box);
+		histogram[num_boxes - 2] += 1;
+		for (int b = 0; b < level.alive; b++)
+			if (Bits.test(box, b))
+				for (Move a : level.cells[b].moves)
+					if (agent[a.cell.id])
+						pattern_index_near[a.cell.id].add(box, num_boxes);
+		for (int a = 0; a < level.cells.length; a++)
+			if (agent[a]) {
+				pattern_index[a].add(box, num_boxes);
+				pattern_index_new[a].add(box, num_boxes);
+			}
 	}
 
 	private void addToFile(boolean[] agent, int[] box) {
@@ -187,17 +188,15 @@ public final class PatternIndex {
 	}
 
 	public boolean matches(int agent, int[] box, int offset, int num_boxes, boolean incremental) {
-		try (AutoTimer t = timer_match.open()) {
-			assert looksLikeAPush(level.cells[agent], box, offset);
-			return (incremental ? pattern_index_near : pattern_index)[agent].matches(box, offset, num_boxes);
-		}
+		@Cleanup val t = timer_match.open();
+		assert looksLikeAPush(level.cells[agent], box, offset);
+		return (incremental ? pattern_index_near : pattern_index)[agent].matches(box, offset, num_boxes);
 	}
 
 	public boolean matchesNew(int agent, int[] box, int offset, int num_boxes) {
-		try (AutoTimer t = timer_match.open()) {
-			assert looksLikeAPush(level.cells[agent], box, offset);
-			return pattern_index_new[agent].matches(box, offset, num_boxes);
-		}
+		@Cleanup val t = timer_match.open();
+		assert looksLikeAPush(level.cells[agent], box, offset);
+		return pattern_index_new[agent].matches(box, offset, num_boxes);
 	}
 
 	public boolean hasNew() {

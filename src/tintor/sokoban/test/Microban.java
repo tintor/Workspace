@@ -21,8 +21,7 @@ public class Microban {
 		levels.addAll(Level.loadAll("microban3"));
 		levels.addAll(Level.loadAll("microban4"));
 		levels.addAll(Level.loadAll("microban5"));
-		@SuppressWarnings("unchecked")
-		ArrayList<Level>[] space = new ArrayList[110];
+		@SuppressWarnings("unchecked") ArrayList<Level>[] space = new ArrayList[110];
 		for (Level level : levels) {
 			int s = level.state_space();
 			if (space[s] == null)
@@ -38,6 +37,7 @@ public class Microban {
 							break;
 						Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.name, level.cells.length,
 								level.alive, level.num_boxes, level.state_space());
+
 						AStarSolver solver = new AStarSolver(level, false);
 						solver.trace = 2;
 						timer.total = 0;

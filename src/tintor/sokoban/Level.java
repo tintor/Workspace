@@ -4,6 +4,9 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import lombok.Cleanup;
+import lombok.val;
+import lombok.experimental.ExtensionMethod;
 import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.BipartiteMatching;
@@ -16,6 +19,7 @@ import tintor.sokoban.Cell.Dir;
 final class Move {
 	final Cell cell;
 	final Dir dir;
+	final Dir exit_dir; // in case of dead tunnels if can be different from dir
 	final int dist;
 	boolean alive;
 
@@ -25,11 +29,13 @@ final class Move {
 		assert dist > 0;
 		this.cell = cell;
 		this.dir = dir;
+		this.exit_dir = null;
 		this.dist = dist;
 		this.alive = alive;
 	}
 }
 
+@ExtensionMethod(Array.class)
 public final class Level {
 	final static char Box = '$';
 	final static char Wall = '#';
@@ -107,6 +113,7 @@ public final class Level {
 
 		// Try to move agent and remove reachable dead end cells
 		int dist = 0;
+		// TODO remove restriction on not being able to push box to remove dead end
 		while (!agent.goal && agent.moves.length == 1 && !agent.moves[0].cell.box) {
 			Cell b = agent.moves[0].cell;
 			buffer[agent.xy] = Wall;
@@ -559,15 +566,14 @@ public final class Level {
 	static final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
 
 	public boolean is_valid_level(CellToChar op) {
-		try (AutoTimer t = timer_isvalidlevel.open()) {
-			Level clone = new Level(render(op), null);
-			if (Array.count(clone.cells, c -> c.box) != Array.count(clone.cells, c -> c.goal))
-				return false;
+		@Cleanup val t = timer_isvalidlevel.open();
+		Level clone = new Level(render(op), null);
+		if (Array.count(clone.cells, c -> c.box) != Array.count(clone.cells, c -> c.goal))
+			return false;
 
-			PairVisitor visitor = new PairVisitor(clone.cells.length, clone.cells.length);
-			return has_goal_rooms ? clone.are_all_goals_reachable_quick(visitor)
-					: clone.are_all_goals_reachable_full(visitor);
-		}
+		PairVisitor visitor = new PairVisitor(clone.cells.length, clone.cells.length);
+		return has_goal_rooms ? clone.are_all_goals_reachable_quick(visitor)
+				: clone.are_all_goals_reachable_full(visitor);
 	}
 
 	private boolean are_all_goals_reachable_quick(PairVisitor visitor) {

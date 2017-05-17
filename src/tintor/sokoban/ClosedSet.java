@@ -1,5 +1,7 @@
 package tintor.sokoban;
 
+import lombok.Cleanup;
+import lombok.val;
 import tintor.common.AutoTimer;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
@@ -29,17 +31,15 @@ public final class ClosedSet {
 	}
 
 	void add(State s) {
-		try (AutoTimer t = timer_add.open()) {
-			State a = transforms.normalize(s);
-			assert !map.contains(a);
-			map.insert(a);
-		}
+		@Cleanup val t = timer_add.open();
+		State a = transforms.normalize(s);
+		assert !map.contains(a);
+		map.insert(a);
 	}
 
 	boolean contains(StateKey s) {
-		try (AutoTimer t = timer_contains.open()) {
-			return map.contains(transforms.normalize(s));
-		}
+		@Cleanup val t = timer_contains.open();
+		return map.contains(transforms.normalize(s));
 	}
 
 	State get(StateKey s) {

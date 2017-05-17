@@ -2,6 +2,8 @@ package tintor.sokoban;
 
 import java.util.Arrays;
 
+import lombok.Cleanup;
+import lombok.val;
 import tintor.common.AutoTimer;
 import tintor.common.InstrumentationAgent;
 import tintor.common.Util;
@@ -24,22 +26,22 @@ public final class OpenSet {
 	}
 
 	void do_some_cleanup() {
+		@Cleanup val t = timer_cleanup.openExclusive();
 		int s = garbage;
-		while (true)
-			try (AutoTimer t = timer_cleanup.openExclusive()) {
-				cleanup_iter = min;
-				while (cleanup_iter < queue.length) {
-					StateArray q = queue[cleanup_iter++];
-					if (q != null && q.garbage > 0) {
-						q.remove_if((agent, box, offset) -> !map.contains(agent, box, offset));
-						cleanup += q.garbage;
-						garbage -= q.garbage;
-						q.garbage = 0;
-						if (garbage <= s - s / 32)
-							return;
-					}
+		while (true) {
+			cleanup_iter = min;
+			while (cleanup_iter < queue.length) {
+				StateArray q = queue[cleanup_iter++];
+				if (q != null && q.garbage > 0) {
+					q.remove_if((agent, box, offset) -> !map.contains(agent, box, offset));
+					cleanup += q.garbage;
+					garbage -= q.garbage;
+					q.garbage = 0;
+					if (garbage <= s - s / 32)
+						return;
 				}
 			}
+		}
 	}
 
 	void report() {
@@ -89,57 +91,53 @@ public final class OpenSet {
 
 	// O(1)
 	public int get_total_dist(StateKey s) {
-		try (AutoTimer t = timer_get.open()) {
-			return map.get_total_dist(s);
-		}
+		@Cleanup val t = timer_get.open();
+		return map.get_total_dist(s);
 	}
 
 	// Called when a better path B to state is found than existing V
 	// O(1)
 	public void update(int v_total_dist, State b) {
-		try (AutoTimer t = timer_update.open()) {
-			map.update(v_total_dist, b);
-			if (b.total_dist < min)
-				min = b.total_dist;
-			queue(b.total_dist).push(b);
-			queue(v_total_dist).garbage += 1;
-			garbage += 1;
-		}
+		@Cleanup val t = timer_update.open();
+		map.update(v_total_dist, b);
+		if (b.total_dist < min)
+			min = b.total_dist;
+		queue(b.total_dist).push(b);
+		queue(v_total_dist).garbage += 1;
+		garbage += 1;
 	}
 
 	// O(1)
 	public void add(State s) {
-		try (AutoTimer t = timer_add.open()) {
-			map.insert(s);
-			if (s.total_dist < min)
-				min = s.total_dist;
-			queue(s.total_dist).push(s);
-		}
+		@Cleanup val t = timer_add.open();
+		map.insert(s);
+		if (s.total_dist < min)
+			min = s.total_dist;
+		queue(s.total_dist).push(s);
 	}
 
 	// O(1)
 	public State remove_min() {
-		try (AutoTimer t = timer_remove_min.open()) {
-			if (min >= queue.length)
-				return null;
+		@Cleanup val t = timer_remove_min.open();
+		if (min >= queue.length)
+			return null;
+		while (true) {
 			while (true) {
-				while (true) {
-					if (min == queue.length)
-						return null;
-					if (queue[min] != null && queue[min].size() > 0)
-						break;
-					min += 1;
-				}
-				StateKey k = queue(min).pop();
-				State s = map.get(k);
-				if (s == null) {
-					garbage -= 1;
-					continue;
-				}
-				map.remove(k);
-				assert !s.is_initial();
-				return s;
+				if (min == queue.length)
+					return null;
+				if (queue[min] != null && queue[min].size() > 0)
+					break;
+				min += 1;
 			}
+			StateKey k = queue(min).pop();
+			State s = map.get(k);
+			if (s == null) {
+				garbage -= 1;
+				continue;
+			}
+			map.remove(k);
+			assert !s.is_initial();
+			return s;
 		}
 	}
 

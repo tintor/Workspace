@@ -9,6 +9,24 @@ import tintor.common.Timer;
 // Unsolved
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
 
+// TODO [non-optimal] trick for one original level:
+//   add an extra wall to reduce 2-cell wide entrance to a goal room to 1-cell wide
+
+// TODO split level into rooms and tunnels
+//      - compress tunnels
+//      -   keep entrance and exit (if alive) to be able to park one box in tunnel
+//      -   for alive tunnels, keep only one tunnel cell in the middle to be able to park (distance to enter 1, distance to exit = length-1 on both sides!)
+//      - assign each cell to one room or tunnel (and group cells by tunnels / rooms)
+//      - tunnel can be bottleneck or not
+//      - room can be bottleneck or not
+//      - build a graph of rooms and tunnels
+//      - tunnels don't have to be straight (but they have to connect two different rooms, or two non-touching cells in the same room)
+//      - tunnels can be alive (can push box through) or dead (or for agent)
+//      - compute parking capacity of each room (max number of boxes in room without deadlocking)
+//      - easy to count boxes / goals in each room
+//      - easy to split level and solve each room separately (ie. push order in goal room)
+//      - fork cells that connect 3 or 4 tunnels are considered regular rooms
+
 // TODO push macro:
 // - if box is pushed inside a tunnel with a box already inside (on goal) then keep pushing the box all the way through
 // TODO goal cut:

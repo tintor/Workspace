@@ -3,7 +3,7 @@ package tintor.common;
 import java.util.ArrayList;
 import java.util.Collections;
 
-public final class AutoTimer implements AutoCloseable {
+public final class AutoTimer {
 	public static final long Second = 1000000000l;
 
 	private final String name;

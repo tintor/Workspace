@@ -3,12 +3,15 @@ package tintor.common;
 import java.util.Arrays;
 import java.util.Random;
 
-// Note: It only returns 31-bits! non-negative integers!
-public final class Zobrist {
-	private static int[] hash = new int[0];
-	private static final Random random = new Random(0);
+import lombok.experimental.UtilityClass;
 
-	public static void ensure(int size) {
+// Note: It only returns 31-bits! non-negative integers!
+@UtilityClass
+public class Zobrist {
+	private int[] hash = new int[0];
+	private final Random random = new Random(0);
+
+	public void ensure(int size) {
 		if (size <= hash.length)
 			return;
 		synchronized (random) {
@@ -24,15 +27,15 @@ public final class Zobrist {
 		}
 	}
 
-	public static int hash(int i) {
+	public int hash(int i) {
 		return hash[i];
 	}
 
-	static {
+	{
 		ensure(64);
 	}
 
-	public static int hashBitset(long b, int start) {
+	public int hashBitset(long b, int start) {
 		ensure(start + 64);
 		int h = 0;
 		for (int i = 0; i < 64; i++)
@@ -41,7 +44,7 @@ public final class Zobrist {
 		return h;
 	}
 
-	public static int hash(boolean[] b) {
+	public int hash(boolean[] b) {
 		ensure(b.length);
 		int h = 0;
 		for (int i = 0; i < b.length; i++)

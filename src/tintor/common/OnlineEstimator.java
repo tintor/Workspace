@@ -1,42 +1,42 @@
 package tintor.common;
 
 public final class OnlineEstimator {
-	private long n = 0;
-	private double m = 0;
-	private double s = 0;
+	private long size = 0;
+	private double mean = 0;
+	private double var_sum = 0;
 
 	public void add(double x) {
-		n += 1;
-		double next = m + (x - m) / n;
-		s += (x - m) * (x - next);
-		m = next;
+		size += 1;
+		double next = mean + (x - mean) / size;
+		var_sum += (x - mean) * (x - next);
+		mean = next;
 	}
 
 	public void remove(double x) {
-		if (n == 0)
+		if (size == 0)
 			throw new IllegalStateException();
-		if (n == 1) {
-			n = 0;
-			m = 0;
-			s = 0;
+		if (size == 1) {
+			size = 0;
+			mean = 0;
+			var_sum = 0;
 			return;
 		}
-		double prev = (n * m - x) / (n - 1);
-		s -= (x - m) * (x - prev);
-		m = prev;
-		n -= 1;
+		double prev = (size * mean - x) / (size - 1);
+		var_sum -= (x - mean) * (x - prev);
+		mean = prev;
+		size -= 1;
 	}
 
 	public long size() {
-		return n;
+		return size;
 	}
 
 	public double mean() {
-		return m;
+		return mean;
 	}
 
 	public double variance() {
-		return n > 1 ? s / n : 0;
+		return size > 1 ? var_sum / size : 0;
 	}
 
 	public double stdev() {

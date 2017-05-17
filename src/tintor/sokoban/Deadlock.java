@@ -4,6 +4,8 @@ import java.io.FileWriter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 
+import lombok.Cleanup;
+import lombok.val;
 import tintor.common.AutoTimer;
 import tintor.common.Bits;
 import tintor.common.InstrumentationAgent;
@@ -49,7 +51,8 @@ public final class Deadlock {
 
 	void report() {
 		if (patternIndex.hasNew()) {
-			try (AutoTimer t = timer_cleanup.openExclusive()) {
+			{
+				@Cleanup val t = timer_cleanup.openExclusive();
 				open.remove_if(this::should_cleanup);
 				closed.remove_if(this::should_cleanup);
 			}
@@ -72,6 +75,7 @@ public final class Deadlock {
 	}
 
 	private boolean isGoalZoneDeadlock(StateKey s) {
+		@Cleanup val t = timer_goalzone.open();
 		if (!level.has_goal_zone)
 			return false;
 
@@ -148,74 +152,73 @@ public final class Deadlock {
 
 	// Note: modifies input array!
 	private Result containsFrozenBoxes(final int agent, int[] box, int num_boxes) {
-		try (AutoTimer t = timer_frozen.open()) {
-			if (num_boxes < 2)
-				return Result.NotFrozen;
-			int pushed_boxes = 0;
-			int[] original_box = box.clone();
-
-			visitor.init(agent);
-			while (!visitor.done()) {
-				Cell a = level.cells[visitor.next()];
-				for (Move e : a.moves) {
-					Cell b = e.cell;
-					if (visitor.visited(b.id))
-						continue;
-					if (!b.alive || !Bits.test(box, b.id)) {
-						// agent moves to B
-						visitor.add(b.id);
-						continue;
-					}
-
-					Move c = b.move(e.dir);
-					if (c == null || !c.alive || Bits.test(box, c.cell.id))
-						continue;
-
-					Bits.clear(box, b.id);
-					Bits.set(box, c.cell.id);
-					boolean m = patternIndex.matches(b.id, box, 0, num_boxes, true);
-					Bits.clear(box, c.cell.id);
-					if (m) {
-						Bits.set(box, b.id);
-						continue;
-					}
-
-					// agent pushes box from B to C (and box disappears)
-					if (--num_boxes == 1)
-						return Result.NotFrozen;
-					pushed_boxes += 1;
-					visitor.init(b.id);
-					break;
-				}
-			}
-
-			if (!level.is_solved(box))
-				return Result.Deadlock;
-
-			// check that agent can reach all goals without boxes on them
-			int reachable_free_goals = 0;
-			for (int a = 0; a < level.alive; a++)
-				if (level.cells[a].goal && visitor.visited(a))
-					reachable_free_goals += 1;
-			if (reachable_free_goals < pushed_boxes)
-				return Result.GoalZoneDeadlock;
-
-			if (!level.is_valid_level(p -> {
-				if (p.id == agent)
-					return p.goal ? Level.AgentGoal : Level.Agent;
-				if (p.alive && Bits.test(box, p.id))
-					return Level.Wall;
-				if (p.alive && Bits.test(original_box, p.id))
-					return p.goal ? Level.BoxGoal : Level.Box;
-				return p.goal ? Level.Goal : Level.Space;
-			})) {
-				isvalidlevel_deadlocks += 1;
-				Util.write(is_valid_level_deadlocks_file, level.render(new StateKey(agent, original_box)));
-				return Result.GoalZoneDeadlock;
-			}
-
+		@Cleanup val t = timer_frozen.open();
+		if (num_boxes < 2)
 			return Result.NotFrozen;
+		int pushed_boxes = 0;
+		int[] original_box = box.clone();
+
+		visitor.init(agent);
+		while (!visitor.done()) {
+			Cell a = level.cells[visitor.next()];
+			for (Move e : a.moves) {
+				Cell b = e.cell;
+				if (visitor.visited(b.id))
+					continue;
+				if (!b.alive || !Bits.test(box, b.id)) {
+					// agent moves to B
+					visitor.add(b.id);
+					continue;
+				}
+
+				Move c = b.move(e.dir);
+				if (c == null || !c.alive || Bits.test(box, c.cell.id))
+					continue;
+
+				Bits.clear(box, b.id);
+				Bits.set(box, c.cell.id);
+				boolean m = patternIndex.matches(b.id, box, 0, num_boxes, true);
+				Bits.clear(box, c.cell.id);
+				if (m) {
+					Bits.set(box, b.id);
+					continue;
+				}
+
+				// agent pushes box from B to C (and box disappears)
+				if (--num_boxes == 1)
+					return Result.NotFrozen;
+				pushed_boxes += 1;
+				visitor.init(b.id);
+				break;
+			}
 		}
+
+		if (!level.is_solved(box))
+			return Result.Deadlock;
+
+		// check that agent can reach all goals without boxes on them
+		int reachable_free_goals = 0;
+		for (int a = 0; a < level.alive; a++)
+			if (level.cells[a].goal && visitor.visited(a))
+				reachable_free_goals += 1;
+		if (reachable_free_goals < pushed_boxes)
+			return Result.GoalZoneDeadlock;
+
+		if (!level.is_valid_level(p -> {
+			if (p.id == agent)
+				return p.goal ? Level.AgentGoal : Level.Agent;
+			if (p.alive && Bits.test(box, p.id))
+				return Level.Wall;
+			if (p.alive && Bits.test(original_box, p.id))
+				return p.goal ? Level.BoxGoal : Level.Box;
+			return p.goal ? Level.Goal : Level.Space;
+		})) {
+			isvalidlevel_deadlocks += 1;
+			Util.write(is_valid_level_deadlocks_file, level.render(new StateKey(agent, original_box)));
+			return Result.GoalZoneDeadlock;
+		}
+
+		return Result.NotFrozen;
 	}
 
 	// Looks for boxes not on goal that can't be moved
@@ -232,10 +235,8 @@ public final class Deadlock {
 			return true;
 		if (matchesGoalZonePattern(s.agent, s.box))
 			return true;
-		try (AutoTimer t = timer_goalzone.open()) {
-			if (isGoalZoneDeadlock(s))
-				return true;
-		}
+		if (isGoalZoneDeadlock(s))
+			return true;
 
 		int[] box = s.box.clone();
 		Result result = containsFrozenBoxes(s.agent, box, num_boxes);
@@ -244,61 +245,65 @@ public final class Deadlock {
 
 		// if we have boxes frozen on goals, we can't store that pattern
 		if (result == Result.GoalZoneDeadlock) {
-			if (goal_zone_crap) {
-				long unreachable_goals = 0;
-				for (int a = 0; a < level.alive; a++)
-					if (level.cells[a].goal && !visitor.visited(a))
-						unreachable_goals |= Bits.mask(a);
-				assert box[1] == 0; // TODO
-				final GoalZonePattern z = new GoalZonePattern();
-				z.agent = visitor.visited().clone();
-				z.boxes_frozen_on_goals = box[0];
-				z.unreachable_goals = unreachable_goals & ~box[0];
-				level.print(i -> {
-					int e = 0;
-					if (!i.goal)
-						return ' ';
-					if (Bits.test(z.boxes_frozen_on_goals, i.id))
-						e += 1;
-					if (Bits.test(z.unreachable_goals, i.id))
-						e += 2;
-					if (e == 0)
-						return ' ';
-					return (char) ((int) '0' + e);
-				});
-				goal_zone_patterns.add(z);
-			}
+			addGoalZonePattern(box);
 			return true;
 		}
 
-		num_boxes = Bits.count(box);
 		boolean[] agent = visitor.visited().clone();
-
-		// TODO there could be more than one minimal pattern from box
-		try (AutoTimer t = timer_minimize.open()) {
-			// try to removing boxes to generalize the pattern
-			for (Cell i : level.cells)
-				if (i.alive && Bits.test(box, i.id) && !level.is_solved(box)) {
-					int[] box_copy = box.clone();
-					Bits.clear(box_copy, i.id);
-					if (containsFrozenBoxes(s.agent, box_copy, num_boxes - 1) == Result.Deadlock) {
-						Bits.clear(box, i.id);
-						num_boxes -= 1;
-						for (Move z : i.moves)
-							if (agent[z.cell.id])
-								agent[i.id] = true;
-					}
-				}
-			// try moving agent to unreachable cells to generalize the pattern
-			for (int i = 0; i < level.cells.length; i++)
-				if (!agent[i] && (i >= level.alive || !Bits.test(box, i))
-						&& containsFrozenBoxes(i, box.clone(), num_boxes) == Result.Deadlock)
-					Util.updateOr(agent, visitor.visited());
-		}
-
-		// Save remaining state as a new deadlock pattern
+		num_boxes = minimizePattern(s, agent, box, Bits.count(box));
 		patternIndex.add(agent, box, num_boxes);
 		return true;
+	}
+
+	// TODO there could be more than one minimal pattern from box
+	private int minimizePattern(StateKey s, boolean[] agent, int[] box, int num_boxes) {
+		@Cleanup val t = timer_minimize.openExclusive();
+		// try removing boxes to generalize the pattern
+		for (Cell i : level.cells)
+			if (i.alive && Bits.test(box, i.id) && !level.is_solved(box)) {
+				int[] box_copy = box.clone();
+				Bits.clear(box_copy, i.id);
+				if (containsFrozenBoxes(s.agent, box_copy, num_boxes - 1) == Result.Deadlock) {
+					Bits.clear(box, i.id);
+					num_boxes -= 1;
+					for (Move z : i.moves)
+						if (agent[z.cell.id])
+							agent[i.id] = true;
+				}
+			}
+		// try moving agent to unreachable cells to generalize the pattern
+		for (int i = 0; i < level.cells.length; i++)
+			if (!agent[i] && (i >= level.alive || !Bits.test(box, i))
+					&& containsFrozenBoxes(i, box.clone(), num_boxes) == Result.Deadlock)
+				Util.updateOr(agent, visitor.visited());
+		return num_boxes;
+	}
+
+	private void addGoalZonePattern(int[] box) {
+		if (!goal_zone_crap)
+			return;
+		long unreachable_goals = 0;
+		for (int a = 0; a < level.alive; a++)
+			if (level.cells[a].goal && !visitor.visited(a))
+				unreachable_goals |= Bits.mask(a);
+		assert box[1] == 0; // TODO
+		final GoalZonePattern z = new GoalZonePattern();
+		z.agent = visitor.visited().clone();
+		z.boxes_frozen_on_goals = box[0];
+		z.unreachable_goals = unreachable_goals & ~box[0];
+		level.print(i -> {
+			int e = 0;
+			if (!i.goal)
+				return ' ';
+			if (Bits.test(z.boxes_frozen_on_goals, i.id))
+				e += 1;
+			if (Bits.test(z.unreachable_goals, i.id))
+				e += 2;
+			if (e == 0)
+				return ' ';
+			return (char) ((int) '0' + e);
+		});
+		goal_zone_patterns.add(z);
 	}
 
 	static class GoalZonePattern {
@@ -332,30 +337,28 @@ public final class Deadlock {
 	private final static boolean goal_zone_crap = false;
 
 	public boolean checkIncremental(State s) {
-		try (AutoTimer t = timer.open()) {
-			assert !s.is_initial();
-			if (LevelUtil.is_reversible_push(s, level)) {
-				trivial += 1;
-				return false;
-			}
-			if (checkInternal(s, level.num_boxes, true)) {
-				deadlocks += 1;
-				return true;
-			}
-			non_deadlocks += 1;
+		@Cleanup val t = timer.open();
+		assert !s.is_initial();
+		if (LevelUtil.is_reversible_push(s, level)) {
+			trivial += 1;
 			return false;
 		}
+		if (checkInternal(s, level.num_boxes, true)) {
+			deadlocks += 1;
+			return true;
+		}
+		non_deadlocks += 1;
+		return false;
 	}
 
 	public boolean checkFull(State s) {
-		try (AutoTimer t = timer.open()) {
-			assert !s.is_initial();
-			if (checkInternal(s, level.num_boxes, false)) {
-				deadlocks += 1;
-				return true;
-			}
-			non_deadlocks += 1;
-			return false;
+		@Cleanup val t = timer.open();
+		assert !s.is_initial();
+		if (checkInternal(s, level.num_boxes, false)) {
+			deadlocks += 1;
+			return true;
 		}
+		non_deadlocks += 1;
+		return false;
 	}
 }

@@ -28,25 +28,27 @@ public final class Cell {
 	static final int Infinity = Integer.MAX_VALUE / 2; // limitation due to Hungarian
 	int[] distance_box; // distance[goal_orginal]
 
+	Cell(Level level, int xy, char ch) {
+		this.level = level;
+		this.xy = xy;
+		goal = ch == Level.Goal || ch == Level.AgentGoal || ch == Level.BoxGoal;
+		box = ch == Level.Box || ch == Level.BoxGoal;
+	}
+
 	boolean bottleneck_tunnel() {
-		return bottleneck && moves.length == 2;
+		return bottleneck && tunnel();
 	}
 
-	boolean real_tunnel() {
-		return moves.length == 2 && moves[0].dir == moves[1].dir.reverse();
+	public boolean tunnel() {
+		return moves.length == 2;
 	}
 
-	boolean tunnel() {
-		return real_tunnel() || (moves.length == 2 && (moves[0].cell.real_tunnel() || moves[1].cell.real_tunnel()));
+	public boolean tunnel_entrance() {
+		return tunnel() && (!moves[0].cell.tunnel() || !moves[1].cell.tunnel());
 	}
 
-	boolean tunnel_entrance() {
-		return moves.length == 2 && ((moves[0].cell.moves.length == 2 && moves[1].cell.moves.length != 2)
-				|| (moves[0].cell.moves.length != 2 && moves[1].cell.moves.length == 2));
-	}
-
-	boolean tunnel_interior() {
-		return moves.length == 2 && (moves[0].cell.moves.length == 2 && moves[1].cell.moves.length == 2);
+	public boolean tunnel_interior() {
+		return tunnel() && moves[0].cell.tunnel() && moves[1].cell.tunnel();
 	}
 
 	int dist(Dir d) {
@@ -67,12 +69,5 @@ public final class Cell {
 	// move in reverse direction
 	Move rmove(Dir d) {
 		return dir[d.ordinal() ^ 2];
-	}
-
-	Cell(Level level, int xy, char ch) {
-		this.level = level;
-		this.xy = xy;
-		goal = ch == Level.Goal || ch == Level.AgentGoal || ch == Level.BoxGoal;
-		box = ch == Level.Box || ch == Level.BoxGoal;
 	}
 }

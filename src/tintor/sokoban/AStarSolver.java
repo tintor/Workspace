@@ -2,6 +2,8 @@ package tintor.sokoban;
 
 import java.util.ArrayDeque;
 
+import lombok.Cleanup;
+import lombok.val;
 import tintor.common.AutoTimer;
 import tintor.common.Util;
 
@@ -55,7 +57,8 @@ public final class AStarSolver {
 		explore(level.start);
 		State a = null;
 		while (true) {
-			try (AutoTimer t = timer_solve.open()) {
+			{
+				@Cleanup val t = timer_solve.open();
 				a = open.remove_min();
 				if (a == null || level.is_solved_fast(a.box))
 					break;
