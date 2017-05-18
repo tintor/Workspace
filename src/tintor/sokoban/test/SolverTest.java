@@ -45,15 +45,14 @@ public class SolverTest {
 		AutoTimer.enabled = false;
 		try {
 			Level level = Level.load(filename);
-			level.print(level.start);
 			AStarSolver solver = new AStarSolver(level, false);
-			solver.closed_size_limit = 3000;
+			solver.closed_size_limit = 5000;
 			try {
 				State end = solver.solve();
 				Assert.assertTrue(end != null);
 				solver.extractPath(end);
 			} catch (AStarSolver.ClosedSizeLimitError e) {
-				Assert.assertTrue("ClosedSizeLimit " + level.state_space(), level.state_space() > 15);
+				Assert.assertTrue("ClosedSizeLimit " + level.state_space(), level.state_space() > 16);
 			}
 		} catch (MoreThan256CellsError e) {
 		}

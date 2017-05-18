@@ -308,12 +308,13 @@ public final class Level {
 			if (a != null && (a.alive || a.moves.length != 2))
 				for (Move am : a.moves) {
 					Cell b = am.cell;
-					while (!b.alive && b.moves.length == 2 && b.moves[0].dir == b.moves[1].dir.reverse && b != agent
-							&& !b.goal && !b.box) {
+					while (!b.alive && b.moves.length == 2 && b != agent && !b.goal && !b.box) {
 						// remove B, and connect A and C directly
 						Move bma = b.rmove(am.exit_dir);
 						Move bmc = Array.find(b.moves, m -> m != bma);
 						Cell c = bmc.cell;
+						if (a.connected_to(c))
+							break;
 						Move cm = c.rmove(bmc.exit_dir);
 						cells[b.id] = null;
 						buffer[b.xy] = 'o';

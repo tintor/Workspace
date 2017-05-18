@@ -53,6 +53,13 @@ public final class Cell {
 		return tunnel() && moves[0].cell.tunnel() && moves[1].cell.tunnel();
 	}
 
+	public boolean connected_to(Cell b) {
+		for (Move m : moves)
+			if (m.cell == b)
+				return true;
+		return false;
+	}
+
 	Move move(int d) {
 		return dir[d];
 	}

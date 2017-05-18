@@ -19,28 +19,28 @@ class LevelUtil {
 		return count;
 	}
 
-	private static boolean free(Move a, StateKey s) {
-		return a != null && !s.box(a.cell);
+	private static boolean free_or_tunnel(Move a, StateKey s) {
+		return a != null && (!s.box(a.cell) || a.dist > 1);
 	}
 
 	public static boolean is_2x2_frozen(Cell box, StateKey s) {
 		for (Dir dir : Dir.values()) {
 			Move a = box.move(dir);
-			if (free(a, s))
+			if (free_or_tunnel(a, s))
 				continue;
 			Move b = box.move(dir.next);
-			if (free(b, s))
+			if (free_or_tunnel(b, s))
 				continue;
 			if (a == null && b == null)
 				return !box.goal;
 			if (a != null) {
 				Move c = a.cell.move(dir.next);
-				if (!free(c, s))
+				if (!free_or_tunnel(c, s))
 					return !(box.goal && a.cell.goal && (b == null || b.cell.goal) && (c == null || c.cell.goal));
 			}
 			if (b != null) {
 				Move c = b.cell.move(dir);
-				if (!free(c, s))
+				if (!free_or_tunnel(c, s))
 					return !(box.goal && b.cell.goal && (a == null || a.cell.goal) && (c == null || c.cell.goal));
 			}
 		}
