@@ -39,7 +39,7 @@ public class LevelLoaderTest {
 	@Parameter
 	public String filename;
 
-	@Test(timeout = 800)
+	@Test
 	public void solve() {
 		try {
 			Level.load(filename);

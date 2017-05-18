@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import lombok.AllArgsConstructor;
 import lombok.Cleanup;
 import lombok.val;
 import lombok.experimental.ExtensionMethod;
@@ -12,26 +13,30 @@ import tintor.common.AutoTimer;
 import tintor.common.BipartiteMatching;
 import tintor.common.Bits;
 import tintor.common.For;
-import tintor.common.PairVisitor;
 import tintor.common.Util;
 import tintor.sokoban.Cell.Dir;
 
-final class Move {
-	final Cell cell;
+// TODO move inside Cell class
+final class Move implements Comparable<Move> {
+	Cell cell;
 	final Dir dir;
-	final Dir exit_dir; // in case of dead tunnels if can be different from dir
-	final int dist;
-	boolean alive;
+	Dir exit_dir; // in case of dead tunnels if can be different from dir
+	int dist;
+	boolean alive = true;
 
 	Move(Cell cell, Dir dir, int dist, boolean alive) {
 		assert cell != null;
 		assert dir != null;
 		assert dist > 0;
 		this.cell = cell;
-		this.dir = dir;
-		this.exit_dir = null;
+		this.dir = this.exit_dir = dir;
 		this.dist = dist;
 		this.alive = alive;
+	}
+
+	@Override
+	public int compareTo(Move o) {
+		return dist - o.dist;
 	}
 }
 
@@ -52,7 +57,7 @@ public final class Level {
 	public final int num_boxes;
 	public final CellVisitor visitor;
 	public final State start;
-	final int[] goal;
+	int[] goal;
 	public final CellLevelTransforms transforms;
 	public final boolean has_goal_rooms;
 	public final boolean has_goal_zone;
@@ -84,94 +89,20 @@ public final class Level {
 		this.name = name;
 		this.buffer = buffer;
 
-		// Create cells
-		Cell[] grid = new Cell[buffer.length];
-		for (int y = w + 1; y < buffer.length - w - 1; y += w + 1)
-			for (int xy = y + 1; xy < y + w - 1; xy++)
-				if (buffer[xy] != Wall)
-					grid[xy] = new Cell(this, xy, buffer[xy]);
-		// Connect cells with neighbors
-		Move[] m = new Move[4];
-		for (Cell c : grid)
-			if (c != null) {
-				int p = 0;
-				for (Dir dir : Dir.values()) {
-					int xy = move(c.xy, dir, w + 1, buffer.length);
-					if (grid[xy] != null)
-						c.dir[dir.ordinal()] = m[p++] = new Move(grid[xy], dir, 1, true);
-				}
-				c.moves = Arrays.copyOf(m, p);
-			}
+		Cell[] grid = create_cell_grid(w);
+		connect_nearby_cells(grid, w);
+		Cell agent = find_agent(grid);
 
-		// Find agent
-		if (Array.count(grid, c -> c != null && (buffer[c.xy] == Agent || buffer[c.xy] == AgentGoal)) != 1)
-			throw new IllegalArgumentException("need exactly one agent");
-		Cell agent = null;
-		for (Cell c : grid)
-			if (c != null && (buffer[c.xy] == Agent || buffer[c.xy] == AgentGoal))
-				agent = c;
+		val p = move_agent_from_deadend(grid, agent);
+		int dist = p.dist;
+		agent = p.agent;
 
-		// Try to move agent and remove reachable dead end cells
-		int dist = 0;
-		// TODO remove restriction on not being able to push box to remove dead end
-		while (!agent.goal && agent.moves.length == 1 && !agent.moves[0].cell.box) {
-			Cell b = agent.moves[0].cell;
-			buffer[agent.xy] = Wall;
-			buffer[b.xy] = Agent;
-			grid[agent.xy] = null;
-			detach(b, agent);
-			agent = b;
-			assert grid[agent.xy] != null;
-			dist += 1;
-		}
-
-		// Remove dead end cells
-		for (Cell a : grid)
-			while (a != null && a != agent && a.moves.length == 1 && !a.goal && !a.box) {
-				Cell b = a.moves[0].cell;
-				buffer[a.xy] = Wall;
-				grid[a.xy] = null;
-				detach(b, a);
-				a = b;
-			}
-
-		// Remove non-reachable cells
+		remove_deadend_cells(grid, agent);
 		visitor = new CellVisitor(buffer.length);
-		visitor.try_add(agent, agent.xy);
-		for (Cell a : visitor)
-			for (Move e : grid[a.xy].moves)
-				visitor.try_add(e.cell, e.cell.xy);
-		for (int i = 0; i < grid.length; i++)
-			if (grid[i] != null && !visitor.visited(grid[i].xy))
-				grid[i] = null;
-
-		// Clean buffer chars that are far from reachable cells
-		for (int i = 0; i < buffer.length; i++)
-			if (!visitor.visited(i) && buffer[i] != '\n' & buffer[i] != Space)
-				if (!is_close_to_visited(i, visitor.visited(), w + 1, buffer.length / (w + 1), false))
-					buffer[i] = Space;
-		// Add walls close to reachable cells to make level look nice
-		if (name != null)
-			for (int i = 0; i < buffer.length; i++)
-				if (!visitor.visited(i) && buffer[i] != '\n' && buffer[i] != Wall)
-					if (is_close_to_visited(i, visitor.visited(), w + 1, buffer.length / (w + 1), true))
-						buffer[i] = Wall;
-
-		// Assign compact cell id-s
-		int count = Array.count(grid, c -> c != null);
-		cells = new Cell[count];
-		int id = 0;
-		for (Cell c : grid)
-			if (c != null)
-				cells[c.id = id++] = c;
-		if (count > 256)
-			throw new MoreThan256CellsError(); // until I make compute_alive() faster
-
-		// Init goal ordinals
-		int i = 0;
-		for (Cell c : cells)
-			if (c.goal)
-				c.goal_ordinal = i++;
+		remove_unreachable_cells(agent, grid);
+		clean_buffer_chars(w);
+		assign_compact_cell_ids();
+		init_goal_ordinals();
 
 		if (name == null) {
 			transforms = null;
@@ -184,6 +115,8 @@ public final class Level {
 			return;
 		}
 
+		add_nice_walls(w);
+
 		// Check boxes and goals
 		num_boxes = Array.count(cells, c -> c.box);
 		if (num_boxes == 0)
@@ -192,14 +125,143 @@ public final class Level {
 			throw new IllegalArgumentException("count(box) != count(goal)");
 
 		// Make sure all goals are reachable by boxes
-		PairVisitor pair_visitor = new PairVisitor(count, count);
+		CellPairVisitor pair_visitor = new CellPairVisitor(cells.length, cells.length, cells);
 		if (!are_all_goals_reachable_full(pair_visitor))
 			throw new IllegalArgumentException("level contains unreachable goal");
 
-		// Compute alive cells
-		compute_alive(pair_visitor);
+		compute_alive_cells(pair_visitor);
+		remove_useless_alive_cells();
+		int room_count = compute_rooms();
 
-		// Remove useless alive cells (no goal dead-ends of alive cells)
+		// Set alive of all Moves
+		for (Cell a : cells)
+			for (Move am : a.moves)
+				am.alive = a.alive && am.cell.alive;
+
+		compress_dead_tunnels(agent);
+		compress_alive_tunnels(agent);
+		compress_cell_ids();
+		pair_visitor.cells = cells;
+		for (Cell a : cells)
+			Arrays.sort(a.moves);
+		move_alive_cells_in_front();
+		compute_distances_to_each_goal(Array.count(cells, c -> c.goal), pair_visitor);
+		start = compute_goal_and_start(agent, dist);
+		transforms = new CellLevelTransforms(this, w + 1, buffer.length / (w + 1), grid);
+		find_bottlenecks(agent, new int[cells.length], null, new int[1]);
+		has_goal_rooms = has_goal_rooms(room_count);
+		has_goal_zone = For.any(cells, a -> a.goal && For.any(a.moves, e -> e.cell.goal));
+	}
+
+	private Cell[] create_cell_grid(int w) {
+		Cell[] grid = new Cell[buffer.length];
+		for (int y = w + 1; y < buffer.length - w - 1; y += w + 1)
+			for (int xy = y + 1; xy < y + w - 1; xy++)
+				if (buffer[xy] != Wall)
+					grid[xy] = new Cell(this, xy, buffer[xy]);
+		return grid;
+	}
+
+	private void connect_nearby_cells(Cell[] grid, int w) {
+		Move[] m = new Move[4];
+		for (Cell c : grid)
+			if (c != null) {
+				int p = 0;
+				for (Dir dir : Dir.values()) {
+					int xy = move(c.xy, dir, w + 1, buffer.length);
+					if (grid[xy] != null)
+						c.dir[dir.ordinal()] = m[p++] = new Move(grid[xy], dir, 1, true);
+				}
+				c.moves = Arrays.copyOf(m, p);
+			}
+	}
+
+	private Cell find_agent(Cell[] grid) {
+		if (Array.count(grid, c -> c != null && (buffer[c.xy] == Agent || buffer[c.xy] == AgentGoal)) != 1)
+			throw new IllegalArgumentException("need exactly one agent");
+		Cell agent = null;
+		for (Cell c : grid)
+			if (c != null && (buffer[c.xy] == Agent || buffer[c.xy] == AgentGoal))
+				agent = c;
+		return agent;
+	}
+
+	@AllArgsConstructor
+	static class DistAgent {
+		int dist;
+		Cell agent;
+	}
+
+	private DistAgent move_agent_from_deadend(Cell[] grid, Cell agent) {
+		int dist = 0;
+		// TODO remove restriction on not being able to push box to remove dead end
+		while (!agent.goal && agent.moves.length == 1 && !agent.moves[0].cell.box) {
+			Cell b = agent.moves[0].cell;
+			buffer[agent.xy] = Wall;
+			buffer[b.xy] = Agent;
+			grid[agent.xy] = null;
+			detach(b, agent);
+			agent = b;
+			assert grid[agent.xy] != null;
+			dist += 1;
+		}
+		return new DistAgent(dist, agent);
+	}
+
+	private void remove_deadend_cells(Cell[] grid, Cell agent) {
+		for (Cell a : grid)
+			while (a != null && a != agent && a.moves.length == 1 && !a.goal && !a.box) {
+				Cell b = a.moves[0].cell;
+				buffer[a.xy] = Wall;
+				grid[a.xy] = null;
+				detach(b, a);
+				a = b;
+			}
+	}
+
+	private void remove_unreachable_cells(Cell agent, Cell[] grid) {
+		visitor.add(agent);
+		for (Cell a : visitor)
+			for (Move e : grid[a.xy].moves)
+				visitor.try_add(e.cell);
+		for (int i = 0; i < grid.length; i++)
+			if (!visitor.visited()[i])
+				grid[i] = null;
+	}
+
+	private void clean_buffer_chars(int w) {
+		for (int i = 0; i < buffer.length; i++)
+			if (!visitor.visited(i) && buffer[i] != '\n' & buffer[i] != Space)
+				if (!is_close_to_visited(i, visitor.visited(), w + 1, buffer.length / (w + 1), false))
+					buffer[i] = Space;
+	}
+
+	private void assign_compact_cell_ids() {
+		int count = visitor.tail();
+		// TODO move this after tunnel compression, as cell count will decrease
+		if (count > 256)
+			throw new MoreThan256CellsError(); // until I make compute_alive() faster
+		cells = new Cell[count];
+		Array.copy(visitor.queue(), 0, cells, 0, count);
+		for (int i = 0; i < cells.length; i++)
+			cells[i].id = i;
+	}
+
+	private void add_nice_walls(int w) {
+		for (int i = 0; i < buffer.length; i++)
+			if (!visitor.visited(i) && buffer[i] != '\n' && buffer[i] != Wall)
+				if (is_close_to_visited(i, visitor.visited(), w + 1, buffer.length / (w + 1), true))
+					buffer[i] = Wall;
+	}
+
+	private void init_goal_ordinals() {
+		int i = 0;
+		for (Cell c : cells)
+			if (c.goal)
+				c.goal_ordinal = i++;
+	}
+
+	private void remove_useless_alive_cells() {
 		for (Cell a : cells)
 			while (true) {
 				Cell b = end_of_half_tunnel(a);
@@ -208,39 +270,84 @@ public final class Level {
 				a.alive = false;
 				a = b;
 			}
+	}
 
-		// Set alive of all Moves
+	private static Cell end_of_half_tunnel(Cell pos) {
+		if (!pos.alive || pos.moves.length > 2)
+			return null;
+		int count = 0;
+		Cell b = null;
+		for (Move e : pos.moves)
+			if (e.cell.alive) {
+				count += 1;
+				b = e.cell;
+			}
+		if (count != 1 || b.moves.length != 2)
+			return null;
+		return Array.count(b.moves, e -> e.cell.alive) == 2 ? b : null;
+	}
+
+	private int compute_rooms() {
+		int room_count = 0;
+		for (Cell a : cells) {
+			if (a.moves.length == 2 || a.room > 0)
+				continue;
+			room_count += 1;
+			for (Cell b : visitor.init(a)) {
+				b.room = room_count;
+				for (Move e : b.moves)
+					if (e.cell.moves.length != 2)
+						visitor.try_add(e.cell);
+			}
+		}
+		return room_count;
+	}
+
+	private void compress_dead_tunnels(Cell agent) {
 		for (Cell a : cells)
-			for (Move e : a.moves)
-				e.alive = a.alive && e.cell.alive;
-
-		// Compress dead tunnels
-		if (compress_tunnels)
-			for (Cell a : cells)
-				if (!a.alive && a.tunnel_entrance()) {
-					Move e = Array.find(a.moves, p -> p.cell.moves.length == 2);
-					Cell b = e.cell;
-					dist = e.dist;
-					while (!b.alive && b.tunnel_interior()) {
-						Cell c = cells[b.moves[0].cell.id ^ b.moves[1].cell.id ^ b.id];
+			if (a != null && (a.alive || a.moves.length != 2))
+				for (Move am : a.moves) {
+					Cell b = am.cell;
+					while (!b.alive && b.moves.length == 2 && b.moves[0].dir == b.moves[1].dir.reverse && b != agent
+							&& !b.goal && !b.box) {
+						// remove B, and connect A and C directly
+						Move bma = b.rmove(am.exit_dir);
+						Move bmc = Array.find(b.moves, m -> m != bma);
+						Cell c = bmc.cell;
+						Move cm = c.rmove(bmc.exit_dir);
 						cells[b.id] = null;
 						buffer[b.xy] = 'o';
-						detach(a, b);
-						attach(a, new Move(c, e.dir, ++dist, false));
-						detach(c, b);
-						// TODO second direction might be different if tunnel isn't straight
-						attach(c, new Move(a, e.dir.reverse, dist, false));
+						am.cell = c;
+						am.dist += bmc.dist;
+						am.alive = false;
+						am.exit_dir = bmc.exit_dir;
+						cm.cell = a;
+						cm.dist += bma.dist;
+						cm.alive = false;
+						cm.exit_dir = bma.exit_dir;
 						b = c;
 					}
 				}
+		for (Cell a : cells)
+			if (a != null)
+				for (Move am : a.moves) {
+					Cell b = am.cell;
+					Move bm = b.rmove(am.exit_dir);
+					assert am.dist == bm.dist;
+					if (am.dist > 1)
+						assert !am.alive && !bm.alive;
+					assert am.exit_dir == bm.dir.reverse;
+					assert bm.exit_dir == am.dir.reverse;
+				}
+	}
 
-		// Compress alive tunnels 
+	private void compress_alive_tunnels(Cell agent) {
 		if (compress_tunnels)
 			for (Cell a : cells)
-				if (a.alive && a.tunnel_entrance()) {
+				if (a != null && a.alive && a.tunnel_entrance()) {
 					Move e = Array.find(a.moves, p -> p.cell.moves.length == 2);
 					Cell b = e.cell;
-					dist = e.dist;
+					int dist = e.dist;
 					boolean is_alive = b.alive;
 					while (b.tunnel_interior() && !b.goal) {
 						Cell c = cells[b.moves[0].cell.id ^ b.moves[1].cell.id ^ b.id];
@@ -256,20 +363,19 @@ public final class Level {
 						b = c;
 					}
 				}
+	}
 
-		// Compress cell IDs
-		if (compress_tunnels) {
-			id = 0;
-			for (i = 0; i < cells.length; i++)
-				if (cells[i] != null)
-					cells[id++] = cells[i];
-			cells = Arrays.copyOf(cells, id);
-			for (i = 0; i < cells.length; i++)
-				cells[i].id = i;
-			assert alive == cells.length || !cells[alive].alive;
-		}
+	private void compress_cell_ids() {
+		int id = 0;
+		for (int i = 0; i < cells.length; i++)
+			if (cells[i] != null)
+				cells[id++] = cells[i];
+		cells = Arrays.copyOf(cells, id);
+		for (int i = 0; i < cells.length; i++)
+			cells[i].id = i;
+	}
 
-		// Put alive cells in front of dead cells
+	private void move_alive_cells_in_front() {
 		int p = 0, q = cells.length - 1;
 		while (true) {
 			while (p < q && cells[p].alive)
@@ -287,46 +393,6 @@ public final class Level {
 		alive = cells[p].alive ? p + 1 : p;
 		assert Util.all(alive, e -> cells[e].alive);
 		assert Util.all(alive, cells.length, e -> !cells[e].alive);
-
-		// Compute distances to each goal
-		compute_distances_to_each_goal(Array.count(cells, c -> c.goal), pair_visitor);
-
-		// Compute box and goal bit sets
-		int[] box = new int[(alive + 31) / 32];
-		goal = new int[(alive + 31) / 32];
-		for (Cell c : cells) {
-			if (c.box)
-				Bits.set(box, c.id);
-			if (c.goal)
-				Bits.set(goal, c.id);
-		}
-		start = new State(agent.id, box, 0, dist, 0, 0, 0);
-
-		// Compute transforms
-		transforms = new CellLevelTransforms(this, w + 1, buffer.length / (w + 1), grid);
-
-		// Compute bottlenecks
-		find_bottlenecks(agent, new int[cells.length], null, new int[1]);
-
-		// Compute rooms
-		int room_count = 0;
-		for (Cell a : cells) {
-			if (a.bottleneck_tunnel() || a.room > 0)
-				continue;
-			for (Cell b : visitor.init(a)) {
-				b.room = room_count + 1;
-				for (Move e : b.moves)
-					if (!e.cell.bottleneck_tunnel())
-						visitor.try_add(e.cell);
-			}
-			room_count += 1;
-		}
-
-		// Compute has_goal_rooms
-		has_goal_rooms = has_goal_rooms(room_count);
-
-		// Compute has_goal_zone
-		has_goal_zone = For.any(cells, a -> a.goal && For.any(a.moves, e -> e.cell.goal));
 	}
 
 	private static final boolean compress_tunnels = false;
@@ -365,22 +431,20 @@ public final class Level {
 		return low_a;
 	}
 
-	private void compute_distances_to_each_goal(int goals, PairVisitor pair_visitor) {
+	private void compute_distances_to_each_goal(int goals, CellPairVisitor pair_visitor) {
 		For.each(cells, g -> g.distance_box = Array.ofInt(goals, Cell.Infinity));
 		int[][] distance = Array.ofInt(cells.length, alive, Cell.Infinity);
 		for (Cell g : cells)
 			if (g.goal) {
 				pair_visitor.init();
-				for (Move e : g.moves) {
-					pair_visitor.add(e.cell.id, g.id);
-					distance[e.cell.id][g.id] = e.dist - 1;
-				}
+				for (Move e : g.moves)
+					if (pair_visitor.try_add(e.cell, g))
+						distance[e.cell.id][g.id] = e.dist - 1;
 				g.distance_box[g.goal_ordinal] = 0;
 
 				while (!pair_visitor.done()) {
-					final Cell agent = cells[pair_visitor.first()];
-					final Cell box = cells[pair_visitor.second()];
-					assert distance[agent.id][box.id] >= 0;
+					final Cell agent = pair_visitor.first();
+					final Cell box = pair_visitor.second();
 					assert distance[agent.id][box.id] != Cell.Infinity;
 					box.distance_box[g.goal_ordinal] = Math.min(box.distance_box[g.goal_ordinal],
 							distance[agent.id][box.id]);
@@ -388,17 +452,29 @@ public final class Level {
 					for (Move e : agent.moves) {
 						// TODO moves included only if ! optimal
 						Cell c = e.cell;
-						if (c != box && pair_visitor.try_add(c.id, box.id))
+						if (c != box && pair_visitor.try_add(c, box))
 							distance[c.id][box.id] = distance[agent.id][box.id] + e.dist;
 						Move m = agent.rmove(e.dir);
-						if (agent.alive && m != null && m.cell == box && pair_visitor.try_add(c.id, agent.id))
+						if (agent.alive && m != null && m.cell == box && pair_visitor.try_add(c, agent))
 							distance[c.id][agent.id] = distance[agent.id][box.id] + e.dist;
 					}
 				}
 			}
 	}
 
-	public boolean are_all_goals_reachable_full(PairVisitor visitor) {
+	private State compute_goal_and_start(Cell agent, int dist) {
+		int[] box = new int[(alive + 31) / 32];
+		goal = new int[(alive + 31) / 32];
+		for (Cell c : cells) {
+			if (c.box)
+				Bits.set(box, c.id);
+			if (c.goal)
+				Bits.set(goal, c.id);
+		}
+		return new State(agent.id, box, 0, dist, 0, 0, 0);
+	}
+
+	public boolean are_all_goals_reachable_full(CellPairVisitor visitor) {
 		int[] num = new int[1];
 		int[] box_ordinal = Array.ofInt(cells.length, p -> cells[p].box ? num[0]++ : -1);
 		int num_boxes = num[0];
@@ -406,9 +482,11 @@ public final class Level {
 			return true;
 
 		boolean[][] can_reach = new boolean[num_boxes][num_boxes];
-		main: for (Cell g : cells) {
+		main:
+		for (Cell g : cells) {
 			if (!g.goal)
 				continue;
+			assert g.goal_ordinal >= 0;
 			int count = 0;
 			if (g.box) {
 				can_reach[box_ordinal[g.id]][g.goal_ordinal] = true;
@@ -417,19 +495,19 @@ public final class Level {
 			}
 			visitor.init();
 			for (Move e : g.moves)
-				visitor.add(e.cell.id, g.id);
+				visitor.add(e.cell, g);
 			while (!visitor.done()) {
-				final int a = visitor.first();
-				final int b = visitor.second();
-				for (Move e : cells[a].moves) {
+				final Cell a = visitor.first();
+				final Cell b = visitor.second();
+				for (Move e : a.moves) {
 					Cell c = e.cell;
-					if (c.id == b)
+					if (c == b)
 						continue;
-					visitor.try_add(c.id, b);
-					Move m = cells[a].rmove(e.dir);
-					if (m != null && m.cell.id == b && visitor.try_add(c.id, a))
-						if (cells[a].box && !can_reach[box_ordinal[a]][g.goal_ordinal]) {
-							can_reach[box_ordinal[a]][g.goal_ordinal] = true;
+					visitor.try_add(c, b);
+					Move m = a.rmove(e.dir);
+					if (m != null && m.cell == b && visitor.try_add(c, a))
+						if (a.box && !can_reach[box_ordinal[a.id]][g.goal_ordinal]) {
+							can_reach[box_ordinal[a.id]][g.goal_ordinal] = true;
 							if (++count == num_boxes)
 								continue main;
 						}
@@ -442,7 +520,7 @@ public final class Level {
 	}
 
 	// TODO instead of searching forward N times => search backward once from every goal
-	private void compute_alive(PairVisitor visitor) {
+	private void compute_alive_cells(CellPairVisitor visitor) {
 		for (Cell b : cells) {
 			if (b.goal) {
 				b.alive = true;
@@ -451,15 +529,16 @@ public final class Level {
 
 			visitor.init();
 			for (Move e : b.moves)
-				visitor.add(e.cell.id, b.id);
+				visitor.add(e.cell, b);
 
-			loop: while (!visitor.done()) {
-				final Cell agent = cells[visitor.first()];
-				final Cell box = cells[visitor.second()];
+			loop:
+			while (!visitor.done()) {
+				final Cell agent = visitor.first();
+				final Cell box = visitor.second();
 
 				for (Move e : agent.moves) {
 					if (e.cell != box) {
-						visitor.try_add(e.cell.id, box.id);
+						visitor.try_add(e.cell, box);
 						continue;
 					}
 					final Move q = e.cell.move(e.dir);
@@ -469,25 +548,10 @@ public final class Level {
 						b.alive = true;
 						break loop;
 					}
-					visitor.try_add(e.cell.id, q.cell.id);
+					visitor.try_add(e.cell, q.cell);
 				}
 			}
 		}
-	}
-
-	private static Cell end_of_half_tunnel(Cell pos) {
-		if (!pos.alive || pos.moves.length > 2)
-			return null;
-		int count = 0;
-		Cell b = null;
-		for (Move e : pos.moves)
-			if (e.cell.alive) {
-				count += 1;
-				b = e.cell;
-			}
-		if (count != 1 || b.moves.length != 2)
-			return null;
-		return Array.count(b.moves, e -> e.cell.alive) == 2 ? b : null;
 	}
 
 	private static boolean is_close_to_visited(int pos, boolean[] visited, int width, int height, boolean diagonal) {
@@ -530,7 +594,8 @@ public final class Level {
 	public char[] render(CellToChar ch) {
 		char[] copy = buffer.clone();
 		for (Cell c : cells)
-			copy[c.xy] = ch.fn(c);
+			if (c != null)
+				copy[c.xy] = ch.fn(c);
 		return copy;
 	}
 
@@ -571,28 +636,29 @@ public final class Level {
 		if (Array.count(clone.cells, c -> c.box) != Array.count(clone.cells, c -> c.goal))
 			return false;
 
-		PairVisitor visitor = new PairVisitor(clone.cells.length, clone.cells.length);
+		CellPairVisitor visitor = new CellPairVisitor(clone.cells.length, clone.cells.length, clone.cells);
 		return has_goal_rooms ? clone.are_all_goals_reachable_quick(visitor)
 				: clone.are_all_goals_reachable_full(visitor);
 	}
 
-	private boolean are_all_goals_reachable_quick(PairVisitor visitor) {
+	private boolean are_all_goals_reachable_quick(CellPairVisitor visitor) {
 		// TODO assert original level is single_goal_room
-		main: for (Cell g : cells) {
+		main:
+		for (Cell g : cells) {
 			if (!g.goal || g.box)
 				continue;
 			visitor.init();
 			for (Move e : g.moves)
-				visitor.add(e.cell.id, g.id);
+				visitor.add(e.cell, g);
 			while (!visitor.done()) {
-				final Cell a = cells[visitor.first()];
-				final Cell b = cells[visitor.second()];
+				final Cell a = visitor.first();
+				final Cell b = visitor.second();
 				for (Move e : a.moves) {
 					if (e.cell == b)
 						continue;
-					visitor.try_add(e.cell.id, b.id);
+					visitor.try_add(e.cell, b);
 					Move m = a.rmove(e.dir);
-					if (m != null && m.cell == b && visitor.try_add(e.cell.id, a.id))
+					if (m != null && m.cell == b && visitor.try_add(e.cell, a))
 						if (a.box && !a.goal && !e.cell.goal)
 							continue main;
 				}

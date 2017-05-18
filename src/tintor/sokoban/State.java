@@ -144,11 +144,10 @@ public final class State extends StateKey {
 
 	State push(Move m, Level level, boolean optimal, int moves, int prev_agent) {
 		Cell a = m.cell;
-		Dir dir = m.dir;
 		assert symmetry == 0;
 		assert box(a.id);
-		assert !box(a.rmove(dir).cell.id);
 
+		Dir dir = m.exit_dir;
 		Move b = a.move(dir);
 		if (b == null || !b.alive || box(b.cell))
 			return null;

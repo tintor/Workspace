@@ -16,8 +16,8 @@ final class Heuristic {
 	final Cell[] boxes;
 	final Hungarian hungarian;
 	static final AutoTimer timer = new AutoTimer("heuristic");
-	int deadlocks;
-	int non_deadlocks;
+	long deadlocks;
+	long non_deadlocks;
 
 	Heuristic(Level level, boolean optimal) {
 		this.level = level;

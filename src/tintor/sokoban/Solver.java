@@ -9,10 +9,34 @@ import tintor.common.Timer;
 // Unsolved
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
 
+// TODO: Use Unsafe to allocate large uninitialized arrays faster:
+// https://shipilev.net/jvm-anatomy-park/7-initialization-costs/
+
+/* How did it miss this deadlock in original:9?
+         #######
+         #  ...#
+     #####  ...#
+     #      . .#
+     #  ##  ...#
+     ## ##  ...#
+    ### ########
+    #   $ ##
+#####    $ #####
+#   #    $ #   #
+#         $  $ #
+#####      #####
+    #      #
+    ########
+*/
+
+// TODO separate line in stats showing memory (total memory used and ETA to memory exhaustion)
+// TODO auto switch to always cleaning when close to OOM
+
 // TODO [non-optimal] trick for one original level:
 //   add an extra wall to reduce 2-cell wide entrance to a goal room to 1-cell wide
 
 // TODO split level into rooms and tunnels
+//      - compress non-straight one-way alive tunnels (ie. original:9) 
 //      - compress tunnels
 //      -   keep entrance and exit (if alive) to be able to park one box in tunnel
 //      -   for alive tunnels, keep only one tunnel cell in the middle to be able to park (distance to enter 1, distance to exit = length-1 on both sides!)

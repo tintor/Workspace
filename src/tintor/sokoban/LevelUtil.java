@@ -94,11 +94,10 @@ class LevelUtil {
 		CellVisitor visitor = c.level.visitor;
 		for (Cell a : visitor.init(c.level.cells[s.agent]))
 			for (Move e : a.moves) {
-				if (visitor.visited(e.cell) || s.box(e.cell))
-					continue;
 				if (e.cell == c)
 					return true;
-				visitor.add(e.cell);
+				if (!s.box(e.cell))
+					visitor.try_add(e.cell);
 			}
 		return false;
 	}

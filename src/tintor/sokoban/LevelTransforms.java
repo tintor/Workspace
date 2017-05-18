@@ -3,7 +3,6 @@ package tintor.sokoban;
 import java.util.Arrays;
 
 import tintor.common.Bits;
-import tintor.common.Util;
 import tintor.sokoban.Cell.Dir;
 
 final class CellLevelTransforms {
@@ -17,7 +16,7 @@ final class CellLevelTransforms {
 		dir_transforms = new int[7][];
 		inv_dir_transforms = new int[7][];
 		int w = 0;
-		for (int symmetry = 1; symmetry <= 7; symmetry += 1)
+		/*for (int symmetry = 1; symmetry <= 7; symmetry += 1)
 			if (is_symmetric(symmetry, grid)) {
 				int[] mapping = new int[level.cells.length];
 				int[] inv_mapping = new int[level.cells.length];
@@ -29,14 +28,14 @@ final class CellLevelTransforms {
 				}
 				transforms[w] = mapping;
 				inv_transforms[w] = inv_mapping;
-
+		
 				for (int i = 0; i < level.alive; i++)
 					assert 0 <= mapping[i] && mapping[i] < level.alive;
 				for (int i = level.alive; i < level.cells.length; i++)
 					assert level.alive <= mapping[i] && mapping[i] < level.cells.length;
 				assert Util.all(level.cells.length, i -> inv_mapping[mapping[i]] == i);
 				assert Util.sum(level.cells.length, i -> i - mapping[i]) == 0;
-
+		
 				dir_transforms[w] = new int[4];
 				inv_dir_transforms[w] = new int[4];
 				for (int a = 0; a < 4; a++) {
@@ -44,9 +43,9 @@ final class CellLevelTransforms {
 					dir_transforms[w][c] = a;
 					inv_dir_transforms[w][a] = c;
 				}
-
+		
 				w += 1;
-			}
+			}*/
 		transforms = Arrays.copyOf(transforms, w);
 		transforms = new int[0][];
 		inv_transforms = Arrays.copyOf(inv_transforms, w);

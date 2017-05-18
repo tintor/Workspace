@@ -32,7 +32,7 @@ public final class Cell {
 
 	Cell(Level level, int xy, char ch) {
 		this.level = level;
-		this.xy = xy;
+		id = this.xy = xy;
 		goal = ch == Level.Goal || ch == Level.AgentGoal || ch == Level.BoxGoal;
 		box = ch == Level.Box || ch == Level.BoxGoal;
 	}
@@ -51,13 +51,6 @@ public final class Cell {
 
 	public boolean tunnel_interior() {
 		return tunnel() && moves[0].cell.tunnel() && moves[1].cell.tunnel();
-	}
-
-	int dist(Dir d) {
-		for (Move m : moves)
-			if (m.dir == d)
-				return m.dist;
-		throw new Error();
 	}
 
 	Move move(int d) {

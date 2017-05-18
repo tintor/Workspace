@@ -12,6 +12,9 @@ import java.util.Scanner;
 import java.util.function.IntPredicate;
 import java.util.function.IntUnaryOperator;
 
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
 public final class Util {
 	public static FileChannel newTempFile() {
 		return Util.checkIOException(() -> FileChannel.open(Files.createTempFile(null, null), StandardOpenOption.CREATE,
@@ -71,13 +74,18 @@ public final class Util {
 	}
 
 	public static String human(long a) {
+		final long K = 1000;
+		final long M = 1000_000;
+		final long B = 1000_000_000;
 		if (a < 0)
 			return "-" + human(-a);
-		if (a <= 10000)
-			return String.format("%d", a);
-		if (a <= 10000000)
-			return String.format("%dK", (a + 500) / 1000);
-		return String.format("%dM", (a + 500000) / 1000000);
+		if (a < 10 * K)
+			return String.format("%ld", a);
+		if (a < 10 * M)
+			return String.format("%ldK", (a + K / 2) / K);
+		if (a < 10 * B)
+			return String.format("%ldM", (a + M / 2) / M);
+		return String.format("%ldB", (a + B / 2) / B);
 	}
 
 	public static int[] compressToIntArray(boolean[] b) {

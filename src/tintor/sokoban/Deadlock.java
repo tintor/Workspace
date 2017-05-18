@@ -115,7 +115,7 @@ public final class Deadlock {
 						visitor.try_add(b.id);
 						continue;
 					}
-					Move c = b.move(e.dir);
+					Move c = b.move(e.exit_dir);
 					if (c == null)
 						continue;
 					if (!c.cell.goal) {
@@ -171,7 +171,7 @@ public final class Deadlock {
 					continue;
 				}
 
-				Move c = b.move(e.dir);
+				Move c = b.move(e.exit_dir);
 				if (c == null || !c.alive || Bits.test(box, c.cell.id))
 					continue;
 

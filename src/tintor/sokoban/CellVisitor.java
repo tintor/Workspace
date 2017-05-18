@@ -14,6 +14,10 @@ public final class CellVisitor implements Iterable<Cell> {
 		set = new boolean[size];
 	}
 
+	public Cell[] queue() {
+		return queue;
+	}
+
 	public boolean try_add(Cell a) {
 		if (set[a.id])
 			return false;
@@ -22,18 +26,14 @@ public final class CellVisitor implements Iterable<Cell> {
 		return true;
 	}
 
-	public boolean try_add(Cell a, int id) {
-		if (set[id])
-			return false;
-		set[id] = true;
-		queue[tail++] = a;
-		return true;
-	}
-
 	public void add(Cell a) {
 		assert !set[a.id];
 		set[a.id] = true;
 		queue[tail++] = a;
+	}
+
+	public int tail() {
+		return tail;
 	}
 
 	public boolean visited(int a) {

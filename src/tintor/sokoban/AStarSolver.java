@@ -5,6 +5,7 @@ import java.util.ArrayDeque;
 import lombok.Cleanup;
 import lombok.val;
 import tintor.common.AutoTimer;
+import tintor.common.Timer;
 import tintor.common.Util;
 
 public final class AStarSolver {
@@ -100,6 +101,7 @@ public final class AStarSolver {
 				timer_moves.open();
 				State b = a.push(p, level, optimal, moves[agent.id], a.agent);
 				timer_moves.close();
+
 				if (b == null || closed.contains(b))
 					continue;
 
@@ -160,7 +162,7 @@ public final class AStarSolver {
 		deadlock.report();
 		System.out.printf("cutoff:%s dead:%s live:%s ", Util.human(cutoffs), Util.human(heuristic.deadlocks),
 				Util.human(heuristic.non_deadlocks));
-		System.out.printf("time:%s ", Util.human(AutoTimer.total() / AutoTimer.Second));
+		System.out.printf("time:%s ", Timer.format(AutoTimer.total()));
 		System.out.printf("speed:%s ", Util.human((int) speed));
 		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
 	}
