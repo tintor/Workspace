@@ -202,6 +202,10 @@ public final class Util {
 		return Util.checkIOException(() -> new FileWriter(file, false));
 	}
 
+	public static void write(FileWriter writer, String string) {
+		Util.checkIOException(() -> writer.write(string));
+	}
+
 	public static void write(FileWriter writer, char[] buffer) {
 		Util.checkIOException(() -> writer.write(buffer, 0, buffer.length));
 	}
