@@ -146,8 +146,6 @@ public class Solver {
 		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells.length, level.alive,
 				level.num_boxes, level.state_space(), level.has_goal_rooms);
 		level.print(level.start);
-		Log.raw("alive");
-		level.print(p -> p.alive ? '.' : ' ');
 		Log.raw("bottleneck");
 		level.print(p -> p.bottleneck ? '.' : ' ');
 		Log.raw("rooms");

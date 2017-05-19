@@ -296,6 +296,7 @@ public final class Level {
 	}
 
 	private void compress_dead_tunnels(Cell agent) {
+		// TODO if agent is inside empty tunnel we can move agent to both sides to avoid breaking tunnel into two (will have 2 start states) 
 		for (Cell a : cells)
 			if (a != null && (a.alive || a.moves.length != 2))
 				for (Move am : a.moves) {
@@ -321,17 +322,6 @@ public final class Level {
 						b = c;
 					}
 				}
-		for (Cell a : cells)
-			if (a != null)
-				for (Move am : a.moves) {
-					Cell b = am.cell;
-					Move bm = b.rmove(am.exit_dir);
-					assert am.dist == bm.dist;
-					if (am.dist > 1)
-						assert !am.alive && !bm.alive;
-					assert am.exit_dir == bm.dir.reverse;
-					assert bm.exit_dir == am.dir.reverse;
-				}
 	}
 
 	private boolean straight(Cell a) {
@@ -339,6 +329,7 @@ public final class Level {
 	}
 
 	private void compress_alive_tunnels(Cell agent) {
+		// TODO if agent is inside empty tunnel we can move agent to both sides to avoid breaking tunnel into two (will have 2 start states) 
 		// TODO optimal mode requires that one cell is left uncompressed at both sides of the tunnel (unless bottleneck)
 		for (Cell a : cells)
 			if (a != null && a.alive)
@@ -348,19 +339,13 @@ public final class Level {
 						// remove B, and connect A and C directly
 						Move bma = b.move(am.dir.reverse);
 						Move bmc = b.move(am.dir);
-						assert bma != bmc;
-						assert bmc != null;
 						Cell c = bmc.cell;
 						// TODO compress tunnels of length 1 if they are bottleneck
 						if (!c.alive || !bmc.alive)
 							break;
 						if (!straight(c) && am.dist + bmc.dist == 2)
 							break;
-						assert c.moves.length >= 1;
-						assert c.dir[am.dir.reverse.ordinal()] != null;
 						Move cm = c.move(am.dir.reverse);
-						assert cm != null;
-						assert cm.cell == b;
 						cells[b.id] = null;
 						buffer[b.xy] = Code.AliveTunnel;
 						am.cell = c;
