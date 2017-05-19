@@ -1,2 +1,4 @@
 #!/bin/bash
-javac -classpath "commons-lang3-3.5.jar:commons-cli-1.4.jar:lombok.jar:/usr/local/google/eclipse47_tintor/stable/plugins/org.junit_4.12.0.v201504281640/junit.jar" src/tintor/*/*.java src/tintor/*/*/*.java
+JARS='junit.jar:org.hamcrest.core_1.3.0.v201303031735.jar:commons-lang3-3.5.jar:commons-cli-1.4.jar:lombok.jar'
+mkdir bin
+javac -XDignore.symbol.file -classpath $JARS -d bin src/tintor/*/*.java src/tintor/*/*/*.java
