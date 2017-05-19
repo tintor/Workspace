@@ -30,6 +30,21 @@ public final class Array {
 		return null;
 	}
 
+	public int find_index(int[] array, IntPredicate fn) {
+		for (int i = 0; i < array.length; i++)
+			if (fn.test(array[i]))
+				return i;
+		return -1;
+	}
+
+	public int count(int[] array, IntPredicate fn) {
+		int count = 0;
+		for (int e : array)
+			if (fn.test(e))
+				count += 1;
+		return count;
+	}
+
 	public <T> int count(T[] array, Predicate<T> fn) {
 		int count = 0;
 		for (T e : array)

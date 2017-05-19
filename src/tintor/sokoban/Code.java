@@ -1,7 +1,5 @@
 package tintor.sokoban;
 
-import org.apache.commons.lang3.SystemUtils;
-
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
@@ -17,6 +15,7 @@ public class Code {
 	final char Dead = ':';
 	final char AliveTunnel = 't';
 	final char DeadTunnel = 'o';
+	final char GoalRoomEntrance = 'b';
 
 	private String emojify(char c) {
 		if (c == ' ')
@@ -32,7 +31,7 @@ public class Code {
 		if (c == Goal)
 			return "🏳";
 		if (c == BoxGoal)
-			return "⚫";
+			return "🔵";
 		if (c == AgentGoal)
 			return "😎";
 		if (c == DeadTunnel)
@@ -41,7 +40,7 @@ public class Code {
 			return "🔸";
 		if (c == Dead) // dead cell
 			return "🌀";
-		if (c == 'b') // bottleneck
+		if (c == GoalRoomEntrance)
 			return "🚩";
 		if (c == '0')
 			return "0️⃣";
@@ -70,10 +69,11 @@ public class Code {
 	}
 
 	String emojify(char[] buffer) {
+		boolean add_space = System.console() != null;
 		StringBuilder sb = new StringBuilder();
 		for (char c : buffer) {
 			sb.append(emojify(c));
-			if (SystemUtils.IS_OS_LINUX && c != '\n')
+			if (add_space && c != '\n')
 				sb.append(' ');
 		}
 		return sb.toString();
