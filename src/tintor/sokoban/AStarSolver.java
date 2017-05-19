@@ -13,6 +13,10 @@ public final class AStarSolver {
 		private static final long serialVersionUID = 1L;
 	};
 
+	public static class SpeedTooLow extends Error {
+		private static final long serialVersionUID = 1L;
+	};
+
 	static final AutoTimer timer_solve = new AutoTimer("solve");
 	static final AutoTimer timer_moves = new AutoTimer("moves");
 
@@ -25,6 +29,7 @@ public final class AStarSolver {
 
 	public int closed_size_limit = Integer.MAX_VALUE;
 	public int trace; // 0 to turn off any tracing
+	public int min_speed = Integer.MAX_VALUE;
 
 	private CellVisitor visitor;
 	private int[] moves;
@@ -165,5 +170,7 @@ public final class AStarSolver {
 		System.out.printf("time:%s ", Timer.format(AutoTimer.total()));
 		System.out.printf("speed:%s ", Util.human((int) speed));
 		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
+		if (speed < min_speed)
+			throw new SpeedTooLow();
 	}
 }

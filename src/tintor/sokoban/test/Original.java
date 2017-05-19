@@ -31,6 +31,7 @@ public class Original {
 				AStarSolver solver = new AStarSolver(level, false);
 				solver.trace = 2;
 				solver.closed_size_limit = 1_000_000;
+				solver.min_speed = 750;
 				timer.total = 0;
 				AutoTimer.reset();
 				timer.start();
@@ -50,6 +51,10 @@ public class Original {
 			} catch (AStarSolver.ClosedSizeLimitError e) {
 				timer.stop();
 				raw("out of closed nodes");
+				unsolved += 1;
+			} catch (AStarSolver.SpeedTooLow e) {
+				timer.stop();
+				raw("speed too low");
 				unsolved += 1;
 			} catch (OutOfMemoryError e) {
 				timer.stop();
