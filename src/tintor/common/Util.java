@@ -80,12 +80,12 @@ public final class Util {
 		if (a < 0)
 			return "-" + human(-a);
 		if (a < 10 * K)
-			return String.format("%ld", a);
+			return String.format("%d", a);
 		if (a < 10 * M)
-			return String.format("%ldK", (a + K / 2) / K);
+			return String.format("%dK", (a + K / 2) / K);
 		if (a < 10 * B)
-			return String.format("%ldM", (a + M / 2) / M);
-		return String.format("%ldB", (a + B / 2) / B);
+			return String.format("%dM", (a + M / 2) / M);
+		return String.format("%dB", (a + B / 2) / B);
 	}
 
 	public static int[] compressToIntArray(boolean[] b) {

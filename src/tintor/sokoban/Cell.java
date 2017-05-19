@@ -33,8 +33,8 @@ public final class Cell {
 	Cell(Level level, int xy, char ch) {
 		this.level = level;
 		id = this.xy = xy;
-		goal = ch == Level.Goal || ch == Level.AgentGoal || ch == Level.BoxGoal;
-		box = ch == Level.Box || ch == Level.BoxGoal;
+		goal = ch == Code.Goal || ch == Code.AgentGoal || ch == Code.BoxGoal;
+		box = ch == Code.Box || ch == Code.BoxGoal;
 	}
 
 	boolean bottleneck_tunnel() {

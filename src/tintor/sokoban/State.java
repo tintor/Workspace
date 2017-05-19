@@ -148,30 +148,33 @@ public final class State extends StateKey {
 		assert box(a.id);
 
 		Dir dir = m.exit_dir;
-		Move b = a.move(dir);
-		if (b == null || !b.alive || box(b.cell))
+		Move am = a.move(dir);
+		if (am == null || !am.alive || box(am.cell))
 			return null;
+		assert am.dir == am.exit_dir;
 
 		int[] nbox = Array.clone(box);
 		Bits.clear(nbox, a.id);
-		Bits.set(nbox, b.cell.id);
-		int pushes = b.dist;
+		Bits.set(nbox, am.cell.id);
+		int new_dist = dist + moves + m.dist - 1 + am.dist;
+		int pushes = 1;
 
 		// TODO increase push limit
 		// keep pushing box until the end of tunnel
-		while (pushes < 15 && can_force_push(a, b.cell, dir, optimal, level)) {
+		while (pushes < 15 && can_force_push(a, am.cell, dir, optimal, level)) {
 			// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
-			Move c = b.cell.move(dir);
+			Move c = am.cell.move(dir);
 			if (c == null || !c.alive || box(c.cell))
 				return null;
-			a = b.cell;
-			b = c;
+			a = am.cell;
+			am = c;
 			Bits.clear(nbox, a.id);
-			Bits.set(nbox, b.cell.id);
-			pushes += c.dist;
+			Bits.set(nbox, am.cell.id);
+			new_dist += c.dist;
+			pushes += 1;
 		}
 
-		State s = new State(a.id, nbox, 0, dist + moves + m.dist - 1 + pushes, dir.ordinal(), pushes, prev_agent);
+		State s = new State(a.id, nbox, 0, new_dist, dir.ordinal(), pushes, prev_agent);
 		assert s.prev(level).equals(this);
 		return s;
 	}

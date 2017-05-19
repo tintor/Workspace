@@ -12,8 +12,8 @@ class LevelLoader {
 			return "";
 		for (int i = 0; i < line.length(); i++) {
 			char c = line.charAt(i);
-			if (c != Level.Box && c != Level.Space && c != Level.Wall && c != Level.BoxGoal && c != Level.AgentGoal
-					&& c != Level.Goal && c != Level.Agent)
+			if (c != Code.Box && c != Code.Space && c != Code.Wall && c != Code.BoxGoal && c != Code.AgentGoal
+					&& c != Code.Goal && c != Code.Agent)
 				return "";
 		}
 		return line;
@@ -69,7 +69,7 @@ class LevelLoader {
 		for (int row = 0; row < lines.size(); row++) {
 			String s = lines.get(row);
 			for (int col = 0; col < w; col++)
-				buffer[row * (w + 1) + col] = col < s.length() ? s.charAt(col) : Level.Space;
+				buffer[row * (w + 1) + col] = col < s.length() ? s.charAt(col) : Code.Space;
 			buffer[row * (w + 1) + w] = '\n';
 		}
 		return buffer;

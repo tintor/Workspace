@@ -206,12 +206,12 @@ public final class Deadlock {
 
 		if (!level.is_valid_level(p -> {
 			if (p.id == agent)
-				return p.goal ? Level.AgentGoal : Level.Agent;
+				return p.goal ? Code.AgentGoal : Code.Agent;
 			if (p.alive && Bits.test(box, p.id))
-				return Level.Wall;
+				return Code.Wall;
 			if (p.alive && Bits.test(original_box, p.id))
-				return p.goal ? Level.BoxGoal : Level.Box;
-			return p.goal ? Level.Goal : Level.Space;
+				return p.goal ? Code.BoxGoal : Code.Box;
+			return p.goal ? Code.Goal : Code.Space;
 		})) {
 			isvalidlevel_deadlocks += 1;
 			Util.write(is_valid_level_deadlocks_file, level.render(new StateKey(agent, original_box)));

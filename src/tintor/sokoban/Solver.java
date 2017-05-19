@@ -36,6 +36,7 @@ import tintor.common.Timer;
 //   add an extra wall to reduce 2-cell wide entrance to a goal room to 1-cell wide
 
 // TODO split level into rooms and tunnels
+//      - can we compress 2-cell wide tunnels? box can only move up or down one lane, agent can go around the box, more than one box can fit into tunnel
 //      - compress non-straight one-way alive tunnels (ie. original:9) 
 //      - compress tunnels
 //      -   keep entrance and exit (if alive) to be able to park one box in tunnel
@@ -149,14 +150,8 @@ public class Solver {
 		level.print(p -> p.alive ? '.' : ' ');
 		Log.raw("bottleneck");
 		level.print(p -> p.bottleneck ? '.' : ' ');
-		Log.raw("tunnel");
-		level.print(p -> p.tunnel() ? '.' : ' ');
-		Log.raw("tunnel_entrance");
-		level.print(p -> p.tunnel_entrance() ? '.' : ' ');
-		Log.raw("tunnel_interior");
-		level.print(p -> p.tunnel_interior() ? '.' : ' ');
 		Log.raw("rooms");
-		level.print(p -> p.room == -1 ? 'x' : hex(p.room));
+		level.print(p -> hex(p.room));
 		AStarSolver solver = new AStarSolver(level, false);
 		solver.trace = 2;
 

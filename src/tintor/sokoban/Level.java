@@ -42,14 +42,6 @@ final class Move implements Comparable<Move> {
 
 @ExtensionMethod(Array.class)
 public final class Level {
-	final static char Box = '$';
-	final static char Wall = '#';
-	final static char BoxGoal = '*';
-	final static char AgentGoal = '+';
-	final static char Goal = '.';
-	final static char Agent = '@';
-	final static char Space = ' ';
-
 	public final String name;
 	private final char[] buffer;
 	public Cell[] cells;
@@ -157,7 +149,7 @@ public final class Level {
 		Cell[] grid = new Cell[buffer.length];
 		for (int y = w + 1; y < buffer.length - w - 1; y += w + 1)
 			for (int xy = y + 1; xy < y + w - 1; xy++)
-				if (buffer[xy] != Wall)
+				if (buffer[xy] != Code.Wall)
 					grid[xy] = new Cell(this, xy, buffer[xy]);
 		return grid;
 	}
@@ -177,11 +169,11 @@ public final class Level {
 	}
 
 	private Cell find_agent(Cell[] grid) {
-		if (Array.count(grid, c -> c != null && (buffer[c.xy] == Agent || buffer[c.xy] == AgentGoal)) != 1)
+		if (Array.count(grid, c -> c != null && (buffer[c.xy] == Code.Agent || buffer[c.xy] == Code.AgentGoal)) != 1)
 			throw new IllegalArgumentException("need exactly one agent");
 		Cell agent = null;
 		for (Cell c : grid)
-			if (c != null && (buffer[c.xy] == Agent || buffer[c.xy] == AgentGoal))
+			if (c != null && (buffer[c.xy] == Code.Agent || buffer[c.xy] == Code.AgentGoal))
 				agent = c;
 		return agent;
 	}
@@ -197,8 +189,8 @@ public final class Level {
 		// TODO remove restriction on not being able to push box to remove dead end
 		while (!agent.goal && agent.moves.length == 1 && !agent.moves[0].cell.box) {
 			Cell b = agent.moves[0].cell;
-			buffer[agent.xy] = Wall;
-			buffer[b.xy] = Agent;
+			buffer[agent.xy] = Code.Wall;
+			buffer[b.xy] = Code.Agent;
 			grid[agent.xy] = null;
 			detach(b, agent);
 			agent = b;
@@ -212,7 +204,7 @@ public final class Level {
 		for (Cell a : grid)
 			while (a != null && a != agent && a.moves.length == 1 && !a.goal && !a.box) {
 				Cell b = a.moves[0].cell;
-				buffer[a.xy] = Wall;
+				buffer[a.xy] = Code.Wall;
 				grid[a.xy] = null;
 				detach(b, a);
 				a = b;
@@ -231,9 +223,9 @@ public final class Level {
 
 	private void clean_buffer_chars(int w) {
 		for (int i = 0; i < buffer.length; i++)
-			if (!visitor.visited(i) && buffer[i] != '\n' & buffer[i] != Space)
+			if (!visitor.visited(i) && buffer[i] != '\n' & buffer[i] != Code.Space)
 				if (!is_close_to_visited(i, visitor.visited(), w + 1, buffer.length / (w + 1), false))
-					buffer[i] = Space;
+					buffer[i] = Code.Space;
 	}
 
 	private void assign_compact_cell_ids() {
@@ -249,9 +241,9 @@ public final class Level {
 
 	private void add_nice_walls(int w) {
 		for (int i = 0; i < buffer.length; i++)
-			if (!visitor.visited(i) && buffer[i] != '\n' && buffer[i] != Wall)
+			if (!visitor.visited(i) && buffer[i] != '\n' && buffer[i] != Code.Wall)
 				if (is_close_to_visited(i, visitor.visited(), w + 1, buffer.length / (w + 1), true))
-					buffer[i] = Wall;
+					buffer[i] = Code.Wall;
 	}
 
 	private void init_goal_ordinals() {
@@ -317,7 +309,7 @@ public final class Level {
 							break;
 						Move cm = c.rmove(bmc.exit_dir);
 						cells[b.id] = null;
-						buffer[b.xy] = 'o';
+						buffer[b.xy] = Code.DeadTunnel;
 						am.cell = c;
 						am.dist += bmc.dist;
 						am.alive = false;
@@ -342,25 +334,39 @@ public final class Level {
 				}
 	}
 
+	private boolean straight(Cell a) {
+		return a.moves.length == 2 && a.moves[0].dir == a.moves[1].dir.reverse;
+	}
+
 	private void compress_alive_tunnels(Cell agent) {
-		if (compress_tunnels)
-			for (Cell a : cells)
-				if (a != null && a.alive && a.tunnel_entrance()) {
-					Move e = Array.find(a.moves, p -> p.cell.moves.length == 2);
-					Cell b = e.cell;
-					int dist = e.dist;
-					boolean is_alive = b.alive;
-					while (b.tunnel_interior() && !b.goal) {
-						Cell c = cells[b.moves[0].cell.id ^ b.moves[1].cell.id ^ b.id];
-						is_alive = is_alive && c.alive;
+		// TODO optimal mode requires that one cell is left uncompressed at both sides of the tunnel (unless bottleneck)
+		for (Cell a : cells)
+			if (a != null && a.alive)
+				for (Move am : a.moves) {
+					Cell b = am.cell;
+					while (am.alive && b.alive && b.moves.length == 2 && b != agent && !b.goal && !b.box) {
+						// remove B, and connect A and C directly
+						Move bma = b.move(am.dir.reverse);
+						Move bmc = b.move(am.dir);
+						assert bma != bmc;
+						assert bmc != null;
+						Cell c = bmc.cell;
+						// TODO compress tunnels of length 1 if they are bottleneck
+						if (!c.alive || !bmc.alive)
+							break;
+						if (!straight(c) && am.dist + bmc.dist == 2)
+							break;
+						assert c.moves.length >= 1;
+						assert c.dir[am.dir.reverse.ordinal()] != null;
+						Move cm = c.move(am.dir.reverse);
+						assert cm != null;
+						assert cm.cell == b;
 						cells[b.id] = null;
-						buffer[b.xy] = 'o';
-						detach(a, b);
-						attach(a, new Move(c, e.dir, ++dist, is_alive));
-						detach(c, b);
-						// TODO second direction might be different if tunnel isn't straight
-						attach(c, new Move(c, e.dir.reverse, dist, is_alive));
-						alive -= 1;
+						buffer[b.xy] = Code.AliveTunnel;
+						am.cell = c;
+						am.dist += bmc.dist;
+						cm.cell = a;
+						cm.dist += bma.dist;
 						b = c;
 					}
 				}
@@ -586,12 +592,6 @@ public final class Level {
 		throw new Error();
 	}
 
-	private static void attach(Cell a, Move m) {
-		assert a.dir[m.dir.ordinal()] == null;
-		a.dir[m.dir.ordinal()] = m;
-		a.moves = Array.append(a.moves, m);
-	}
-
 	public char[] render(CellToChar ch) {
 		char[] copy = buffer.clone();
 		for (Cell c : cells)
@@ -603,19 +603,21 @@ public final class Level {
 	public char[] render(StateKey s) {
 		return render(c -> {
 			if (s.agent == c.id)
-				return c.goal ? AgentGoal : Agent;
+				return c.goal ? Code.AgentGoal : Code.Agent;
 			if (s.box(c.id))
-				return c.goal ? BoxGoal : Box;
-			return c.goal ? Goal : Space;
+				return c.goal ? Code.BoxGoal : Code.Box;
+			if (!c.alive)
+				return Code.Dead;
+			return c.goal ? Code.Goal : Code.Space;
 		});
 	}
 
 	public void print(CellToChar ch) {
-		System.out.print(render(ch));
+		System.out.print(Code.emojify(render(ch)));
 	}
 
 	public void print(StateKey s) {
-		System.out.print(render(s));
+		System.out.print(Code.emojify(render(s)));
 	}
 
 	public boolean is_solved(int[] box) {
