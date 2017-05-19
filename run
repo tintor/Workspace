@@ -1,2 +1,2 @@
 #!/bin/bash
-java -Xprof -Xmx37G -cp src -javaagent:agent.jar "$@"
+java -Xprof -Xmx37G -cp src:commons-lang3-3.5.jar -javaagent:agent.jar "$@"

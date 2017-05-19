@@ -1,2 +1,2 @@
 #!/bin/bash
-javac -classpath "lombok.jar:/usr/local/google/eclipse47_tintor/stable/plugins/org.junit_4.12.0.v201504281640/junit.jar" src/tintor/*/*.java src/tintor/*/*/*.java
+javac -classpath "commons-lang3-3.5.jar:lombok.jar:/usr/local/google/eclipse47_tintor/stable/plugins/org.junit_4.12.0.v201504281640/junit.jar" src/tintor/*/*.java src/tintor/*/*/*.java
