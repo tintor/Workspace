@@ -62,6 +62,7 @@ public class Original {
 				unsolved += 1;
 			}
 
+			raw(AutoTimer.report(new StringBuilder()).toString());
 			raw("Elapsed %s", timer.human());
 			raw("");
 			System.out.flush();

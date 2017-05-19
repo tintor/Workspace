@@ -69,10 +69,13 @@ public final class AutoTimer {
 	}
 
 	public static void report() {
+		System.out.println(report(new StringBuilder()));
+	}
+
+	public static StringBuilder report(StringBuilder s) {
 		synchronized (list) {
 			assert current.name == null;
 			Collections.sort(list, (a, b) -> Long.compare(b.total, a.total));
-			StringBuilder s = new StringBuilder();
 			for (AutoTimer t : list) {
 				double p = 100.0 * t.total / -current.total;
 				if (p < 1)
@@ -83,7 +86,7 @@ public final class AutoTimer {
 				s.append(':');
 				s.append((int) (p * 10));
 			}
-			System.out.println(s);
+			return s;
 		}
 	}
 
