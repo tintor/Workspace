@@ -1,2 +1,0 @@
-#!/bin/bash
-./run tintor.sokoban.Solver "$@"
