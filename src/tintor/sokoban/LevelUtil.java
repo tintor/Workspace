@@ -19,28 +19,28 @@ class LevelUtil {
 		return count;
 	}
 
-	private static boolean free_or_tunnel(Move a, StateKey s) {
-		return a != null && (!s.box(a.cell) || a.dist > 1);
+	private static boolean free_or_tunnel(Move a, int[] boxes) {
+		return a != null && (a.cell.id >= boxes.length * 32 || !Bits.test(boxes, a.cell.id) || a.dist > 1);
 	}
 
-	public static boolean is_2x2_frozen(Cell box, StateKey s) {
+	public static boolean is_2x2_frozen(Cell box, int[] boxes) {
 		for (Dir dir : Dir.values()) {
 			Move a = box.move(dir);
-			if (free_or_tunnel(a, s))
+			if (free_or_tunnel(a, boxes))
 				continue;
 			Move b = box.move(dir.next);
-			if (free_or_tunnel(b, s))
+			if (free_or_tunnel(b, boxes))
 				continue;
 			if (a == null && b == null)
 				return !box.goal;
 			if (a != null) {
 				Move c = a.cell.move(dir.next);
-				if (!free_or_tunnel(c, s))
+				if (!free_or_tunnel(c, boxes))
 					return !(box.goal && a.cell.goal && (b == null || b.cell.goal) && (c == null || c.cell.goal));
 			}
 			if (b != null) {
 				Move c = b.cell.move(dir);
-				if (!free_or_tunnel(c, s))
+				if (!free_or_tunnel(c, boxes))
 					return !(box.goal && b.cell.goal && (a == null || a.cell.goal) && (c == null || c.cell.goal));
 			}
 		}

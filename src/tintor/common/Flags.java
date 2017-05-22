@@ -13,11 +13,8 @@ public final class Flags {
 	private final static Map<String, Flag> flags = new HashMap<>();
 
 	private static class Flag {
-		public final String desc;
-
-		Flag(String name, String desc) {
+		Flag(String name) {
 			flags.put(name, this);
-			this.desc = desc;
 		}
 
 		void set(String arg) {
@@ -27,8 +24,8 @@ public final class Flags {
 	public static class Text extends Flag {
 		public String value;
 
-		public Text(String name, String def, String desc) {
-			super(name, desc);
+		public Text(String name, String def) {
+			super(name);
 			value = def;
 		}
 
@@ -44,8 +41,8 @@ public final class Flags {
 	public static class Int extends Flag {
 		public int value;
 
-		public Int(String name, int def, String desc) {
-			super(name, desc);
+		public Int(String name, int def) {
+			super(name);
 			value = def;
 		}
 
@@ -61,8 +58,8 @@ public final class Flags {
 	public static class Real extends Flag {
 		public double value;
 
-		public Real(String name, double def, String desc) {
-			super(name, desc);
+		public Real(String name, double def) {
+			super(name);
 			value = def;
 		}
 
@@ -78,8 +75,8 @@ public final class Flags {
 	public static class Bool extends Flag {
 		public boolean value;
 
-		public Bool(String name, boolean def, String desc) {
-			super(name, desc);
+		public Bool(String name, boolean def) {
+			super(name);
 			value = def;
 		}
 
@@ -97,7 +94,7 @@ public final class Flags {
 			if (arg.equals("-help")) {
 				for (Map.Entry<String, Flag> e : flags.entrySet()) {
 					// TODO print default value of each flag
-					Log.raw("%s - %s - %s", e.getKey(), e.getValue().getClass().getSimpleName(), e.getValue().desc);
+					Log.raw("%s - %s", e.getKey(), e.getValue().getClass().getSimpleName());
 				}
 				System.exit(0);
 			}

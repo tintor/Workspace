@@ -86,7 +86,6 @@ public final class Hungarian {
 		}
 
 		return starsToAssignments(); // O(n^2)
-
 	}
 
 	// the starred 0's in each column are the assignments. O(n^2)

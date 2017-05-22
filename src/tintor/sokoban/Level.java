@@ -55,6 +55,8 @@ public final class Level {
 	public final Cell goal_section_entrance; // sections are rooms of alive cells only
 	public final boolean has_goal_zone;
 
+	private static final Flags.Bool enable_tunnels = new Flags.Bool("enable_tunnels", true);
+
 	public static class MoreThan256CellsError extends Error {
 		private static final long serialVersionUID = 1L;
 	}
@@ -130,8 +132,10 @@ public final class Level {
 			for (Move am : a.moves)
 				am.alive = a.alive && am.cell.alive;
 
-		compress_dead_tunnels(agent);
-		compress_cell_ids();
+		if (enable_tunnels.value) {
+			compress_dead_tunnels(agent);
+			compress_cell_ids();
+		}
 		pair_visitor.cells = cells;
 		move_alive_cells_in_front();
 		compute_distances_to_each_goal(Array.count(cells, c -> c.goal), pair_visitor);
@@ -521,8 +525,11 @@ public final class Level {
 			if (count == 0)
 				return false;
 		}
+		@Cleanup val t = timer_max_bpm.open();
 		return BipartiteMatching.maxBPM(can_reach) == num_boxes;
 	}
+
+	static final AutoTimer timer_max_bpm = new AutoTimer("max_bpm");
 
 	// TODO instead of searching forward N times => search backward once from every goal
 	private void compute_alive_cells(CellPairVisitor visitor) {
@@ -633,8 +640,7 @@ public final class Level {
 
 	static final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
 
-	static final Flags.Bool enable_all_goals_reachable_full = new Flags.Bool("enable_all_goals_reachable_full", false,
-			"");
+	static final Flags.Bool all_goals_reachable_full = new Flags.Bool("all_goals_reachable_full", false);
 
 	public boolean is_valid_level(char[] buffer) {
 		@Cleanup val t = timer_isvalidlevel.open();
@@ -643,12 +649,8 @@ public final class Level {
 			return false;
 
 		CellPairVisitor visitor = new CellPairVisitor(clone.cells.length, clone.cells.length, clone.cells);
-		return enable_all_goals_reachable_full.value ? clone.are_all_goals_reachable_full(visitor)
+		return all_goals_reachable_full.value ? clone.are_all_goals_reachable_full(visitor)
 				: clone.are_all_goals_reachable_quick(visitor, goal_section_entrance);
-	}
-
-	public boolean is_valid_level(CellToChar op) {
-		return is_valid_level(render(op));
 	}
 
 	private boolean are_all_goals_reachable_quick(CellPairVisitor visitor, Cell entrance) {

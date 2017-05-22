@@ -37,14 +37,14 @@ public final class AStarSolver {
 	private int cutoff = Integer.MAX_VALUE;
 	int cutoffs = 0;
 
-	private static final Flags.Bool optimal = new Flags.Bool("optimal", false, "Generate optimal solution only.");
-	private static final Flags.Int report_time = new Flags.Int("report_time", 20, "In seconds.");
+	private static final Flags.Bool optimal_solution = new Flags.Bool("optimal_solution", false);
+	private static final Flags.Int report_time = new Flags.Int("report_time", 20); // in seconds
 
 	public AStarSolver(Level level) {
 		this.level = level;
 		open = new OpenSet(level.alive.length, level.cells.length);
 		closed = new ClosedSet(level);
-		heuristic = new Heuristic(level, optimal.value);
+		heuristic = new Heuristic(level, optimal_solution.value);
 		deadlock = new Deadlock(level);
 
 		visitor = new CellVisitor(level.cells.length);
@@ -108,7 +108,7 @@ public final class AStarSolver {
 				}
 
 				timer_moves.open();
-				State b = a.push(p, level, optimal.value, moves[agent.id], a.agent);
+				State b = a.push(p, level, optimal_solution.value, moves[agent.id], a.agent);
 				timer_moves.close();
 
 				if (b == null || closed.contains(b))
@@ -166,13 +166,14 @@ public final class AStarSolver {
 
 		speed = (speed + 1e9 * delta_closed / delta_time) / 2;
 
-		closed.report();
-		open.report();
-		deadlock.report();
+		System.out.printf("%s ", level.name);
 		System.out.printf("cutoff:%s dead:%s live:%s ", Util.human(cutoffs), Util.human(heuristic.deadlocks),
 				Util.human(heuristic.non_deadlocks));
 		System.out.printf("time:%s ", Timer.format(AutoTimer.total()));
 		System.out.printf("speed:%s ", Util.human((int) speed));
 		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
+		closed.report();
+		open.report();
+		deadlock.report();
 	}
 }

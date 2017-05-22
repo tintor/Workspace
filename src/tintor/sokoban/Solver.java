@@ -13,8 +13,10 @@ import tintor.common.Timer;
 // TODO original:63, original:69 goal_zone_entrance is wrong!
 // original:74 goal room with 2 bottleneck entrances (try to solve it first by replacing 2 goal room entrances with box dispensers)
 
+// Heuristic:
 // TODO faster heuristic: how? (incremental heuristic) can we pre-compute a matching for a state and reuse that with a single box pushed 
-// TODO implement other heuristic implementation - and switch them with flag
+// TODO add other heuristic implementation - and switch them with flag
+// TODO Find which boxes are frozen on goals (mark them in State so that all next moves can benefit) and reduce the size of Cost matrix
 
 // TODO concept of push bottleneck, even if there is no single cell that is bottleneck for agent, there could be one for boxes (and it can be used as goal room entrance)
 
@@ -157,7 +159,7 @@ public class Solver {
 		return (char) (a < 10 ? '0' + a : 'a' + a - 10);
 	}
 
-	final static Flags.Int trace = new Flags.Int("trace", 2, "");
+	final static Flags.Int trace = new Flags.Int("trace", 2);
 
 	public static void main(String[] args) throws Exception {
 		args = Sokoban.init(args, 1, 1);

@@ -11,6 +11,7 @@ import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.Bits;
 import tintor.common.Flags;
+import tintor.common.For;
 import tintor.common.InstrumentationAgent;
 import tintor.common.MurmurHash3;
 import tintor.common.OpenAddressingHashSet;
@@ -227,7 +228,7 @@ public final class Deadlock {
 
 				Bits.clear(box, b.id);
 				Bits.set(box, c.cell.id);
-				boolean m = patternIndex.matches(b.id, box, 0, num_boxes, true);
+				boolean m = LevelUtil.is_2x2_frozen(c.cell, box) || patternIndex.matches(b.id, box, 0, num_boxes, true);
 				Bits.clear(box, c.cell.id);
 				if (m) {
 					Bits.set(box, b.id);
@@ -259,6 +260,12 @@ public final class Deadlock {
 			reachable_free_goals_deadlocks += 1;
 			return Result.GoalZoneDeadlock;
 		}
+
+		// Quick pre-filter for is_valid_level()
+		for (Cell a : level.alive) // TODO put goals at the start of cells array and have their id == goal_ordinal 
+			if (a.goal && !For.any(a.moves,
+					m -> m.cell.alive && m.cell.move(m.dir) != null && m.cell.move(m.dir).cell.alive))
+				return Result.GoalZoneDeadlock;
 
 		val visited = Util.compressToIntArray(visitor.visited());
 		val cache_new = new GoalZoneCache(visited, box, original_box, level);
@@ -294,7 +301,7 @@ public final class Deadlock {
 		// TODO do we really need this?
 		if (level.is_solved_fast(s.box))
 			return false;
-		if (incremental && LevelUtil.is_2x2_frozen(level.cells[s.agent].move(s.dir).cell, s))
+		if (incremental && LevelUtil.is_2x2_frozen(level.cells[s.agent].move(s.dir).cell, s.box))
 			return true;
 		if (patternIndex.matches(s.agent, s.box, 0, num_boxes, incremental))
 			return true;
@@ -339,7 +346,7 @@ public final class Deadlock {
 		return num_boxes;
 	}
 
-	private static final Flags.Bool enabled = new Flags.Bool("deadlocks", true, "");
+	private static final Flags.Bool enabled = new Flags.Bool("deadlocks", true);
 
 	public boolean checkIncremental(State s) {
 		@Cleanup val t = timer.open();

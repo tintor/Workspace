@@ -29,7 +29,7 @@ final class Heuristic {
 	}
 
 	private static boolean EnableGoalRoomHeuristic = false;
-	private static final Flags.Int heuristic_mult = new Flags.Int("heuristic_mult", 3, "");
+	private static final Flags.Int heuristic_mult = new Flags.Int("heuristic_mult", 3);
 
 	public int evaluate(StateKey s) {
 		@Cleanup val t = timer.open();

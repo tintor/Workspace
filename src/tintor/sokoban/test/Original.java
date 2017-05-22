@@ -4,6 +4,7 @@ import java.io.FileWriter;
 
 import lombok.SneakyThrows;
 import tintor.common.AutoTimer;
+import tintor.common.Flags;
 import tintor.common.Timer;
 import tintor.sokoban.AStarSolver;
 import tintor.sokoban.Level;
@@ -23,6 +24,9 @@ public class Original {
 		file.write(s);
 	}
 
+	private final static Flags.Int closed_size_limit = new Flags.Int("closed_size_limit", 1_000_000);
+	private final static Flags.Int min_speed = new Flags.Int("min_speed", 750);
+
 	@SneakyThrows
 	public static void main(String[] args) {
 		args = Sokoban.init(args, 0, 0);
@@ -34,8 +38,8 @@ public class Original {
 						level.num_boxes, level.state_space());
 				AStarSolver solver = new AStarSolver(level);
 				solver.trace = 2;
-				solver.closed_size_limit = 1_000_000;
-				solver.min_speed = 750;
+				solver.closed_size_limit = closed_size_limit.value;
+				solver.min_speed = min_speed.value;
 				timer.total = 0;
 				AutoTimer.reset();
 				timer.start();
