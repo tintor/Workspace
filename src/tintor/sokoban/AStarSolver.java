@@ -5,6 +5,7 @@ import java.util.ArrayDeque;
 import lombok.Cleanup;
 import lombok.val;
 import tintor.common.AutoTimer;
+import tintor.common.Flags;
 import tintor.common.Timer;
 import tintor.common.Util;
 
@@ -21,7 +22,6 @@ public final class AStarSolver {
 	static final AutoTimer timer_moves = new AutoTimer("moves");
 
 	final Level level;
-	final boolean optimal;
 	public final OpenSet open;
 	public final ClosedSet closed;
 	final Heuristic heuristic;
@@ -29,7 +29,7 @@ public final class AStarSolver {
 
 	public int closed_size_limit = Integer.MAX_VALUE;
 	public int trace; // 0 to turn off any tracing
-	public int min_speed = Integer.MAX_VALUE;
+	public int min_speed = 0;
 
 	private CellVisitor visitor;
 	private int[] moves;
@@ -37,12 +37,14 @@ public final class AStarSolver {
 	private int cutoff = Integer.MAX_VALUE;
 	int cutoffs = 0;
 
-	public AStarSolver(Level level, boolean optimal) {
+	private static final Flags.Bool optimal = new Flags.Bool("optimal", false, "Generate optimal solution only.");
+	private static final Flags.Int report_time = new Flags.Int("report_time", 20, "In seconds.");
+
+	public AStarSolver(Level level) {
 		this.level = level;
-		this.optimal = optimal;
-		open = new OpenSet(level.alive, level.cells.length);
+		open = new OpenSet(level.alive.length, level.cells.length);
 		closed = new ClosedSet(level);
-		heuristic = new Heuristic(level, optimal);
+		heuristic = new Heuristic(level, optimal.value);
 		deadlock = new Deadlock(level);
 
 		visitor = new CellVisitor(level.cells.length);
@@ -59,7 +61,7 @@ public final class AStarSolver {
 		if (level.is_solved_fast(level.start.box))
 			return level.start;
 
-		long next_report = AutoTimer.total() + 20 * AutoTimer.Second;
+		long next_report = AutoTimer.total() + report_time.value * AutoTimer.Second;
 		explore(level.start);
 		State a = null;
 		while (true) {
@@ -75,7 +77,9 @@ public final class AStarSolver {
 				report();
 				AutoTimer.report();
 				level.print(a);
-				next_report += 20 * AutoTimer.Second;
+				next_report += report_time.value * AutoTimer.Second;
+				if (speed < min_speed)
+					throw new SpeedTooLow();
 			}
 		}
 		if (trace > 1)
@@ -104,7 +108,7 @@ public final class AStarSolver {
 				}
 
 				timer_moves.open();
-				State b = a.push(p, level, optimal, moves[agent.id], a.agent);
+				State b = a.push(p, level, optimal.value, moves[agent.id], a.agent);
 				timer_moves.close();
 
 				if (b == null || closed.contains(b))
@@ -170,7 +174,5 @@ public final class AStarSolver {
 		System.out.printf("time:%s ", Timer.format(AutoTimer.total()));
 		System.out.printf("speed:%s ", Util.human((int) speed));
 		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
-		if (speed < min_speed)
-			throw new SpeedTooLow();
 	}
 }

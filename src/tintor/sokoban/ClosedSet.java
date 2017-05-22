@@ -14,7 +14,7 @@ public final class ClosedSet {
 
 	ClosedSet(Level level) {
 		this.transforms = level.transforms;
-		map = new StateMap(level.alive, level.cells.length);
+		map = new StateMap(level.alive.length, level.cells.length);
 	}
 
 	public int size() {

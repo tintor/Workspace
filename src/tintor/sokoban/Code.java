@@ -4,18 +4,18 @@ import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public class Code {
-	final char Box = '$';
-	final char Wall = '#';
-	final char BoxGoal = '*';
-	final char AgentGoal = '+';
-	final char Goal = '.';
-	final char Agent = '@';
-	final char Space = ' ';
+	public final char Box = '$';
+	public final char Wall = '#';
+	public final char BoxGoal = '*';
+	public final char AgentGoal = '+';
+	public final char Goal = '.';
+	public final char Agent = '@';
+	public final char Space = ' ';
 
-	final char Dead = ':';
-	final char AliveTunnel = 't';
-	final char DeadTunnel = 'o';
-	final char GoalRoomEntrance = 'b';
+	public final char Dead = ':';
+	public final char AliveTunnel = 't';
+	public final char DeadTunnel = 'o';
+	public final char GoalRoomEntrance = 'b';
 
 	private String emojify(char c) {
 		if (c == ' ')
@@ -64,11 +64,19 @@ public class Code {
 			return "9️⃣";
 		if (c == 'A')
 			return "🔟";
+		if (c == 'w')
+			return "⬆️";
+		if (c == 'a')
+			return "⬅️️";
+		if (c == 's')
+			return "⬇️️";
+		if (c == 'd')
+			return "➡️";
 		assert false : "" + c;
 		return "" + c;
 	}
 
-	String emojify(char[] buffer) {
+	public String emojify(char[] buffer) {
 		boolean add_space = System.console() != null;
 		StringBuilder sb = new StringBuilder();
 		for (char c : buffer) {

@@ -42,16 +42,16 @@ public final class Flags {
 	}
 
 	public static class Int extends Flag {
-		public long value;
+		public int value;
 
-		public Int(String name, long def, String desc) {
+		public Int(String name, int def, String desc) {
 			super(name, desc);
 			value = def;
 		}
 
 		void set(String arg) {
 			try {
-				value = Long.parseLong(arg);
+				value = Integer.parseInt(arg);
 			} catch (NumberFormatException e) {
 				throw new Error("expecting integer instead of [" + arg + "]");
 			}
@@ -96,6 +96,7 @@ public final class Flags {
 		for (String arg : args) {
 			if (arg.equals("-help")) {
 				for (Map.Entry<String, Flag> e : flags.entrySet()) {
+					// TODO print default value of each flag
 					Log.raw("%s - %s - %s", e.getKey(), e.getValue().getClass().getSimpleName(), e.getValue().desc);
 				}
 				System.exit(0);

@@ -11,6 +11,7 @@ public final class BloomFilter {
 		capacity = Util.roundUpPowerOf2(Math.max(32, capacity));
 		ThreadLocalRandom rand = ThreadLocalRandom.current();
 		seed = Array.ofInt(functions, i -> rand.nextInt());
+		// TODO ensure seeds are unique
 		bits = new int[functions][capacity / 32];
 		mask = capacity - 1;
 	}

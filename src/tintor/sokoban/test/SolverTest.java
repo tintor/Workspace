@@ -45,7 +45,7 @@ public class SolverTest {
 		AutoTimer.enabled = false;
 		try {
 			Level level = Level.load(filename);
-			AStarSolver solver = new AStarSolver(level, false);
+			AStarSolver solver = new AStarSolver(level);
 			solver.closed_size_limit = 5000;
 			try {
 				State end = solver.solve();

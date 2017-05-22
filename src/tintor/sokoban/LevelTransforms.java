@@ -139,7 +139,7 @@ final class CellLevelTransforms {
 
 	private int[] transform(int[] box, int[] mapping) {
 		int[] out = new int[box.length];
-		for (int i = 0; i < level.alive; i++)
+		for (int i = 0; i < level.alive.length; i++)
 			if (Bits.test(box, i))
 				Bits.set(out, mapping[i]);
 		return out;

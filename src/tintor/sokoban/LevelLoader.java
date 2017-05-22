@@ -2,14 +2,13 @@ package tintor.sokoban;
 
 import java.util.ArrayList;
 import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import tintor.common.Regex;
 import tintor.common.Util;
 
 class LevelLoader {
 	private static String preprocess(String line) {
-		if (line.startsWith("'") || line.startsWith(";") || line.trim().isEmpty() || Regex.matches(line, "^Level\\s+"))
-			return "";
 		for (int i = 0; i < line.length(); i++) {
 			char c = line.charAt(i);
 			if (c != Code.Box && c != Code.Space && c != Code.Wall && c != Code.BoxGoal && c != Code.AgentGoal
@@ -34,11 +33,14 @@ class LevelLoader {
 		return currentLevelNo;
 	}
 
+	static final Pattern level_suffix = Pattern.compile("(.+):(\\d+)");
+
 	static ArrayList<String> loadLevelLines(String filename) {
 		int desiredLevelNo = 1;
-		if (Regex.matches(filename, "^(.*):(\\d+)$")) {
-			filename = Regex.group(1);
-			desiredLevelNo = Integer.parseInt(Regex.group(2));
+		Matcher m = level_suffix.matcher(filename);
+		if (m.matches()) {
+			filename = m.group(1);
+			desiredLevelNo = Integer.parseInt(m.group(2));
 		}
 
 		ArrayList<String> lines = new ArrayList<String>();

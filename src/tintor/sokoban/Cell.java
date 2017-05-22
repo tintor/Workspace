@@ -19,13 +19,15 @@ public final class Cell {
 	final Move[] dir = new Move[4];
 	Move[] moves;
 	public final int xy;
-	final boolean goal;
+	public final boolean goal;
 	int goal_ordinal = -1;
 	boolean box;
 	int id;
-	boolean alive;
+	public boolean alive;
 	public boolean bottleneck;
+	public boolean box_bottleneck;
 	int room; // 0 means door between rooms
+	int goal_section_entrance; // 0 - inside, 1 - at the entrance, 2 - outside
 
 	static final int Infinity = Integer.MAX_VALUE / 2; // limitation due to Hungarian
 	int[] distance_box; // distance[goal_orginal]

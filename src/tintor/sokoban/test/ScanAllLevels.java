@@ -20,7 +20,7 @@ public class ScanAllLevels {
 			Level level = Level.load(prefix + i);
 			timer.stop();
 			cells += level.cells.length;
-			alive += level.alive;
+			alive += level.alive.length;
 			int state_space = level.state_space();
 			Log.info("%s%d cells:%d alive:%d boxes:%d state_space:%s time:%s", name, i, level.cells, level.alive,
 					level.num_boxes, state_space, timer.human());
@@ -28,7 +28,7 @@ public class ScanAllLevels {
 			Log.info("bottleneck");
 			level.print(p -> p.bottleneck ? '.' : ' ');
 			if (MinStateSpace <= state_space && state_space <= MaxStateSpace) {
-				AStarSolver solver = new AStarSolver(level, false);
+				AStarSolver solver = new AStarSolver(level);
 				solver.trace = 1;
 				try {
 					if (solver.solve() != null)

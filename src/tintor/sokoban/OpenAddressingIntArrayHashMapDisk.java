@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import lombok.SneakyThrows;
 import tintor.common.Util;
 
 final class ValueList {
@@ -45,6 +46,7 @@ public final class OpenAddressingIntArrayHashMapDisk extends OpenAddressingIntAr
 		thread.start();
 	}
 
+	@SneakyThrows
 	private static void value_list_writer() {
 		while (true) {
 			while (!queue.isEmpty())
@@ -72,7 +74,7 @@ public final class OpenAddressingIntArrayHashMapDisk extends OpenAddressingIntAr
 				idle = false;
 			}
 			if (idle)
-				Util.sleep(100);
+				Thread.sleep(100);
 		}
 	}
 
@@ -83,8 +85,9 @@ public final class OpenAddressingIntArrayHashMapDisk extends OpenAddressingIntAr
 	}
 
 	@Override
+	@SneakyThrows
 	protected void finalize() {
-		Util.close(file);
+		file.close();
 	}
 
 	public long get(int[] k) {
@@ -116,9 +119,10 @@ public final class OpenAddressingIntArrayHashMapDisk extends OpenAddressingIntAr
 	}
 
 	@Override
+	@SneakyThrows
 	protected void reinsert_all(int old_capacity, int[] old_key) {
 		while (value_list.index != -1)
-			Util.sleep(100);
+			Thread.sleep(100);
 
 		final FileChannel old_file = file;
 		file = Util.newTempFile();
@@ -129,7 +133,7 @@ public final class OpenAddressingIntArrayHashMapDisk extends OpenAddressingIntAr
 				Util.read(old_file, buffer, b * 8L);
 				set_value(a, buffer.getLong(0));
 			}
-		Util.close(old_file);
+		old_file.close();
 	}
 
 	@Override

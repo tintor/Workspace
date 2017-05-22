@@ -4,6 +4,7 @@ import java.io.FileWriter;
 import java.util.Arrays;
 
 import lombok.Cleanup;
+import lombok.SneakyThrows;
 import lombok.val;
 import tintor.common.Array;
 import tintor.common.AutoTimer;
@@ -121,14 +122,15 @@ public final class PatternIndex {
 	private static final AutoTimer timer_add = new AutoTimer("pattern.add");
 	private static final AutoTimer timer_match = new AutoTimer("pattern.match");
 
+	@SneakyThrows
 	public PatternIndex(Level level) {
 		this.level = level;
-		box_length = (level.alive + 31) / 32;
-		pattern_index = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive));
-		pattern_index_near = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive));
-		pattern_index_new = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive));
+		box_length = (level.alive.length + 31) / 32;
+		pattern_index = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
+		pattern_index_near = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
+		pattern_index_new = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
 		histogram = new int[level.num_boxes - 1];
-		pattern_file = Util.openWriter("patterns.txt");
+		pattern_file = new FileWriter(level.name + "_patterns.txt");
 		patterns = new OpenAddressingIntArrayHashSet((level.cells.length + 31) / 32 + box_length);
 	}
 
@@ -150,9 +152,9 @@ public final class PatternIndex {
 
 		addToFile(agent, box);
 		histogram[num_boxes - 2] += 1;
-		for (int b = 0; b < level.alive; b++)
-			if (Bits.test(box, b))
-				for (Move a : level.cells[b].moves)
+		for (Cell b : level.alive)
+			if (Bits.test(box, b.id))
+				for (Move a : b.moves)
 					if (agent[a.cell.id])
 						pattern_index_near[a.cell.id].add(box, num_boxes);
 		for (int a = 0; a < level.cells.length; a++)
@@ -162,25 +164,26 @@ public final class PatternIndex {
 			}
 	}
 
+	@SneakyThrows
 	private void addToFile(boolean[] agent, int[] box) {
-		Util.write(pattern_file, level.render(p -> {
+		pattern_file.write(Code.emojify(level.render(p -> {
 			if (p.id < box.length * 32 && Bits.test(box, p.id))
 				return '$';
 			if (agent[p.id])
 				return ' ';
 			return '.';
-		}));
-		Util.flush(pattern_file);
+		})));
+		pattern_file.flush();
 	}
 
 	private boolean looksLikeAPush(Cell agent, int[] box, int offset) {
 		for (Dir dir : Dir.values()) {
 			// if B is box
 			Move b = agent.move(dir);
-			if (b != null && b.alive && Bits.test(box, offset, box_length, b.cell.id)) {
+			if (b != null && b.cell.alive && Bits.test(box, offset, box_length, b.cell.id)) {
 				// and if S (opposite from B) is empty
 				Move s = agent.rmove(dir);
-				if (s != null && (!s.alive || !Bits.test(box, offset, box_length, s.cell.id)))
+				if (s != null && (!s.cell.alive || !Bits.test(box, offset, box_length, s.cell.id)))
 					return true;
 			}
 		}

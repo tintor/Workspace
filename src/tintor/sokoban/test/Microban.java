@@ -2,11 +2,12 @@ package tintor.sokoban.test;
 
 import java.util.ArrayList;
 
+import lombok.SneakyThrows;
 import tintor.common.Log;
 import tintor.common.Timer;
-import tintor.common.Util;
 import tintor.sokoban.AStarSolver;
 import tintor.sokoban.Level;
+import tintor.sokoban.Sokoban;
 import tintor.sokoban.State;
 
 // Run all Microban levels up to a certain complexity, one at a time
@@ -14,7 +15,9 @@ public class Microban {
 	static Timer timer = new Timer();
 	static int solved = 0, unsolved = 0;
 
+	@SneakyThrows
 	public static void main(String[] args) {
+		args = Sokoban.init(args, 0, 0);
 		long totalDist = 0, totalClosed = 0, totalOpen = 0;
 		ArrayList<Level> levels = Level.loadAll("microban1");
 		levels.addAll(Level.loadAll("microban2"));
@@ -33,12 +36,10 @@ public class Microban {
 			if (space[i] != null)
 				for (Level level : space[i]) {
 					try {
-						if (level.state_space() >= 30)
-							break;
 						Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.name, level.cells.length,
-								level.alive, level.num_boxes, level.state_space());
+								level.alive.length, level.num_boxes, level.state_space());
 
-						AStarSolver solver = new AStarSolver(level, false);
+						AStarSolver solver = new AStarSolver(level);
 						solver.trace = 2;
 						timer.total = 0;
 						timer.start();
@@ -64,11 +65,11 @@ public class Microban {
 					}
 
 					System.gc();
-					Util.sleep(10);
+					Thread.sleep(10);
 					System.gc();
-					Util.sleep(10);
+					Thread.sleep(10);
 					System.gc();
-					Util.sleep(10);
+					Thread.sleep(10);
 				}
 		Log.raw("solved %d, unsolved %d, DIST %d, CLOSED %d, OPEN %d", solved, unsolved, totalDist, totalClosed,
 				totalOpen);

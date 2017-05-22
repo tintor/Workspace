@@ -3,6 +3,7 @@ package tintor.sokoban;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 import tintor.common.Flags;
+import tintor.common.KeepAwake;
 
 @UtilityClass
 public class Sokoban {
@@ -11,6 +12,7 @@ public class Sokoban {
 		for (Class<?> c : new Class<?>[] { Deadlock.class, OpenSet.class, ClosedSet.class, PatternIndex.class,
 				Heuristic.class, State.class, AStarSolver.class, Level.class })
 			Class.forName(c.getName());
+		KeepAwake.enable();
 		return Flags.parse(args, min, max);
 	}
 }

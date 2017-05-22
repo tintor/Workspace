@@ -10,6 +10,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+import lombok.SneakyThrows;
+
 // TODO perf: replace root Node with hash bucket array
 // TODO perf: use binary search for large nodes
 // TODO perf: use sun.misc.Unsafe for key comparison
@@ -36,11 +38,12 @@ final class BufferStorage {
 	private final int buffer_size;
 	private final Map<Integer, ByteBuffer> clean = new WeakHashMap<Integer, ByteBuffer>();
 
+	@SneakyThrows
 	BufferStorage(int buffer_size) {
 		this.buffer_size = buffer_size;
-		fc = Util.checkIOException(() -> FileChannel.open(Files.createTempFile("BTree", null),
-				StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE, StandardOpenOption.TRUNCATE_EXISTING,
-				StandardOpenOption.WRITE, StandardOpenOption.READ));
+		fc = FileChannel.open(Files.createTempFile("BTree", null), StandardOpenOption.CREATE,
+				StandardOpenOption.DELETE_ON_CLOSE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
+				StandardOpenOption.READ);
 	}
 
 	public int cleanCache() {

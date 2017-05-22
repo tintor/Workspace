@@ -17,6 +17,12 @@ public final class Array {
 		return narray;
 	}
 
+	public boolean[] clone(boolean[] array) {
+		boolean[] narray = new boolean[array.length];
+		copy(array, 0, narray, 0, array.length);
+		return narray;
+	}
+
 	public <T> T[] append(T[] array, T m) {
 		array = Arrays.copyOf(array, array.length + 1);
 		array[array.length - 1] = m;

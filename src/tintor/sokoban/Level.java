@@ -12,6 +12,7 @@ import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.BipartiteMatching;
 import tintor.common.Bits;
+import tintor.common.Flags;
 import tintor.common.For;
 import tintor.common.Util;
 import tintor.sokoban.Cell.Dir;
@@ -45,13 +46,13 @@ public final class Level {
 	public final String name;
 	private final char[] buffer;
 	public Cell[] cells;
-	public int alive;
+	public Cell[] alive;
 	public final int num_boxes;
 	public final CellVisitor visitor;
 	public final State start;
 	int[] goal;
 	public final CellLevelTransforms transforms;
-	public final boolean has_goal_rooms;
+	public final Cell goal_section_entrance; // sections are rooms of alive cells only
 	public final boolean has_goal_zone;
 
 	public static class MoreThan256CellsError extends Error {
@@ -99,11 +100,11 @@ public final class Level {
 		if (name == null) {
 			transforms = null;
 			start = null;
-			has_goal_rooms = false;
+			goal_section_entrance = null;
 			has_goal_zone = false;
 			num_boxes = 0;
 			goal = null;
-			alive = Integer.MAX_VALUE;
+			alive = null;
 			return;
 		}
 
@@ -123,7 +124,6 @@ public final class Level {
 
 		compute_alive_cells(pair_visitor);
 		remove_useless_alive_cells();
-		int room_count = compute_rooms();
 
 		// Set alive of all Moves
 		for (Cell a : cells)
@@ -131,18 +131,19 @@ public final class Level {
 				am.alive = a.alive && am.cell.alive;
 
 		compress_dead_tunnels(agent);
-		compress_alive_tunnels(agent);
 		compress_cell_ids();
 		pair_visitor.cells = cells;
-		for (Cell a : cells)
-			Arrays.sort(a.moves);
 		move_alive_cells_in_front();
 		compute_distances_to_each_goal(Array.count(cells, c -> c.goal), pair_visitor);
 		start = compute_goal_and_start(agent, dist);
 		transforms = new CellLevelTransforms(this, w + 1, buffer.length / (w + 1), grid);
 		find_bottlenecks(agent, new int[cells.length], null, new int[1]);
-		has_goal_rooms = has_goal_rooms(room_count);
-		has_goal_zone = For.any(cells, a -> a.goal && For.any(a.moves, e -> e.cell.goal));
+		find_box_bottlenecks(cells[0], new int[alive.length], null, new int[1]);
+		int room_count = compute_rooms();
+		goal_section_entrance = goal_section_entrance(room_count);
+
+		// At least three goals next to each other
+		has_goal_zone = For.any(cells, a -> a.goal && Array.count(a.moves, e -> e.cell.goal) >= 2);
 	}
 
 	private Cell[] create_cell_grid(int w) {
@@ -282,13 +283,13 @@ public final class Level {
 	private int compute_rooms() {
 		int room_count = 0;
 		for (Cell a : cells) {
-			if (a.moves.length == 2 || a.room > 0)
+			if (straight(a) || a.room > 0)
 				continue;
 			room_count += 1;
 			for (Cell b : visitor.init(a)) {
 				b.room = room_count;
 				for (Move e : b.moves)
-					if (e.cell.moves.length != 2)
+					if (!straight(e.cell) && e.dist == 1)
 						visitor.try_add(e.cell);
 			}
 		}
@@ -328,35 +329,6 @@ public final class Level {
 		return a.moves.length == 2 && a.moves[0].dir == a.moves[1].dir.reverse;
 	}
 
-	private void compress_alive_tunnels(Cell agent) {
-		// TODO if agent is inside empty tunnel we can move agent to both sides to avoid breaking tunnel into two (will have 2 start states) 
-		// TODO optimal mode requires that one cell is left uncompressed at both sides of the tunnel (unless bottleneck)
-		for (Cell a : cells)
-			if (a != null && a.alive)
-				for (Move am : a.moves) {
-					Cell b = am.cell;
-					while (am.alive && b.alive && b.moves.length == 2 && b != agent && !b.goal && !b.box) {
-						// remove B, and connect A and C directly
-						Move bma = b.move(am.dir.reverse);
-						Move bmc = b.move(am.dir);
-						Cell c = bmc.cell;
-						// TODO compress tunnels of length 1 if they are bottleneck
-						if (!c.alive || !bmc.alive)
-							break;
-						if (!straight(c) && am.dist + bmc.dist == 2)
-							break;
-						Move cm = c.move(am.dir.reverse);
-						cells[b.id] = null;
-						buffer[b.xy] = Code.AliveTunnel;
-						am.cell = c;
-						am.dist += bmc.dist;
-						cm.cell = a;
-						cm.dist += bma.dist;
-						b = c;
-					}
-				}
-	}
-
 	private void compress_cell_ids() {
 		int id = 0;
 		for (int i = 0; i < cells.length; i++)
@@ -382,28 +354,50 @@ public final class Level {
 			cells[p].id = p++;
 			cells[q].id = q--;
 		}
-		alive = cells[p].alive ? p + 1 : p;
-		assert Util.all(alive, e -> cells[e].alive);
-		assert Util.all(alive, cells.length, e -> !cells[e].alive);
+		int num_alive = cells[p].alive ? p + 1 : p;
+		assert Util.all(num_alive, e -> cells[e].alive);
+		assert Util.all(num_alive, cells.length, e -> !cells[e].alive);
+		alive = Arrays.copyOf(cells, num_alive);
 	}
 
-	private static final boolean compress_tunnels = false;
-
-	private boolean has_goal_rooms(int room_count) {
-		if (For.any(cells, a -> a.goal && a.room == 0))
-			return false;
-
-		// count goals in each room
-		int[] goals_in_room = new int[room_count + 1];
-		For.each(cells, a -> goals_in_room[a.room] += a.goal ? 1 : 0);
-
-		// check that all boxes are outside of goal rooms
-		return For.all(cells, a -> !a.box || goals_in_room[a.room] == 0);
+	private Cell goal_section_entrance(int room_count) {
+		Cell best = null;
+		int best_size = Integer.MAX_VALUE;
+		for (Cell b : alive)
+			if (b.box_bottleneck) {
+				int size = box_bottleneck_goal_zone_size(b);
+				if (size < best_size) {
+					best = b;
+					best_size = size;
+				}
+			}
+		return best_size < alive.length * 4 / 5 ? best : null;
 	}
 
 	public int state_space() {
-		BigInteger agent_positions = BigInteger.valueOf(cells.length - num_boxes);
-		return Util.combinations(alive, num_boxes).multiply(agent_positions).bitLength();
+		// Discount cells in alive tunnels (count them as 1 cell) and bottleneck tunnels (count them as 0 cells)
+		int discount = 0;
+		for (Cell a : alive)
+			if (!straight(a))
+				for (Move am : a.moves)
+					if ((am.dir == Dir.Right || am.dir == Dir.Down) && straight(am.cell) && am.dist == 1) {
+						// found a tunnel entrance
+						int len = 1;
+						Cell b = am.cell;
+						while (true) {
+							Move m = b.move(am.dir);
+							if (m == null || m.dist != 1)
+								break;
+							Cell c = m.cell;
+							if (c == null || !c.alive || c.goal || !straight(c))
+								break;
+							b = c;
+							len += 1;
+						}
+						discount += b.bottleneck ? len : len - 1;
+					}
+		BigInteger agent_positions = BigInteger.valueOf(cells.length - discount - num_boxes);
+		return Util.combinations(alive.length - discount, num_boxes).multiply(agent_positions).bitLength();
 	}
 
 	private static int find_bottlenecks(Cell a, int[] discovery, Cell parent, int[] time) {
@@ -423,9 +417,28 @@ public final class Level {
 		return low_a;
 	}
 
+	private static int find_box_bottlenecks(Cell a, int[] discovery, Cell parent, int[] time) {
+		assert a.alive;
+		int children = 0;
+		int low_a = discovery[a.id] = ++time[0];
+		for (Move e : a.moves)
+			if (e.cell.alive && e.dist == 1)
+				if (discovery[e.cell.id] == 0) {
+					children += 1;
+					int low_b = find_box_bottlenecks(e.cell, discovery, a, time);
+					low_a = Math.min(low_a, low_b);
+					if (parent != null && low_b >= discovery[a.id])
+						a.box_bottleneck = true;
+				} else if (e.cell != parent)
+					low_a = Math.min(low_a, discovery[e.cell.id]);
+		if (parent == null && children > 1)
+			a.box_bottleneck = true;
+		return low_a;
+	}
+
 	private void compute_distances_to_each_goal(int goals, CellPairVisitor pair_visitor) {
 		For.each(cells, g -> g.distance_box = Array.ofInt(goals, Cell.Infinity));
-		int[][] distance = Array.ofInt(cells.length, alive, Cell.Infinity);
+		int[][] distance = Array.ofInt(cells.length, alive.length, Cell.Infinity);
 		for (Cell g : cells)
 			if (g.goal) {
 				pair_visitor.init();
@@ -455,8 +468,8 @@ public final class Level {
 	}
 
 	private State compute_goal_and_start(Cell agent, int dist) {
-		int[] box = new int[(alive + 31) / 32];
-		goal = new int[(alive + 31) / 32];
+		int[] box = new int[(alive.length + 31) / 32];
+		goal = new int[(alive.length + 31) / 32];
 		for (Cell c : cells) {
 			if (c.box)
 				Bits.set(box, c.id);
@@ -593,6 +606,8 @@ public final class Level {
 				return c.goal ? Code.BoxGoal : Code.Box;
 			if (!c.alive)
 				return Code.Dead;
+			if (c == goal_section_entrance)
+				return Code.GoalRoomEntrance;
 			return c.goal ? Code.Goal : Code.Space;
 		});
 	}
@@ -618,41 +633,76 @@ public final class Level {
 
 	static final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
 
-	public boolean is_valid_level(CellToChar op) {
+	static final Flags.Bool enable_all_goals_reachable_full = new Flags.Bool("enable_all_goals_reachable_full", false,
+			"");
+
+	public boolean is_valid_level(char[] buffer) {
 		@Cleanup val t = timer_isvalidlevel.open();
-		Level clone = new Level(render(op), null);
+		Level clone = new Level(buffer, null);
 		if (Array.count(clone.cells, c -> c.box) != Array.count(clone.cells, c -> c.goal))
 			return false;
 
 		CellPairVisitor visitor = new CellPairVisitor(clone.cells.length, clone.cells.length, clone.cells);
-		return has_goal_rooms ? clone.are_all_goals_reachable_quick(visitor)
-				: clone.are_all_goals_reachable_full(visitor);
+		return enable_all_goals_reachable_full.value ? clone.are_all_goals_reachable_full(visitor)
+				: clone.are_all_goals_reachable_quick(visitor, goal_section_entrance);
 	}
 
-	private boolean are_all_goals_reachable_quick(CellPairVisitor visitor) {
-		// TODO assert original level is single_goal_room
+	public boolean is_valid_level(CellToChar op) {
+		return is_valid_level(render(op));
+	}
+
+	private boolean are_all_goals_reachable_quick(CellPairVisitor visitor, Cell entrance) {
 		main:
 		for (Cell g : cells) {
 			if (!g.goal || g.box)
 				continue;
 			visitor.init();
-			for (Move e : g.moves)
+			for (Move e : g.moves) {
 				visitor.add(e.cell, g);
+				if (e.cell == entrance)
+					continue main;
+			}
 			while (!visitor.done()) {
 				final Cell a = visitor.first();
 				final Cell b = visitor.second();
+				if (a == entrance)
+					continue;
 				for (Move e : a.moves) {
 					if (e.cell == b)
 						continue;
 					visitor.try_add(e.cell, b);
 					Move m = a.rmove(e.dir);
 					if (m != null && m.cell == b && visitor.try_add(e.cell, a))
-						if (a.box && !a.goal && !e.cell.goal)
+						if (!a.goal && !e.cell.goal)
 							continue main;
 				}
 			}
 			return false;
 		}
 		return true;
+	}
+
+	// box_bottleneck splits alive cells into two sets
+	// if all goals are in one set, return number of alive cells in that set,
+	// otherwise return Integer.MAX_VALUE
+	private int box_bottleneck_goal_zone_size(Cell b) {
+		assert b.box_bottleneck;
+		int result = Integer.MAX_VALUE;
+		for (Move bm : b.moves)
+			if (bm.cell.alive && bm.dist == 1) {
+				int num_alive = 0;
+				int num_goals = 0;
+				for (Cell a : visitor.init(bm.cell).markVisited(b)) {
+					num_alive += 1;
+					if (a.goal)
+						num_goals += 1;
+					for (Move m : a.moves)
+						if (m.dist == 1 && m.cell.alive)
+							visitor.try_add(m.cell);
+				}
+				if (num_goals == (b.goal ? num_boxes - 1 : num_boxes))
+					result = Math.min(result, num_alive);
+			}
+		return result;
 	}
 }

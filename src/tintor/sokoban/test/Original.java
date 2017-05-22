@@ -2,33 +2,37 @@ package tintor.sokoban.test;
 
 import java.io.FileWriter;
 
+import lombok.SneakyThrows;
 import tintor.common.AutoTimer;
-import tintor.common.Log;
 import tintor.common.Timer;
-import tintor.common.Util;
 import tintor.sokoban.AStarSolver;
 import tintor.sokoban.Level;
+import tintor.sokoban.Sokoban;
 import tintor.sokoban.State;
 
 // Run all Original levels up to a certain complexity, one at a time
 public class Original {
 	static Timer timer = new Timer();
 	static int solved = 0, unsolved = 0;
-	static FileWriter file = Util.openWriter("results.txt");
+	static FileWriter file;
 
+	@SneakyThrows
 	public static void raw(String format, Object... args) {
 		String s = String.format(format + "\n", args);
 		System.out.print(s);
-		Util.write(file, s);
+		file.write(s);
 	}
 
+	@SneakyThrows
 	public static void main(String[] args) {
+		args = Sokoban.init(args, 0, 0);
+		file = new FileWriter("results.txt");
 		long totalDist = 0, totalClosed = 0, totalOpen = 0;
 		for (Level level : Level.loadAll("original")) {
 			try {
-				raw("%s\ncells:%d alive:%d boxes:%d state_space:%s", level.name, level.cells.length, level.alive,
+				raw("%s\ncells:%d alive:%d boxes:%d state_space:%s", level.name, level.cells.length, level.alive.length,
 						level.num_boxes, level.state_space());
-				AStarSolver solver = new AStarSolver(level, false);
+				AStarSolver solver = new AStarSolver(level);
 				solver.trace = 2;
 				solver.closed_size_limit = 1_000_000;
 				solver.min_speed = 750;
@@ -66,16 +70,15 @@ public class Original {
 			raw("Elapsed %s", timer.human());
 			raw("");
 			System.out.flush();
-			Util.flush(file);
+			file.flush();
 
 			System.gc();
-			Util.sleep(10);
+			Thread.sleep(10);
 			System.gc();
-			Util.sleep(10);
+			Thread.sleep(10);
 			System.gc();
-			Util.sleep(10);
+			Thread.sleep(10);
 		}
-		Log.raw("solved %d, unsolved %d, DIST %d, CLOSED %d, OPEN %d", solved, unsolved, totalDist, totalClosed,
-				totalOpen);
+		raw("solved %d, unsolved %d, DIST %d, CLOSED %d, OPEN %d", solved, unsolved, totalDist, totalClosed, totalOpen);
 	}
 }

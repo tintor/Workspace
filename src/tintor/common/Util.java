@@ -1,8 +1,6 @@
 package tintor.common;
 
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -12,22 +10,16 @@ import java.util.Scanner;
 import java.util.function.IntPredicate;
 import java.util.function.IntUnaryOperator;
 
+import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public final class Util {
+	@SneakyThrows
 	public static FileChannel newTempFile() {
-		return Util.checkIOException(() -> FileChannel.open(Files.createTempFile(null, null), StandardOpenOption.CREATE,
+		return FileChannel.open(Files.createTempFile(null, null), StandardOpenOption.CREATE,
 				StandardOpenOption.DELETE_ON_CLOSE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
-				StandardOpenOption.READ));
-	}
-
-	public static void sleep(long millis) {
-		try {
-			Thread.sleep(millis);
-		} catch (InterruptedException e) {
-			throw new Error(e);
-		}
+				StandardOpenOption.READ);
 	}
 
 	public static boolean try_sleep(long millis) {
@@ -39,38 +31,16 @@ public final class Util {
 		}
 	}
 
-	public static void join(Thread thread) {
-		try {
-			thread.join();
-		} catch (InterruptedException e) {
-			throw new Error(e);
-		}
-	}
-
-	public static void close(FileChannel file) {
-		try {
-			file.close();
-		} catch (IOException e) {
-			throw new Error(e);
-		}
-	}
-
+	@SneakyThrows
 	public static void read(FileChannel file, ByteBuffer buffer, long offset) {
-		try {
-			if (file.read(buffer, offset) != buffer.capacity())
-				throw new Error();
-		} catch (IOException e) {
-			throw new Error(e);
-		}
+		if (file.read(buffer, offset) != buffer.capacity())
+			throw new Error();
 	}
 
+	@SneakyThrows
 	public static void write(FileChannel file, ByteBuffer buffer, long offset) {
-		try {
-			if (file.write(buffer, offset) != buffer.capacity())
-				throw new Error();
-		} catch (IOException e) {
-			throw new Error(e);
-		}
+		if (file.write(buffer, offset) != buffer.capacity())
+			throw new Error();
 	}
 
 	public static String human(long a) {
@@ -158,8 +128,9 @@ public final class Util {
 		return q;
 	}
 
+	@SneakyThrows
 	public static Scanner scanner(String filename) {
-		return checkIOException(() -> new Scanner(new File(filename)));
+		return new Scanner(new File(filename));
 	}
 
 	public static int sum(int range, IntUnaryOperator fn) {
@@ -196,46 +167,6 @@ public final class Util {
 			if (fn.test(i))
 				return true;
 		return false;
-	}
-
-	public static FileWriter openWriter(String file) {
-		return Util.checkIOException(() -> new FileWriter(file, false));
-	}
-
-	public static void write(FileWriter writer, String string) {
-		Util.checkIOException(() -> writer.write(string));
-	}
-
-	public static void write(FileWriter writer, char[] buffer) {
-		Util.checkIOException(() -> writer.write(buffer, 0, buffer.length));
-	}
-
-	public static void flush(FileWriter writer) {
-		Util.checkIOException(() -> writer.flush());
-	}
-
-	public static interface IOExceptionFunction<T> {
-		T call() throws IOException;
-	}
-
-	public static <T> T checkIOException(IOExceptionFunction<T> fn) {
-		try {
-			return fn.call();
-		} catch (IOException e) {
-			throw new Error(e);
-		}
-	}
-
-	public static interface IOExceptionFunctionVoid {
-		void call() throws IOException;
-	}
-
-	public static void checkIOException(IOExceptionFunctionVoid fn) {
-		try {
-			fn.call();
-		} catch (IOException e) {
-			throw new Error(e);
-		}
 	}
 
 	public static int roundUpPowerOf2(int v) {

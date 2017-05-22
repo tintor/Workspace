@@ -1,13 +1,29 @@
 package tintor.sokoban;
 
+import tintor.common.Flags;
 import tintor.common.Log;
 import tintor.common.Timer;
 
-// Solved
-// 1:3, 6:8, 17
-
 // Unsolved
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
+// original:39 goal room is separated by one way tunnel => optimal solution can be decomposed into two optimal solutions
+// original:36, original:43, original:63 goal room has 2-cell wide entrance, but box can be pushed only through one cell
+// original:35 no need to make cell at the dead level entrance alive if box can never be pushed there!
+// TODO original:62 remove dead rooms with agent
+// TODO original:63, original:69 goal_zone_entrance is wrong!
+// original:74 goal room with 2 bottleneck entrances (try to solve it first by replacing 2 goal room entrances with box dispensers)
+
+// TODO faster heuristic: how? (incremental heuristic) can we pre-compute a matching for a state and reuse that with a single box pushed 
+// TODO implement other heuristic implementation - and switch them with flag
+
+// TODO concept of push bottleneck, even if there is no single cell that is bottleneck for agent, there could be one for boxes (and it can be used as goal room entrance)
+
+// TODO push macros: if after push there is only one way to push the same box again (even with all other non-frozen boxes removed), then do that push immediately
+
+// TODO: command line parameters:
+// - turn off dead tunnels
+// - turn off push macros
+// - min / max state_space in microban
 
 // TODO: Use Unsafe to allocate large uninitialized arrays faster:
 // https://shipilev.net/jvm-anatomy-park/7-initialization-costs/
@@ -98,7 +114,7 @@ import tintor.common.Timer;
 // TODO: pre-populate PatternIndex with level-independent deadlocks
 
 // Search space reduction:
-// TODO: +++ (FIXME) Take advantage of symmetry
+// TODO: +++ Take advantage of symmetry
 // TODO: How to optimize goal room with single entrance? Two entrances?
 // TODO: What states can we cut without eliminating: all solutions / optimal solution? (tunnels for example)
 // TODO: Split level into sub-levels that can be solved independently
@@ -141,17 +157,22 @@ public class Solver {
 		return (char) (a < 10 ? '0' + a : 'a' + a - 10);
 	}
 
+	final static Flags.Int trace = new Flags.Int("trace", 2, "");
+
 	public static void main(String[] args) throws Exception {
+		args = Sokoban.init(args, 1, 1);
 		Level level = Level.load(args[0]);
-		Log.info("cells:%d alive:%d boxes:%d state_space:%s has_goal_rooms:%s", level.cells.length, level.alive,
-				level.num_boxes, level.state_space(), level.has_goal_rooms);
+		Log.info("cells:%d alive:%d boxes:%d state_space:%s goal_room_entrance:%s", level.cells.length,
+				level.alive.length, level.num_boxes, level.state_space(), level.goal_section_entrance != null);
 		level.print(level.start);
 		Log.raw("bottleneck");
 		level.print(p -> p.bottleneck ? '.' : ' ');
+		Log.raw("box_bottleneck");
+		level.print(p -> p.box_bottleneck ? '.' : ' ');
 		Log.raw("rooms");
 		level.print(p -> hex(p.room));
-		AStarSolver solver = new AStarSolver(level, false);
-		solver.trace = 2;
+		AStarSolver solver = new AStarSolver(level);
+		solver.trace = (int) trace.value;
 
 		timer.start();
 		State end = solver.solve();

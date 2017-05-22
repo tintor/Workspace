@@ -4,6 +4,9 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.Predicate;
 
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
 public class For {
 	public static <T> boolean all(T[] array, Predicate<T> fn) {
 		for (T e : array)
