@@ -16,7 +16,6 @@ import tintor.common.Timer;
 // Heuristic:
 // TODO faster heuristic: how? (incremental heuristic) can we pre-compute a matching for a state and reuse that with a single box pushed 
 // TODO add other heuristic implementation - and switch them with flag
-// TODO Find which boxes are frozen on goals (mark them in State so that all next moves can benefit) and reduce the size of Cost matrix
 
 // TODO concept of push bottleneck, even if there is no single cell that is bottleneck for agent, there could be one for boxes (and it can be used as goal room entrance)
 
@@ -27,25 +26,7 @@ import tintor.common.Timer;
 // - turn off push macros
 // - min / max state_space in microban
 
-// TODO: Use Unsafe to allocate large uninitialized arrays faster:
-// https://shipilev.net/jvm-anatomy-park/7-initialization-costs/
-
-/* How did it miss this deadlock in original:9?
-         #######
-         #  ...#
-     #####  ...#
-     #      . .#
-     #  ##  ...#
-     ## ##  ...#
-    ### ########
-    #   $ ##
-#####    $ #####
-#   #    $ #   #
-#         $  $ #
-#####      #####
-    #      #
-    ########
-*/
+// TODO +++ improve deadlock detection in frozen boxes! it is missing some patterns
 
 // TODO separate line in stats showing memory (total memory used and ETA to memory exhaustion)
 // TODO auto switch to always cleaning when close to OOM
@@ -55,7 +36,6 @@ import tintor.common.Timer;
 
 // TODO split level into rooms and tunnels
 //      - can we compress 2-cell wide tunnels? box can only move up or down one lane, agent can go around the box, more than one box can fit into tunnel
-//      - compress non-straight one-way alive tunnels (ie. original:9) 
 //      - compress tunnels
 //      -   keep entrance and exit (if alive) to be able to park one box in tunnel
 //      -   for alive tunnels, keep only one tunnel cell in the middle to be able to park (distance to enter 1, distance to exit = length-1 on both sides!)

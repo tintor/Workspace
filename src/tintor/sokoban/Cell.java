@@ -20,7 +20,6 @@ public final class Cell {
 	Move[] moves;
 	public final int xy;
 	public final boolean goal;
-	int goal_ordinal = -1;
 	boolean box;
 	int id;
 	public boolean alive;

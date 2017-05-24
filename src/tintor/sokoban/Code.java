@@ -16,6 +16,7 @@ public class Code {
 	public final char AliveTunnel = 't';
 	public final char DeadTunnel = 'o';
 	public final char GoalRoomEntrance = 'b';
+	public final char FrozenOnGoal = 'm';
 
 	private String emojify(char c) {
 		if (c == ' ')
@@ -42,6 +43,8 @@ public class Code {
 			return "🌀";
 		if (c == GoalRoomEntrance)
 			return "🚩";
+		if (c == FrozenOnGoal)
+			return "Ⓜ️";
 		if (c == '0')
 			return "0️⃣";
 		if (c == '1')

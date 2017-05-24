@@ -6,9 +6,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.util.Iterator;
 import java.util.Scanner;
+import java.util.concurrent.SynchronousQueue;
+import java.util.function.Consumer;
 import java.util.function.IntPredicate;
 import java.util.function.IntUnaryOperator;
+import java.util.function.Supplier;
 
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
@@ -190,5 +194,62 @@ public final class Util {
 		v |= v >> 32;
 		v++;
 		return v;
+	}
+
+	public static <T> Iterable<T> iterable(Supplier<T> fn) {
+		return new Iterable<T>() {
+			@Override
+			public Iterator<T> iterator() {
+				return new Iterator<T>() {
+					T next;
+
+					@Override
+					public boolean hasNext() {
+						next = fn.get();
+						return next != null;
+					}
+
+					@Override
+					public T next() {
+						return next;
+					}
+				};
+			}
+		};
+	}
+
+	public static <T> void put(SynchronousQueue<T> channel, T element) {
+		try {
+			channel.put(element);
+		} catch (InterruptedException e) {
+			throw new Error(e);
+		}
+	}
+
+	public static <T> T take(SynchronousQueue<T> channel) {
+		try {
+			return channel.take();
+		} catch (InterruptedException e) {
+			throw new Error(e);
+		}
+	}
+
+	public static <T> Iterable<T> iterable(Consumer<Consumer<T>> fn) {
+		class Wrapper {
+			final T value;
+
+			Wrapper(T value) {
+				this.value = value;
+			}
+		}
+		SynchronousQueue<Wrapper> channel = new SynchronousQueue<>();
+		// TODO use global executor to avoid creating new thread
+		Thread thread = new Thread(() -> {
+			fn.accept(p -> put(channel, new Wrapper(p)));
+			put(channel, new Wrapper(null));
+		});
+		thread.setDaemon(true);
+		thread.start();
+		return iterable(() -> take(channel).value);
 	}
 }

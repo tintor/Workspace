@@ -76,6 +76,7 @@ public final class Deadlock {
 	private int trivial = 0;
 	private int goalzone_deadlocks = 0;
 	private int reachable_free_goals_deadlocks = 0;
+	private int isvalidlevel_quick_deadlocks = 0;
 	private int isvalidlevel_deadlocks = 0;
 	private int cleanup_count = 0;
 
@@ -97,12 +98,14 @@ public final class Deadlock {
 			patternIndex.clearNew();
 		}
 
-		System.out.printf(
-				"dead:%s live:%s rev:%s goaldead:%s rfgdead:%s ivldead:%s db:%s ivl_db:%s\n  memory:%s cleanup:%s\n",
-				Util.human(deadlocks), Util.human(non_deadlocks), Util.human(trivial), Util.human(goalzone_deadlocks),
-				Util.human(reachable_free_goals_deadlocks), Util.human(isvalidlevel_deadlocks),
-				Util.human(patternIndex.size()), Util.human(goal_zone_cache.size()),
-				Util.human(InstrumentationAgent.deepSizeOf(patternIndex)), Util.human(cleanup_count));
+		System.out.printf("dead:%s live:%s rev:%s ", Util.human(deadlocks), Util.human(non_deadlocks),
+				Util.human(trivial));
+		System.out.printf("goaldead:%s rfgdead:%s ivlqdead:%s ivldead:%s db:%s ivl_db:%s\n",
+				Util.human(goalzone_deadlocks), Util.human(reachable_free_goals_deadlocks),
+				Util.human(isvalidlevel_deadlocks), Util.human(isvalidlevel_quick_deadlocks),
+				Util.human(patternIndex.size()), Util.human(goal_zone_cache.size()));
+		System.out.printf("  memory:%s cleanup:%s\n", Util.human(InstrumentationAgent.deepSizeOf(patternIndex)),
+				Util.human(cleanup_count));
 		goal_zone_deadlocks_file.flush();
 		is_valid_level_deadlocks_file.flush();
 	}
@@ -262,10 +265,11 @@ public final class Deadlock {
 		}
 
 		// Quick pre-filter for is_valid_level()
-		for (Cell a : level.alive) // TODO put goals at the start of cells array and have their id == goal_ordinal 
-			if (a.goal && !For.any(a.moves,
-					m -> m.cell.alive && m.cell.move(m.dir) != null && m.cell.move(m.dir).cell.alive))
+		for (Cell a : level.goals)
+			if (!For.any(a.moves, m -> m.cell.alive && m.alive && m.cell.move(m.dir) != null)) {
+				isvalidlevel_quick_deadlocks += 1;
 				return Result.GoalZoneDeadlock;
+			}
 
 		val visited = Util.compressToIntArray(visitor.visited());
 		val cache_new = new GoalZoneCache(visited, box, original_box, level);

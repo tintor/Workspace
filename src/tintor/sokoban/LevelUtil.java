@@ -47,6 +47,35 @@ class LevelUtil {
 		return false;
 	}
 
+	private static boolean free(Move a, int[] boxes) {
+		return a != null && (a.cell.id >= boxes.length * 32 || !Bits.test(boxes, a.cell.id));
+	}
+
+	public static boolean is_frozen_on_goal(Cell box, int[] boxes) {
+		assert box.goal;
+		for (Dir dir : Dir.values()) {
+			Move a = box.move(dir);
+			if (free(a, boxes))
+				continue;
+			Move b = box.move(dir.next);
+			if (free(b, boxes))
+				continue;
+			if (a == null && b == null)
+				return true;
+			if (a != null) {
+				Move c = a.cell.move(dir.next);
+				if (!free(c, boxes))
+					return true;
+			}
+			if (b != null) {
+				Move c = b.cell.move(dir);
+				if (!free(c, boxes))
+					return true;
+			}
+		}
+		return false;
+	}
+
 	public static boolean is_reversible_push(State s, Level level) {
 		Cell agent = level.cells[s.agent];
 		Dir dir = Dir.values()[s.dir];

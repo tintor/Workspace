@@ -19,6 +19,7 @@ final class Heuristic {
 	static final AutoTimer timer = new AutoTimer("heuristic");
 	long deadlocks;
 	long non_deadlocks;
+	final boolean[] frozen;
 
 	Heuristic(Level level, boolean optimal) {
 		this.level = level;
@@ -26,32 +27,24 @@ final class Heuristic {
 		int num_boxes = level.num_boxes;
 		hungarian = new Hungarian(level.num_boxes);
 		boxes = new Cell[num_boxes];
+		frozen = new boolean[num_boxes];
 	}
 
-	private static boolean EnableGoalRoomHeuristic = false;
 	private static final Flags.Int heuristic_mult = new Flags.Int("heuristic_mult", 3);
 
 	public int evaluate(StateKey s) {
 		@Cleanup val t = timer.open();
-		int prefix = 0;
 		int bc = 0;
+		for (Cell c : level.goals)
+			frozen[c.id] = s.box(c) && LevelUtil.is_frozen_on_goal(c, s.box);
 		for (Cell b : level.cells)
 			if (b.alive && s.box(b)) {
-				Cell entrance = level.goal_section_entrance;
-				boolean found = false;
-				if (EnableGoalRoomHeuristic && entrance != null && b.room != entrance.room)
-					for (int i = 0; i < level.num_boxes; i++)
-						if (b.distance_box[i] != Infinity && entrance.distance_box[i] != Infinity) {
-							if (b.distance_box[i] < entrance.distance_box[i])
-								break;
-							prefix += b.distance_box[i] - entrance.distance_box[i];
-							found = true;
-							break;
-						}
-				if (found)
-					Array.copy(entrance.distance_box, 0, hungarian.costs[bc], 0, level.num_boxes);
+				if (b.goal && frozen[b.id])
+					for (Cell goal : level.goals)
+						hungarian.costs[bc][goal.id] = goal == b ? 0 : Infinity;
 				else
-					Array.copy(b.distance_box, 0, hungarian.costs[bc], 0, level.num_boxes);
+					for (Cell goal : level.goals)
+						hungarian.costs[bc][goal.id] = frozen[goal.id] ? Infinity : b.distance_box[goal.id];
 				boxes[bc++] = b;
 			}
 		assert bc == boxes.length;
@@ -63,7 +56,7 @@ final class Heuristic {
 			return Integer.MAX_VALUE;
 		}
 
-		int h = prefix + result.sum();
+		int h = result.sum();
 		assert h >= 0;
 		non_deadlocks += 1;
 		return optimal ? h : h * (int) heuristic_mult.value;

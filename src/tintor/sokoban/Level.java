@@ -1,8 +1,8 @@
 package tintor.sokoban;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.function.Predicate;
 
 import lombok.AllArgsConstructor;
 import lombok.Cleanup;
@@ -18,7 +18,7 @@ import tintor.common.Util;
 import tintor.sokoban.Cell.Dir;
 
 // TODO move inside Cell class
-final class Move implements Comparable<Move> {
+final class Move {
 	Cell cell;
 	final Dir dir;
 	Dir exit_dir; // in case of dead tunnels if can be different from dir
@@ -34,23 +34,20 @@ final class Move implements Comparable<Move> {
 		this.dist = dist;
 		this.alive = alive;
 	}
-
-	@Override
-	public int compareTo(Move o) {
-		return dist - o.dist;
-	}
 }
 
 @ExtensionMethod(Array.class)
 public final class Level {
 	public final String name;
 	private final char[] buffer;
+	// all three arrays are sorted in the same order: goals first, then non-goal alive, then dead cells
 	public Cell[] cells;
 	public Cell[] alive;
+	public Cell[] goals;
+	private int[] goal_set;
 	public final int num_boxes;
 	public final CellVisitor visitor;
 	public final State start;
-	int[] goal;
 	public final CellLevelTransforms transforms;
 	public final Cell goal_section_entrance; // sections are rooms of alive cells only
 	public final boolean has_goal_zone;
@@ -61,15 +58,15 @@ public final class Level {
 		private static final long serialVersionUID = 1L;
 	}
 
-	public static ArrayList<Level> loadAll(String filename) {
-		int count = LevelLoader.numberOfLevels(filename);
-		ArrayList<Level> levels = new ArrayList<Level>();
-		for (int i = 1; i <= count; i++)
-			try {
-				levels.add(load(filename + ":" + i));
-			} catch (MoreThan256CellsError e) {
-			}
-		return levels;
+	public static Iterable<Level> loadAll(String filename) {
+		return Util.iterable(p -> {
+			final int count = LevelLoader.numberOfLevels(filename);
+			for (int i = 1; i <= count; i++)
+				try {
+					p.accept(load(filename + ":" + i));
+				} catch (MoreThan256CellsError e) {
+				}
+		});
 	}
 
 	public static Level load(String filename) {
@@ -96,8 +93,7 @@ public final class Level {
 		visitor = new CellVisitor(buffer.length);
 		remove_unreachable_cells(agent, grid);
 		clean_buffer_chars(w);
-		assign_compact_cell_ids();
-		init_goal_ordinals();
+		init_cells_goals_and_ids();
 
 		if (name == null) {
 			transforms = null;
@@ -105,7 +101,6 @@ public final class Level {
 			goal_section_entrance = null;
 			has_goal_zone = false;
 			num_boxes = 0;
-			goal = null;
 			alive = null;
 			return;
 		}
@@ -121,7 +116,7 @@ public final class Level {
 
 		// Make sure all goals are reachable by boxes
 		CellPairVisitor pair_visitor = new CellPairVisitor(cells.length, cells.length, cells);
-		if (!are_all_goals_reachable_full(pair_visitor))
+		if (!are_all_goals_reachable_full(pair_visitor, false))
 			throw new IllegalArgumentException("level contains unreachable goal");
 
 		compute_alive_cells(pair_visitor);
@@ -137,7 +132,7 @@ public final class Level {
 			compress_cell_ids();
 		}
 		pair_visitor.cells = cells;
-		move_alive_cells_in_front();
+		alive = Arrays.copyOf(cells, repartition(goals.length, c -> c.alive));
 		compute_distances_to_each_goal(Array.count(cells, c -> c.goal), pair_visitor);
 		start = compute_goal_and_start(agent, dist);
 		transforms = new CellLevelTransforms(this, w + 1, buffer.length / (w + 1), grid);
@@ -233,13 +228,14 @@ public final class Level {
 					buffer[i] = Code.Space;
 	}
 
-	private void assign_compact_cell_ids() {
+	private void init_cells_goals_and_ids() {
 		int count = visitor.tail();
 		// TODO move this after tunnel compression, as cell count will decrease
 		if (count > 256)
 			throw new MoreThan256CellsError(); // until I make compute_alive() faster
 		cells = new Cell[count];
 		Array.copy(visitor.queue(), 0, cells, 0, count);
+		goals = Arrays.copyOf(cells, repartition(0, p -> p.goal));
 		for (int i = 0; i < cells.length; i++)
 			cells[i].id = i;
 	}
@@ -249,13 +245,6 @@ public final class Level {
 			if (!visitor.visited(i) && buffer[i] != '\n' && buffer[i] != Code.Wall)
 				if (is_close_to_visited(i, visitor.visited(), w + 1, buffer.length / (w + 1), true))
 					buffer[i] = Code.Wall;
-	}
-
-	private void init_goal_ordinals() {
-		int i = 0;
-		for (Cell c : cells)
-			if (c.goal)
-				c.goal_ordinal = i++;
 	}
 
 	private void remove_useless_alive_cells() {
@@ -343,12 +332,12 @@ public final class Level {
 			cells[i].id = i;
 	}
 
-	private void move_alive_cells_in_front() {
-		int p = 0, q = cells.length - 1;
+	private int repartition(int offset, Predicate<Cell> fn) {
+		int p = offset, q = cells.length - 1;
 		while (true) {
-			while (p < q && cells[p].alive)
+			while (p < q && fn.test(cells[p]))
 				p += 1;
-			while (p < q && !cells[q].alive)
+			while (p < q && !fn.test(cells[q]))
 				q -= 1;
 			if (p >= q)
 				break;
@@ -357,11 +346,13 @@ public final class Level {
 			cells[q] = e;
 			cells[p].id = p++;
 			cells[q].id = q--;
+			assert fn.test(cells[p - 1]);
+			assert !fn.test(cells[q + 1]);
 		}
-		int num_alive = cells[p].alive ? p + 1 : p;
-		assert Util.all(num_alive, e -> cells[e].alive);
-		assert Util.all(num_alive, cells.length, e -> !cells[e].alive);
-		alive = Arrays.copyOf(cells, num_alive);
+		final int count = fn.test(cells[p]) ? p + 1 : p;
+		assert Util.all(count, e -> fn.test(cells[e]));
+		assert Util.all(count, cells.length, e -> !fn.test(cells[e]));
+		return count;
 	}
 
 	private Cell goal_section_entrance(int room_count) {
@@ -449,14 +440,13 @@ public final class Level {
 				for (Move e : g.moves)
 					if (pair_visitor.try_add(e.cell, g))
 						distance[e.cell.id][g.id] = e.dist - 1;
-				g.distance_box[g.goal_ordinal] = 0;
+				g.distance_box[g.id] = 0;
 
 				while (!pair_visitor.done()) {
 					final Cell agent = pair_visitor.first();
 					final Cell box = pair_visitor.second();
 					assert distance[agent.id][box.id] != Cell.Infinity;
-					box.distance_box[g.goal_ordinal] = Math.min(box.distance_box[g.goal_ordinal],
-							distance[agent.id][box.id]);
+					box.distance_box[g.id] = Math.min(box.distance_box[g.id], distance[agent.id][box.id]);
 
 					for (Move e : agent.moves) {
 						// TODO moves included only if ! optimal
@@ -472,18 +462,18 @@ public final class Level {
 	}
 
 	private State compute_goal_and_start(Cell agent, int dist) {
-		int[] box = new int[(alive.length + 31) / 32];
-		goal = new int[(alive.length + 31) / 32];
+		int[] box_set = new int[(alive.length + 31) / 32];
+		goal_set = new int[(alive.length + 31) / 32];
 		for (Cell c : cells) {
 			if (c.box)
-				Bits.set(box, c.id);
+				Bits.set(box_set, c.id);
 			if (c.goal)
-				Bits.set(goal, c.id);
+				Bits.set(goal_set, c.id);
 		}
-		return new State(agent.id, box, 0, dist, 0, 0, 0);
+		return new State(agent.id, box_set, 0, dist, 0, 0, 0);
 	}
 
-	public boolean are_all_goals_reachable_full(CellPairVisitor visitor) {
+	public boolean are_all_goals_reachable_full(CellPairVisitor visitor, boolean is_valid_level) {
 		int[] num = new int[1];
 		int[] box_ordinal = Array.ofInt(cells.length, p -> cells[p].box ? num[0]++ : -1);
 		int num_boxes = num[0];
@@ -495,10 +485,9 @@ public final class Level {
 		for (Cell g : cells) {
 			if (!g.goal)
 				continue;
-			assert g.goal_ordinal >= 0;
 			int count = 0;
 			if (g.box) {
-				can_reach[box_ordinal[g.id]][g.goal_ordinal] = true;
+				can_reach[box_ordinal[g.id]][g.id] = true;
 				if (++count == num_boxes)
 					continue main;
 			}
@@ -515,8 +504,8 @@ public final class Level {
 					visitor.try_add(c, b);
 					Move m = a.rmove(e.dir);
 					if (m != null && m.cell == b && visitor.try_add(c, a))
-						if (a.box && !can_reach[box_ordinal[a.id]][g.goal_ordinal]) {
-							can_reach[box_ordinal[a.id]][g.goal_ordinal] = true;
+						if (a.box && !can_reach[box_ordinal[a.id]][g.id]) {
+							can_reach[box_ordinal[a.id]][g.id] = true;
 							if (++count == num_boxes)
 								continue main;
 						}
@@ -525,8 +514,12 @@ public final class Level {
 			if (count == 0)
 				return false;
 		}
-		@Cleanup val t = timer_max_bpm.open();
-		return BipartiteMatching.maxBPM(can_reach) == num_boxes;
+		if (is_valid_level) {
+			@Cleanup val t = timer_max_bpm.open();
+			return BipartiteMatching.maxBPM(can_reach) == num_boxes;
+		} else {
+			return BipartiteMatching.maxBPM(can_reach) == num_boxes;
+		}
 	}
 
 	static final AutoTimer timer_max_bpm = new AutoTimer("max_bpm");
@@ -609,8 +602,11 @@ public final class Level {
 		return render(c -> {
 			if (s.agent == c.id)
 				return c.goal ? Code.AgentGoal : Code.Agent;
-			if (s.box(c.id))
-				return c.goal ? Code.BoxGoal : Code.Box;
+			if (s.box(c.id)) {
+				if (!c.goal)
+					return Code.Box;
+				return LevelUtil.is_frozen_on_goal(c, s.box) ? Code.FrozenOnGoal : Code.BoxGoal;
+			}
 			if (!c.alive)
 				return Code.Dead;
 			if (c == goal_section_entrance)
@@ -627,15 +623,16 @@ public final class Level {
 		System.out.print(Code.emojify(render(s)));
 	}
 
-	public boolean is_solved(int[] box) {
-		for (int i = 0; i < box.length; i++)
-			if ((box[i] | goal[i]) != goal[i])
+	public boolean is_solved(int[] box_set) {
+		for (int i = 0; i < box_set.length; i++)
+			if ((box_set[i] | goal_set[i]) != goal_set[i])
 				return false;
 		return true;
 	}
 
-	public boolean is_solved_fast(int[] box) {
-		return Arrays.equals(box, goal);
+	public boolean is_solved_fast(int[] box_set) {
+		assert num_boxes == Bits.count(box_set);
+		return Arrays.equals(box_set, goal_set);
 	}
 
 	static final AutoTimer timer_isvalidlevel = new AutoTimer("is_valid_level");
@@ -649,7 +646,7 @@ public final class Level {
 			return false;
 
 		CellPairVisitor visitor = new CellPairVisitor(clone.cells.length, clone.cells.length, clone.cells);
-		return all_goals_reachable_full.value ? clone.are_all_goals_reachable_full(visitor)
+		return all_goals_reachable_full.value ? clone.are_all_goals_reachable_full(visitor, true)
 				: clone.are_all_goals_reachable_quick(visitor, goal_section_entrance);
 	}
 

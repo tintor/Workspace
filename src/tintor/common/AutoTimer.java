@@ -19,6 +19,9 @@ public final class AutoTimer {
 		assert name != null;
 		this.name = name;
 		synchronized (list) {
+			for (AutoTimer t : list)
+				if (t.name.equals(name))
+					throw new Error();
 			list.add(this);
 		}
 	}
@@ -47,6 +50,8 @@ public final class AutoTimer {
 	public void close() {
 		if (enabled && this == current) {
 			exclusive = false;
+			if (parent == null)
+				throw new Error();
 			assert parent != null;
 			long now = System.nanoTime();
 			total += now;
@@ -61,11 +66,9 @@ public final class AutoTimer {
 	public static boolean enabled = true;
 
 	public static void reset() {
-		synchronized (list) {
-			current.total = 0;
-			for (AutoTimer t : list)
-				t.total = 0;
-		}
+		current.total = 0;
+		for (AutoTimer t : list)
+			t.total = 0;
 	}
 
 	public static void report() {
@@ -73,25 +76,28 @@ public final class AutoTimer {
 	}
 
 	public static StringBuilder report(StringBuilder s) {
-		synchronized (list) {
-			assert current.name == null;
-			Collections.sort(list, (a, b) -> Long.compare(b.total, a.total));
-			for (AutoTimer t : list) {
-				double p = 100.0 * t.total / -current.total;
-				if (p < 1)
-					break;
-				if (s.length() > 0)
-					s.append(' ');
-				s.append(t.name);
-				s.append(':');
-				s.append((int) (p * 10));
-			}
-			return s;
+		if (current.name != null)
+			throw new Error();
+		Collections.sort(list, (a, b) -> Long.compare(b.total, a.total));
+		long total = total();
+		for (AutoTimer t : list) {
+			if (t.total < 0 || t.total >= total)
+				throw new Error();
+			double p = 100.0 * t.total / total;
+			if (p < 1)
+				break;
+			if (s.length() > 0)
+				s.append(' ');
+			s.append(t.name);
+			s.append(':');
+			s.append((int) (p * 10));
 		}
+		return s;
 	}
 
 	public static long total() {
-		assert current.name == null;
+		if (current.name != null)
+			throw new Error();
 		return -current.total;
 	}
 }

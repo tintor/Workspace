@@ -3,6 +3,7 @@ package tintor.common;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.function.IntConsumer;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
@@ -126,12 +127,30 @@ public final class Array {
 	}
 
 	@SuppressWarnings("unchecked")
+	public <T> T[] newInstance(Class<?> componentType, int length) {
+		return (T[]) java.lang.reflect.Array.newInstance(componentType, length);
+	}
+
 	public <T> T[] make(int size, IntToTFunction<T> fn) {
 		T first = fn.apply(0);
-		T[] array = (T[]) java.lang.reflect.Array.newInstance(first.getClass(), size);
+		T[] array = newInstance(first.getClass(), size);
 		array[0] = first;
 		for (int i = 1; i < size; i++)
 			array[i] = fn.apply(i);
+		return array;
+	}
+
+	public <T> T[] make(T[] src_array, Function<T, T> fn) {
+		T[] array = newInstance(src_array.getClass().getComponentType(), src_array.length);
+		for (int i = 0; i < src_array.length; i++)
+			array[i] = fn.apply(src_array[i]);
+		return array;
+	}
+
+	public <T> boolean[] ofBool(T[] src_array, Predicate<T> fn) {
+		boolean[] array = new boolean[src_array.length];
+		for (int i = 0; i < src_array.length; i++)
+			array[i] = fn.test(src_array[i]);
 		return array;
 	}
 

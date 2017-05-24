@@ -31,6 +31,7 @@ public class Original {
 	public static void main(String[] args) {
 		args = Sokoban.init(args, 0, 0);
 		file = new FileWriter("results.txt");
+		raw("closed_size_limit:%s min_speed:%s", closed_size_limit.value, min_speed.value);
 		long totalDist = 0, totalClosed = 0, totalOpen = 0;
 		for (Level level : Level.loadAll("original")) {
 			try {
