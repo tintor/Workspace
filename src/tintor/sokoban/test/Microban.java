@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import lombok.SneakyThrows;
 import lombok.val;
 import tintor.common.Array;
+import tintor.common.CpuTimer;
 import tintor.common.Log;
-import tintor.common.Timer;
 import tintor.sokoban.AStarSolver;
 import tintor.sokoban.Level;
 import tintor.sokoban.Sokoban;
@@ -14,7 +14,7 @@ import tintor.sokoban.State;
 
 // Run all Microban levels up to a certain complexity, one at a time
 public class Microban {
-	static Timer timer = new Timer();
+	static CpuTimer timer = new CpuTimer();
 	static int solved = 0, unsolved = 0;
 
 	@SneakyThrows
@@ -29,32 +29,36 @@ public class Microban {
 		for (int i = 0; i < space.length; i++)
 			for (Level level : space[i]) {
 				try {
-					Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.name, level.cells.length,
-							level.alive.length, level.num_boxes, level.state_space());
+					Log.raw("START %s", level.name);
+					Log.raw("cells:%d alive:%d boxes:%d state_space:%s", level.cells.length, level.alive.length,
+							level.num_boxes, level.state_space());
 
 					AStarSolver solver = new AStarSolver(level);
 					solver.trace = 2;
-					timer.total = 0;
-					timer.start();
+					timer.time_ns = 0;
+					timer.open();
 					State end = solver.solve();
-					timer.stop();
+					timer.close();
 					if (end == null) {
 						unsolved += 1;
-						Log.raw("no solution! %s", timer.human());
+						Log.raw("no solution! %s", timer);
 					} else {
 						solved += 1;
 						solver.extractPath(end);
-						Log.raw("solved in %d steps! %s", end.dist, timer.human());
+						Log.raw("solved in %d steps! %s", end.dist, timer);
 						totalDist += end.dist;
 					}
 					totalClosed += solver.closed.size();
 					totalOpen += solver.open.size();
-					Log.raw("");
 				} catch (OutOfMemoryError e) {
-					Log.raw("exception after %s", timer.human());
+					timer.close();
+					Log.raw("exception after %s", timer);
 					System.out.println(e);
 					e.printStackTrace();
 					unsolved += 1;
+				} finally {
+					Log.raw("END %s", level.name);
+					Log.raw("");
 				}
 
 				System.gc();

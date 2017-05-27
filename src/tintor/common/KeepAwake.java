@@ -14,7 +14,7 @@ public class KeepAwake {
 	private static void run() {
 		final Robot robot = new Robot();
 		while (true) {
-			robot.delay(30_000); // 30 seconds
+			robot.delay(20_000); // 20 seconds
 			Point p = MouseInfo.getPointerInfo().getLocation();
 			robot.mouseMove(p.x + 1, p.y + 1);
 			robot.mouseMove(p.x - 1, p.y - 1);

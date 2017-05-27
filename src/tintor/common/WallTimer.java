@@ -1,24 +1,20 @@
 package tintor.common;
 
-public final class Timer implements AutoCloseable {
-	public long total;
+public final class WallTimer {
+	public long time_ns;
 
-	public Timer start() {
-		total -= System.nanoTime();
+	public WallTimer open() {
+		time_ns -= System.nanoTime();
 		return this;
 	}
 
-	public void stop() {
-		total += System.nanoTime();
-	}
-
 	public void close() {
-		stop();
+		time_ns += System.nanoTime();
 	}
 
 	public long clear() {
-		long a = total;
-		total = 0;
+		long a = time_ns;
+		time_ns = 0;
 		return a;
 	}
 
@@ -46,9 +42,8 @@ public final class Timer implements AutoCloseable {
 		return String.format("%dh%dm", time_min / 60, time_min % 60);
 	}
 
-	public String human() {
-		long a = total;
-		total = 0;
-		return format(a);
+	@Override
+	public String toString() {
+		return format(time_ns);
 	}
 }

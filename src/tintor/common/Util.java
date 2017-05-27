@@ -1,6 +1,8 @@
 package tintor.common;
 
 import java.io.File;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -19,6 +21,18 @@ import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public final class Util {
+	private static final ThreadMXBean threadMxBean = ManagementFactory.getThreadMXBean();
+
+	// returns time in nanoseconds
+	public static long threadCpuTime(Thread thread) {
+		return threadMxBean.getThreadCpuTime(thread.getId());
+	}
+
+	// returns time in nanoseconds
+	public static long threadCpuTime() {
+		return threadMxBean.getCurrentThreadCpuTime();
+	}
+
 	@SneakyThrows
 	public static FileChannel newTempFile() {
 		return FileChannel.open(Files.createTempFile(null, null), StandardOpenOption.CREATE,

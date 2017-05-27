@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 public final class AutoTimer {
+	public static final long Millisecond = 1000000l;
 	public static final long Second = 1000000000l;
 
 	private final String name;
@@ -84,8 +85,6 @@ public final class AutoTimer {
 			if (t.total < 0 || t.total >= total)
 				throw new Error();
 			double p = 100.0 * t.total / total;
-			if (p < 1)
-				break;
 			if (s.length() > 0)
 				s.append(' ');
 			s.append(t.name);

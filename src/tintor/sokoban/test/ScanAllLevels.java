@@ -1,14 +1,14 @@
 package tintor.sokoban.test;
 
 import tintor.common.Log;
-import tintor.common.Timer;
+import tintor.common.WallTimer;
 import tintor.sokoban.AStarSolver;
 import tintor.sokoban.Level;
 
 public class ScanAllLevels {
 	static final int MinStateSpace = 25;
 	static final int MaxStateSpace = 0;
-	static Timer timer = new Timer();
+	static WallTimer timer = new WallTimer();
 	static int cells, alive, errors;
 	static int solved, no_solution, out_of_memory;
 
@@ -16,14 +16,14 @@ public class ScanAllLevels {
 		for (int i = 1; i <= levels; i++) {
 			String[] s = prefix.split("/");
 			String name = s[s.length - 1];
-			timer.start();
+			timer.open();
 			Level level = Level.load(prefix + i);
-			timer.stop();
+			timer.close();
 			cells += level.cells.length;
 			alive += level.alive.length;
 			int state_space = level.state_space();
 			Log.info("%s%d cells:%d alive:%d boxes:%d state_space:%s time:%s", name, i, level.cells, level.alive,
-					level.num_boxes, state_space, timer.human());
+					level.num_boxes, state_space, timer);
 			level.print(level.start);
 			Log.info("bottleneck");
 			level.print(p -> p.bottleneck ? '.' : ' ');
@@ -39,7 +39,7 @@ public class ScanAllLevels {
 					out_of_memory += 1;
 				}
 			}
-			timer.total = 0;
+			timer.time_ns = 0;
 		}
 	}
 

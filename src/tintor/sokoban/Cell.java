@@ -19,7 +19,7 @@ public final class Cell {
 	final Move[] dir = new Move[4];
 	Move[] moves;
 	public final int xy;
-	public final boolean goal;
+	public boolean goal;
 	boolean box;
 	int id;
 	public boolean alive;

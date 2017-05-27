@@ -4,10 +4,10 @@ import java.util.Random;
 
 import tintor.common.Hungarian;
 import tintor.common.Log;
-import tintor.common.Timer;
+import tintor.common.WallTimer;
 
 public class HungarianTest {
-	static Timer timer = new Timer();
+	static WallTimer timer = new WallTimer();
 
 	static final boolean perf = true;
 	static final int n = perf ? 30 : 7;
@@ -48,8 +48,8 @@ public class HungarianTest {
 		return result;
 	}
 
-	static Timer timerA = new Timer();
-	static Timer timerB = new Timer();
+	static WallTimer timerA = new WallTimer();
+	static WallTimer timerB = new WallTimer();
 
 	static int Inf = Integer.MAX_VALUE / 2;
 
@@ -70,22 +70,22 @@ public class HungarianTest {
 					alg.costs[i][j] = cost[i][j] = (rand.nextDouble() < f) ? Inf : rand.nextInt(100000000);
 
 			if (iter % 100000 == 0) {
-				timerA.total /= 100000;
-				timerB.total /= 100000;
-				Log.raw("test %d [%s vs %s]", iter / 100000, timerA.human(), timerB.human());
-				timerA.total = 0;
-				timerB.total = 0;
+				timerA.time_ns /= 100000;
+				timerB.time_ns /= 100000;
+				Log.raw("test %d [%s vs %s]", iter / 100000, timerA, timerB);
+				timerA.time_ns = 0;
+				timerB.time_ns = 0;
 			}
 			iter++;
 
 			if (perf) {
-				timerB.start();
+				timerB.open();
 				result = alg.execute();
-				timerB.stop();
+				timerB.close();
 			} else {
-				timerA.start();
+				timerA.open();
 				int[] result = bruteForceMatching();
-				timerA.stop();
+				timerA.close();
 				float sum = 0;
 				//Log.raw("BruteForce %s", timerA.human());
 				for (int i = 0; i < n; i++) {
@@ -95,9 +95,9 @@ public class HungarianTest {
 				//Log.raw("sum %d", sum);
 				float brute = sum;
 
-				timerB.start();
+				timerB.open();
 				result = alg.execute();
-				timerB.stop();
+				timerB.close();
 				sum = 0;
 				//Log.raw("Hungarian %s", timerB.human());
 				for (int i = 0; i < n; i++) {
