@@ -35,15 +35,84 @@ class StateKey {
 	public boolean equals(Object o) {
 		return equals((StateKey) o);
 	}
+
+	StateKey push(Move m, Level level, boolean optimal) {
+		Cell a = m.cell;
+		assert box(a.id);
+
+		Dir dir = m.exit_dir;
+		Move am = a.move(dir);
+		if (am == null || !am.alive || box(am.cell))
+			return null;
+		assert am.dir == am.exit_dir;
+
+		int[] nbox = Array.clone(box);
+		Bits.clear(nbox, a.id);
+		Bits.set(nbox, am.cell.id);
+
+		// keep pushing box until the end of tunnel
+		while (can_force_push(a, am.cell, dir, optimal, level)) {
+			// don't even attempt pushing box into a tunnel if it can't be pushed all the way through
+			Move c = am.cell.move(dir);
+			if (c == null || !c.alive || box(c.cell))
+				return null;
+			a = am.cell;
+			am = c;
+			Bits.clear(nbox, a.id);
+			Bits.set(nbox, am.cell.id);
+		}
+
+		return new StateKey(a.id, nbox);
+	}
+
+	private boolean more_goals_than_boxes_in_room(Cell a, Cell door, Level level) {
+		assert door.moves.length == 2 && door.bottleneck;
+		int result = 0;
+		for (Cell b : level.visitor.init(a).markVisited(door)) {
+			if (b.goal)
+				result += 1;
+			if (box(b))
+				result -= 1;
+			for (Move c : b.moves)
+				level.visitor.try_add(c.cell);
+		}
+		return result > 0;
+	}
+
+	protected boolean can_force_push(Cell a, Cell b, Dir dir, boolean optimal, Level level) {
+		if (b.goal) {
+			// TODO if a box is pushed inside a tunnel with a box already inside (on goal) and a goal in between,
+			// then keep pushing the box all the way through to that goal
+
+			return b.moves.length == 2 && b.bottleneck && !box(b.move(dir).cell)
+					&& more_goals_than_boxes_in_room(b.move(dir).cell, b, level);
+		}
+
+		// push through non-bottleneck tunnel
+		if (a.moves.length == 2 && b.moves.length == 2)
+			return true;
+
+		// push through bottleneck tunnel (until agent can reach the other side)
+		if (a.moves.length == 2 && a.bottleneck && b.bottleneck)
+			return true;
+
+		if (!optimal && b.bottleneck && b.moves.length == 3 && b.move(dir) != null)
+			return true;
+
+		if (!optimal && b.bottleneck && b.moves.length == 2)
+			return true;
+
+		return false;
+	}
 }
 
 public final class State extends StateKey {
-	final int symmetry;
-	final int dir; // direction of move from previous state
+	public final int symmetry;
+	public final int dir; // direction of move from previous state
 	public final int dist;
-	final int pushes; // number of box pushes from single call to State.move()
-	int total_dist; // = distance from start + heuristic to goal
-	final int prev_agent;
+	public final int pushes; // number of box pushes from single call to State.move()
+	public int total_dist; // = distance from start + heuristic to goal
+	public final int prev_agent;
 
 	State(int agent, int[] box, int symmetry, int dist, int dir, int pushes, int prev_agent) {
 		super(agent, box);
@@ -156,7 +225,7 @@ public final class State extends StateKey {
 		int[] nbox = Array.clone(box);
 		Bits.clear(nbox, a.id);
 		Bits.set(nbox, am.cell.id);
-		int new_dist = dist + moves + m.dist - 1 + am.dist;
+		int new_dist = optimal ? dist + moves + m.dist : dist + m.dist;
 		int pushes = 1;
 
 		// TODO increase push limit
@@ -177,45 +246,5 @@ public final class State extends StateKey {
 		State s = new State(a.id, nbox, 0, new_dist, dir.ordinal(), pushes, prev_agent);
 		assert s.prev(level).equals(this);
 		return s;
-	}
-
-	private boolean more_goals_than_boxes_in_room(Cell a, Cell door, Level level) {
-		assert door.moves.length == 2 && door.bottleneck;
-		int result = 0;
-		for (Cell b : level.visitor.init(a).markVisited(door)) {
-			if (b.goal)
-				result += 1;
-			if (box(b))
-				result -= 1;
-			for (Move c : b.moves)
-				level.visitor.try_add(c.cell);
-		}
-		return result > 0;
-	}
-
-	private boolean can_force_push(Cell a, Cell b, Dir dir, boolean optimal, Level level) {
-		if (b.goal) {
-			// TODO if a box is pushed inside a tunnel with a box already inside (on goal) and a goal in between,
-			// then keep pushing the box all the way through to that goal
-
-			return b.moves.length == 2 && b.bottleneck && !box(b.move(dir).cell)
-					&& more_goals_than_boxes_in_room(b.move(dir).cell, b, level);
-		}
-
-		// push through non-bottleneck tunnel
-		if (a.moves.length == 2 && b.moves.length == 2)
-			return true;
-
-		// push through bottleneck tunnel (until agent can reach the other side)
-		if (a.moves.length == 2 && a.bottleneck && b.bottleneck)
-			return true;
-
-		if (!optimal && b.bottleneck && b.moves.length == 3 && b.move(dir) != null)
-			return true;
-
-		if (!optimal && b.bottleneck && b.moves.length == 2)
-			return true;
-
-		return false;
 	}
 }

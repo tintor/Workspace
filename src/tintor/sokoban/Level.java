@@ -1,7 +1,9 @@
 package tintor.sokoban;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 
 import lombok.AllArgsConstructor;
@@ -69,11 +71,38 @@ public final class Level {
 		});
 	}
 
+	private static final Flags.Int weaken = new Flags.Int("weaken", 0);
+
 	public static Level load(String filename) {
-		return new Level(LevelLoader.load(filename), filename);
+		return new Level(LevelLoader.load(filename), filename, weaken.value);
 	}
 
-	private Level(char[] buffer, String name) {
+	private void weaken(Cell[] grid, int amount) {
+		if (amount == 0)
+			return;
+		ArrayList<Cell> boxes = new ArrayList<>();
+		ArrayList<Cell> goals = new ArrayList<>();
+		for (Cell a : grid)
+			if (a != null) {
+				if (a.box)
+					boxes.add(a);
+				if (a.goal)
+					goals.add(a);
+			}
+		ThreadLocalRandom rand = ThreadLocalRandom.current();
+		for (int i = 0; i < amount; i++) {
+			// remove one box
+			int b = rand.nextInt(boxes.size());
+			boxes.get(b).box = false;
+			boxes.remove(b);
+			// remove one goal
+			int g = rand.nextInt(goals.size());
+			goals.get(g).goal = false;
+			goals.remove(g);
+		}
+	}
+
+	private Level(char[] buffer, String name, int weaken_amount) {
 		int w = 0;
 		while (buffer[w] != '\n')
 			w++;
@@ -82,6 +111,7 @@ public final class Level {
 		this.buffer = buffer;
 
 		Cell[] grid = create_cell_grid(w);
+		weaken(grid, weaken_amount);
 		connect_nearby_cells(grid, w);
 		Cell agent = find_agent(grid);
 
@@ -639,15 +669,24 @@ public final class Level {
 
 	static final Flags.Bool all_goals_reachable_full = new Flags.Bool("all_goals_reachable_full", false);
 
-	public boolean is_valid_level(char[] buffer) {
+	public boolean is_valid_level(char[] buffer, boolean allow_more_goals_than_boxes) {
 		@Cleanup val t = timer_isvalidlevel.open();
-		Level clone = new Level(buffer, null);
-		if (Array.count(clone.cells, c -> c.box) != Array.count(clone.cells, c -> c.goal))
-			return false;
+		Level clone = new Level(buffer, null, 0);
 
-		CellPairVisitor visitor = new CellPairVisitor(clone.cells.length, clone.cells.length, clone.cells);
-		return all_goals_reachable_full.value ? clone.are_all_goals_reachable_full(visitor, true)
-				: clone.are_all_goals_reachable_quick(visitor, goal_section_entrance);
+		if (allow_more_goals_than_boxes) {
+			if (Array.count(clone.cells, c -> c.box) > Array.count(clone.cells, c -> c.goal))
+				return false;
+
+			CellPairVisitor visitor = new CellPairVisitor(clone.cells.length, clone.cells.length, clone.cells);
+			return clone.are_all_goals_reachable_quick(visitor, goal_section_entrance);
+		} else {
+			if (Array.count(clone.cells, c -> c.box) != Array.count(clone.cells, c -> c.goal))
+				return false;
+
+			CellPairVisitor visitor = new CellPairVisitor(clone.cells.length, clone.cells.length, clone.cells);
+			return all_goals_reachable_full.value ? clone.are_all_goals_reachable_full(visitor, true)
+					: clone.are_all_goals_reachable_quick(visitor, goal_section_entrance);
+		}
 	}
 
 	private boolean are_all_goals_reachable_quick(CellPairVisitor visitor, Cell entrance) {

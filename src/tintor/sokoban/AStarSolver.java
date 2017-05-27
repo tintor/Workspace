@@ -6,8 +6,8 @@ import lombok.Cleanup;
 import lombok.val;
 import tintor.common.AutoTimer;
 import tintor.common.Flags;
-import tintor.common.Timer;
 import tintor.common.Util;
+import tintor.common.WallTimer;
 
 public final class AStarSolver {
 	public static class ClosedSizeLimitError extends Error {
@@ -39,6 +39,7 @@ public final class AStarSolver {
 
 	private static final Flags.Bool optimal_solution = new Flags.Bool("optimal_solution", false);
 	private static final Flags.Int report_time = new Flags.Int("report_time", 20); // in seconds
+	private static final Flags.Int unstuck_period = new Flags.Int("unstuck_period", 16);
 
 	public AStarSolver(Level level) {
 		this.level = level;
@@ -53,7 +54,16 @@ public final class AStarSolver {
 		deadlock.open = open;
 	}
 
+	static boolean divisibleByPowerOf2(int a, int p) {
+		return (a >> p) << p == a;
+	}
+
+	private long start_cpu_time;
+	private long start_wall_time;
+
 	public State solve() {
+		start_cpu_time = Util.threadCpuTime();
+		start_wall_time = System.nanoTime();
 		int h = heuristic.evaluate(level.start);
 		if (h == Integer.MAX_VALUE)
 			return null;
@@ -61,23 +71,36 @@ public final class AStarSolver {
 		if (level.is_solved_fast(level.start.box))
 			return level.start;
 
-		long next_report = AutoTimer.total() + report_time.value * AutoTimer.Second;
+		int explored = 0;
+		long next_report = System.nanoTime() + report_time.value * AutoTimer.Second;
 		explore(level.start);
 		State a = null;
+		StateKey recent = null;
 		while (true) {
 			{
 				@Cleanup val t = timer_solve.open();
 				a = open.remove_min();
 				if (a == null || level.is_solved_fast(a.box))
 					break;
+				if (!a.is_initial() && deadlock.checkFull(a))
+					continue;
+
 				explore(a);
+				explored += 1;
+				// TODO auto-adjust frequency here so that deadlock.unstuck is just below 35% of time
+				// (or run deadlock.unstuck in a separate thread 100% of time)
+				if (divisibleByPowerOf2(explored, unstuck_period.value)) {
+					if (recent != null)
+						deadlock.unstuck(recent, a);
+					recent = a;
+				}
 			}
 
-			if (trace > 1 && AutoTimer.total() >= next_report) {
+			if (trace > 1 && System.nanoTime() >= next_report) {
 				report();
 				AutoTimer.report();
 				level.print(a);
-				next_report += report_time.value * AutoTimer.Second;
+				next_report = System.nanoTime() + report_time.value * AutoTimer.Second;
 				if (speed < min_speed)
 					throw new SpeedTooLow();
 			}
@@ -90,8 +113,6 @@ public final class AStarSolver {
 	}
 
 	void explore(State a) {
-		if (!a.is_initial() && deadlock.checkFull(a))
-			return;
 		closed.add(a);
 		if (closed.size() >= closed_size_limit)
 			throw new ClosedSizeLimitError();
@@ -157,10 +178,11 @@ public final class AStarSolver {
 	private double speed = 0;
 
 	private void report() {
-		long delta_time = AutoTimer.total() - prev_time;
+		long now = System.nanoTime();
+		long delta_time = now - prev_time;
 		int delta_closed = closed.size() - prev_closed;
 		int delta_open = open.size() - prev_open;
-		prev_time = AutoTimer.total();
+		prev_time = now;
 		prev_closed = closed.size();
 		prev_open = open.size();
 
@@ -169,7 +191,8 @@ public final class AStarSolver {
 		System.out.printf("%s ", level.name);
 		System.out.printf("cutoff:%s dead:%s live:%s ", Util.human(cutoffs), Util.human(heuristic.deadlocks),
 				Util.human(heuristic.non_deadlocks));
-		System.out.printf("time:%s ", Timer.format(AutoTimer.total()));
+		System.out.printf("time:%s cpu_time:%s ", WallTimer.format(now - start_wall_time),
+				WallTimer.format(Util.threadCpuTime() - start_cpu_time));
 		System.out.printf("speed:%s ", Util.human((int) speed));
 		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
 		closed.report();

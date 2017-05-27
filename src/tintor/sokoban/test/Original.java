@@ -6,7 +6,6 @@ import lombok.SneakyThrows;
 import tintor.common.AutoTimer;
 import tintor.common.CpuTimer;
 import tintor.common.Flags;
-import tintor.common.Log;
 import tintor.sokoban.AStarSolver;
 import tintor.sokoban.Level;
 import tintor.sokoban.Sokoban;
@@ -36,7 +35,7 @@ public class Original {
 		long totalDist = 0, totalClosed = 0, totalOpen = 0;
 		for (Level level : Level.loadAll("original")) {
 			try {
-				Log.raw("START %s", level.name);
+				raw("START %s", level.name);
 				raw("cells:%d alive:%d boxes:%d state_space:%s", level.cells.length, level.alive.length,
 						level.num_boxes, level.state_space());
 				AStarSolver solver = new AStarSolver(level);
@@ -53,8 +52,10 @@ public class Original {
 					raw("no solution!");
 				} else {
 					solved += 1;
-					solver.extractPath(end);
-					raw("solved in %d steps!", end.dist);
+					int pushes = 0;
+					for (State s : solver.extractPath(end))
+						pushes += s.pushes;
+					raw("solved in %d pushes!", pushes);
 					totalDist += end.dist;
 				}
 				totalClosed += solver.closed.size();
@@ -75,7 +76,7 @@ public class Original {
 
 			raw(AutoTimer.report(new StringBuilder()).toString());
 			raw("Elapsed %s", timer);
-			Log.raw("END %s", level.name);
+			raw("END %s", level.name);
 			raw("");
 			System.out.flush();
 			file.flush();

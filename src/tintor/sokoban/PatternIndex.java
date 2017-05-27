@@ -114,6 +114,7 @@ public final class PatternIndex {
 	private final PatternList[] pattern_index_near;
 	private final PatternList[] pattern_index_new;
 	private final FileWriter pattern_file;
+	private final FileWriter pattern_raw_file;
 	private final Level level;
 	private final int box_length;
 	int[] histogram;
@@ -129,8 +130,9 @@ public final class PatternIndex {
 		pattern_index = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
 		pattern_index_near = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
 		pattern_index_new = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
-		histogram = new int[level.num_boxes - 1];
+		histogram = new int[level.num_boxes];
 		pattern_file = new FileWriter(level.name + "_patterns.txt");
+		pattern_raw_file = new FileWriter(level.name + "_patterns_raw.txt");
 		patterns = new OpenAddressingIntArrayHashSet((level.cells.length + 31) / 32 + box_length);
 	}
 
@@ -142,7 +144,7 @@ public final class PatternIndex {
 		return patterns.size();
 	}
 
-	public void add(boolean[] agent, int[] box, int num_boxes) {
+	public void add(boolean[] agent, int[] box, int num_boxes, boolean verbose) {
 		@Cleanup val t = timer_add.open();
 		int[] p = Array.concat(Util.compressToIntArray(agent), box);
 		if (!patterns.insert(p))
@@ -150,8 +152,8 @@ public final class PatternIndex {
 
 		// TODO use level transforms and add all pattern variations
 
-		addToFile(agent, box);
-		histogram[num_boxes - 2] += 1;
+		addToFile(agent, box, verbose);
+		histogram[num_boxes - 1] += 1;
 		for (Cell b : level.alive)
 			if (Bits.test(box, b.id))
 				for (Move a : b.moves)
@@ -165,15 +167,24 @@ public final class PatternIndex {
 	}
 
 	@SneakyThrows
-	private void addToFile(boolean[] agent, int[] box) {
-		pattern_file.write(Code.emojify(level.render(p -> {
+	private void addToFile(boolean[] agent, int[] box, boolean verbose) {
+		char[] render = level.render(p -> {
 			if (p.id < box.length * 32 && Bits.test(box, p.id))
-				return '$';
+				return Code.Box;
 			if (agent[p.id])
-				return ' ';
-			return '.';
-		})));
+				return !p.alive ? Code.Dead : Code.Space;
+			return Code.Goal;
+		});
+		if (verbose)
+			System.out.print(Code.emojify(render));
+		pattern_file.write(Code.emojify(render));
+		pattern_raw_file.write(render);
+	}
+
+	@SneakyThrows
+	public void flush() {
 		pattern_file.flush();
+		pattern_raw_file.flush();
 	}
 
 	private boolean looksLikeAPush(Cell agent, int[] box, int offset) {

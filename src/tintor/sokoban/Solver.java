@@ -1,10 +1,27 @@
 package tintor.sokoban;
 
+import java.io.FileWriter;
+
+import lombok.SneakyThrows;
+import lombok.experimental.UtilityClass;
+import tintor.common.CpuTimer;
 import tintor.common.Flags;
 import tintor.common.Log;
-import tintor.common.Timer;
+
+// Make Original.java run levels in parallel now that we can measure CpuTime
+
+// Break level 25
+
+// Solved without unstuck:
+// original:10 15h30m
+// original:11 2m43s closed:200k
+// 
+
+// TODO remove useless dead cell rooms (ie. original:25)
 
 // Unsolved
+// original:19 has 3 useless dead and 1 useless alive cell at the top
+// original:10 need patterns for bipartite deadlocks (add bipartite matching to Deadlock.check())
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
 // original:39 goal room is separated by one way tunnel => optimal solution can be decomposed into two optimal solutions
 // original:36, original:43, original:63 goal room has 2-cell wide entrance, but box can be pushed only through one cell
@@ -12,6 +29,11 @@ import tintor.common.Timer;
 // TODO original:62 remove dead rooms with agent
 // TODO original:63, original:69 goal_zone_entrance is wrong!
 // original:74 goal room with 2 bottleneck entrances (try to solve it first by replacing 2 goal room entrances with box dispensers)
+
+// TODO try to remove boxes to minimize is_valid_level patterns (need to allow more goals than boxes)
+
+// TODO bug with negative garbage counter
+// TODO kill switch - http port that stops solving (in order to be able to see prof output)
 
 // Heuristic:
 // TODO faster heuristic: how? (incremental heuristic) can we pre-compute a matching for a state and reuse that with a single box pushed 
@@ -25,8 +47,6 @@ import tintor.common.Timer;
 // - turn off dead tunnels
 // - turn off push macros
 // - min / max state_space in microban
-
-// TODO +++ improve deadlock detection in frozen boxes! it is missing some patterns
 
 // TODO separate line in stats showing memory (total memory used and ETA to memory exhaustion)
 // TODO auto switch to always cleaning when close to OOM
@@ -56,6 +76,7 @@ import tintor.common.Timer;
 // - if there are multiple pushes from a given State and some of them reduce the number of unreachable goal cells (by pushing into unreachable goal cell) then cut all other pushes
 // TODO: separate Timer for partial deadlock.match inside frozen boxes from the global one
 // TODO: OpenSet: keep StateArray index in map to avoid garbage (and expensive cleanup)
+// TODO: keep track of AutoTimer total for the full Timer nesting path
 
 // Performance:
 // TODO: at the start greedily find order to fill goal nodes using matching from Heuristic (and trigger goal macros during search)
@@ -118,20 +139,26 @@ import tintor.common.Timer;
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
 // TODO: Look at the sokoban PhD for more ideas.
 
+@UtilityClass
 public class Solver {
+	@SneakyThrows
 	static void printSolution(Level level, State[] solution) {
+		FileWriter file = new FileWriter(level.name + "_solution.txt");
+		int pushes = 0;
 		for (int i = 0; i < solution.length; i++) {
 			State s = solution[i];
 			State n = i == solution.length - 1 ? null : solution[i + 1];
 			Cell agent = level.cells[s.agent];
+			pushes += s.pushes;
 			if (i == solution.length - 1 || agent.dir[s.dir].cell.id != n.agent || s.dir != n.dir) {
-				System.out.printf("dist:%s heur:%s\n", s.dist, s.total_dist - s.dist);
-				level.print(s);
+				file.write(String.format("pushes:%s dist:%s heur:%s\n", pushes, s.dist, s.total_dist - s.dist));
+				file.write(Code.emojify(level.render(s)));
 			}
 		}
+		file.close();
 	}
 
-	static Timer timer = new Timer();
+	static CpuTimer timer = new CpuTimer();
 
 	static char hex(int a) {
 		if (a >= 26 || a < 0)
@@ -144,7 +171,7 @@ public class Solver {
 	public static void main(String[] args) throws Exception {
 		args = Sokoban.init(args, 1, 1);
 		Level level = Level.load(args[0]);
-		Log.info("cells:%d alive:%d boxes:%d state_space:%s goal_room_entrance:%s", level.cells.length,
+		Log.raw("cells:%d alive:%d boxes:%d state_space:%s goal_room_entrance:%s", level.cells.length,
 				level.alive.length, level.num_boxes, level.state_space(), level.goal_section_entrance != null);
 		level.print(level.start);
 		Log.raw("bottleneck");
@@ -156,20 +183,18 @@ public class Solver {
 		AStarSolver solver = new AStarSolver(level);
 		solver.trace = (int) trace.value;
 
-		timer.start();
+		timer.open();
 		State end = solver.solve();
-		timer.stop();
+		timer.close();
 		if (end == null) {
-			Log.info("no solution! %s", timer.human());
+			Log.raw("no solution! %s", timer);
 		} else {
 			State[] solution = solver.extractPath(end);
-			for (State s : solution)
-				if (solver.deadlock.checkFull(s)) {
-					level.print(s);
-					throw new Error();
-				}
 			printSolution(level, solution);
-			Log.info("solved in %d steps! %s", end.dist, timer.human());
+			int pushes = 0;
+			for (State s : solution)
+				pushes += s.pushes;
+			Log.raw("solved in %d pushes! %s", pushes, timer);
 		}
 	}
 }
