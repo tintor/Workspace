@@ -23,6 +23,18 @@ import lombok.experimental.UtilityClass;
 public final class Util {
 	private static final ThreadMXBean threadMxBean = ManagementFactory.getThreadMXBean();
 
+	// applies Util.human to every int / long argument
+	// TODO: apply it only for the new %h modifier
+	public static void print(String format, Object... args) {
+		for (int i = 0; i < args.length; i++) {
+			if (args[i] instanceof Integer)
+				args[i] = Util.human((int) (Integer) args[i]);
+			if (args[i] instanceof Long)
+				args[i] = Util.human((long) (Long) args[i]);
+		}
+		System.out.printf(format, args);
+	}
+
 	// returns time in nanoseconds
 	public static long threadCpuTime(Thread thread) {
 		return threadMxBean.getThreadCpuTime(thread.getId());

@@ -12,6 +12,12 @@ import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public final class Array {
+	public <T> T[] map_inline(T[] array, Function<T, T> fn) {
+		for (int i = 0; i < array.length; i++)
+			array[i] = fn.apply(array[i]);
+		return array;
+	}
+
 	public int[] clone(int[] array) {
 		int[] narray = new int[array.length];
 		copy(array, 0, narray, 0, array.length);

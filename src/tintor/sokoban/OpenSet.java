@@ -1,12 +1,13 @@
 package tintor.sokoban;
 
+import static tintor.common.InstrumentationAgent.deepSizeOf;
+import static tintor.common.Util.print;
+
 import java.util.Arrays;
 
 import lombok.Cleanup;
 import lombok.val;
 import tintor.common.AutoTimer;
-import tintor.common.InstrumentationAgent;
-import tintor.common.Util;
 
 // Set of all States for which we found some path from the start (not sure if optimal yet)
 public final class OpenSet {
@@ -67,14 +68,10 @@ public final class OpenSet {
 			if (queue[i] != null && queue[i].size() == 0)
 				queue[i] = null;
 
-		System.out.printf("open:%s memory_map:%s memory_queue:%s garbage:%s cleanup:%s\n", Util.human(size),
-				deep_size(map), deep_size(queue), Util.human(garbage), Util.human(cleanup));
+		print("open:%s memory_map:%s memory_queue:%s ", size, deepSizeOf(map), deepSizeOf(queue));
+		print("garbage:%s cleanup:%s\n", garbage, cleanup);
 		if (sb.length() > 0)
-			System.out.printf("  %s\n", sb);
-	}
-
-	static String deep_size(Object o) {
-		return Util.human(InstrumentationAgent.deepSizeOf(o));
+			print("  %s\n", sb);
 	}
 
 	private StateArray queue(int p) {

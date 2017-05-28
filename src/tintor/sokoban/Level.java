@@ -56,7 +56,7 @@ public final class Level {
 
 	private static final Flags.Bool enable_tunnels = new Flags.Bool("enable_tunnels", true);
 
-	public static class MoreThan256CellsError extends Error {
+	public static class MoreThan1024CellsError extends Error {
 		private static final long serialVersionUID = 1L;
 	}
 
@@ -66,7 +66,7 @@ public final class Level {
 			for (int i = 1; i <= count; i++)
 				try {
 					p.accept(load(filename + ":" + i));
-				} catch (MoreThan256CellsError e) {
+				} catch (MoreThan1024CellsError e) {
 				}
 		});
 	}
@@ -261,8 +261,8 @@ public final class Level {
 	private void init_cells_goals_and_ids() {
 		int count = visitor.tail();
 		// TODO move this after tunnel compression, as cell count will decrease
-		if (count > 256)
-			throw new MoreThan256CellsError(); // until I make compute_alive() faster
+		if (count > 1024)
+			throw new MoreThan1024CellsError(); // until I make compute_alive() faster
 		cells = new Cell[count];
 		Array.copy(visitor.queue(), 0, cells, 0, count);
 		goals = Arrays.copyOf(cells, repartition(0, p -> p.goal));
@@ -306,13 +306,13 @@ public final class Level {
 	private int compute_rooms() {
 		int room_count = 0;
 		for (Cell a : cells) {
-			if (straight(a) || a.room > 0)
+			if (a.straight() || a.room > 0)
 				continue;
 			room_count += 1;
 			for (Cell b : visitor.init(a)) {
 				b.room = room_count;
 				for (Move e : b.moves)
-					if (!straight(e.cell) && e.dist == 1)
+					if (!e.cell.straight() && e.dist == 1)
 						visitor.try_add(e.cell);
 			}
 		}
@@ -346,10 +346,6 @@ public final class Level {
 						b = c;
 					}
 				}
-	}
-
-	private boolean straight(Cell a) {
-		return a.moves.length == 2 && a.moves[0].dir == a.moves[1].dir.reverse;
 	}
 
 	private void compress_cell_ids() {
@@ -403,9 +399,9 @@ public final class Level {
 		// Discount cells in alive tunnels (count them as 1 cell) and bottleneck tunnels (count them as 0 cells)
 		int discount = 0;
 		for (Cell a : alive)
-			if (!straight(a))
+			if (!a.straight())
 				for (Move am : a.moves)
-					if ((am.dir == Dir.Right || am.dir == Dir.Down) && straight(am.cell) && am.dist == 1) {
+					if ((am.dir == Dir.Right || am.dir == Dir.Down) && am.cell.straight() && am.dist == 1) {
 						// found a tunnel entrance
 						int len = 1;
 						Cell b = am.cell;
@@ -414,7 +410,7 @@ public final class Level {
 							if (m == null || m.dist != 1)
 								break;
 							Cell c = m.cell;
-							if (c == null || !c.alive || c.goal || !straight(c))
+							if (c == null || !c.alive || c.goal || !c.straight())
 								break;
 							b = c;
 							len += 1;

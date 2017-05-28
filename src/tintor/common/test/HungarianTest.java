@@ -1,9 +1,10 @@
 package tintor.common.test;
 
+import static tintor.common.Util.print;
+
 import java.util.Random;
 
 import tintor.common.Hungarian;
-import tintor.common.Log;
 import tintor.common.WallTimer;
 
 public class HungarianTest {
@@ -72,7 +73,7 @@ public class HungarianTest {
 			if (iter % 100000 == 0) {
 				timerA.time_ns /= 100000;
 				timerB.time_ns /= 100000;
-				Log.raw("test %d [%s vs %s]", iter / 100000, timerA, timerB);
+				print("test %d [%s vs %s]\n", iter / 100000, timerA, timerB);
 				timerA.time_ns = 0;
 				timerB.time_ns = 0;
 			}

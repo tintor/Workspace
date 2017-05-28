@@ -36,10 +36,17 @@ public final class WallTimer {
 			return String.format("%ds", time_sec);
 
 		int time_min = (int) ((time_ns + Minute / 2) / Minute);
-		if (time_min < 60)
-			return String.format("%dm%ds", time_sec / 60, time_sec % 60);
+		if (time_min < 60) {
+			int s = time_sec % 60;
+			if (s == 0)
+				return String.format("%dm", time_sec / 60);
+			return String.format("%dm%ds", time_sec / 60, s);
+		}
 
-		return String.format("%dh%dm", time_min / 60, time_min % 60);
+		int m = time_min % 60;
+		if (m == 0)
+			return String.format("%dh", time_min / 60);
+		return String.format("%dh%dm", time_min / 60, m);
 	}
 
 	@Override

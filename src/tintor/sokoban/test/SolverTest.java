@@ -13,7 +13,7 @@ import tintor.common.AutoTimer;
 import tintor.common.ParallelParameterized;
 import tintor.sokoban.AStarSolver;
 import tintor.sokoban.Level;
-import tintor.sokoban.Level.MoreThan256CellsError;
+import tintor.sokoban.Level.MoreThan1024CellsError;
 import tintor.sokoban.State;
 
 @RunWith(ParallelParameterized.class)
@@ -54,7 +54,7 @@ public class SolverTest {
 			} catch (AStarSolver.ClosedSizeLimitError e) {
 				Assert.assertTrue("ClosedSizeLimit " + level.state_space(), level.state_space() > 16);
 			}
-		} catch (MoreThan256CellsError e) {
+		} catch (MoreThan1024CellsError e) {
 		}
 	}
 }

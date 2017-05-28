@@ -94,7 +94,7 @@ public final class Flags {
 			if (arg.equals("-help")) {
 				for (Map.Entry<String, Flag> e : flags.entrySet()) {
 					// TODO print default value of each flag
-					Log.raw("%s - %s", e.getKey(), e.getValue().getClass().getSimpleName());
+					Util.print("%s - %s\n", e.getKey(), e.getValue().getClass().getSimpleName());
 				}
 				System.exit(0);
 			}

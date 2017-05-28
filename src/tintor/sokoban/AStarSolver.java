@@ -1,5 +1,7 @@
 package tintor.sokoban;
 
+import static tintor.common.Util.print;
+
 import java.util.ArrayDeque;
 
 import lombok.Cleanup;
@@ -148,7 +150,7 @@ public final class AStarSolver {
 
 				if (v_total_dist == 0) {
 					if (level.is_solved_fast(b.box)) {
-						open.remove_all_ge(b.total_dist);
+						open.remove_all_ge(optimal_solution.value ? b.total_dist : 0);
 						cutoff = b.total_dist;
 					}
 					open.add(b);
@@ -172,31 +174,32 @@ public final class AStarSolver {
 		return path.toArray(new State[path.size()]);
 	}
 
-	private long prev_time = 0;
+	private long prev_cpu_time = 0;
 	private int prev_open = 0;
 	private int prev_closed = 0;
 	private double speed = 0;
 
 	private void report() {
 		long now = System.nanoTime();
-		long delta_time = now - prev_time;
+		long now_cpu = Util.threadCpuTime();
+		long delta_time = now_cpu - prev_cpu_time;
 		int delta_closed = closed.size() - prev_closed;
 		int delta_open = open.size() - prev_open;
-		prev_time = now;
-		prev_closed = closed.size();
-		prev_open = open.size();
+		prev_cpu_time = now_cpu;
 
 		speed = (speed + 1e9 * delta_closed / delta_time) / 2;
 
-		System.out.printf("%s ", level.name);
-		System.out.printf("cutoff:%s dead:%s live:%s ", Util.human(cutoffs), Util.human(heuristic.deadlocks),
-				Util.human(heuristic.non_deadlocks));
-		System.out.printf("time:%s cpu_time:%s ", WallTimer.format(now - start_wall_time),
-				WallTimer.format(Util.threadCpuTime() - start_cpu_time));
-		System.out.printf("speed:%s ", Util.human((int) speed));
-		System.out.printf("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
+		print("%s ", level.name);
+		print("cutoff:%s dead:%s live:%s ", cutoffs, heuristic.deadlocks, heuristic.non_deadlocks);
+		print("time:%s ", WallTimer.format(now - start_wall_time));
+		print("cpu_time:%s ", WallTimer.format(now_cpu - start_cpu_time));
+		print("speed:%s ", (int) speed);
+		print("branch:%.2f\n", 1 + (double) delta_open / delta_closed);
 		closed.report();
 		open.report();
 		deadlock.report();
+
+		prev_closed = closed.size();
+		prev_open = open.size();
 	}
 }

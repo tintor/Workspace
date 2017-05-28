@@ -33,12 +33,14 @@ final class Heuristic {
 	private static final Flags.Int heuristic_mult = new Flags.Int("heuristic_mult", 3);
 
 	public int evaluate(StateKey s) {
+		if (heuristic_mult.value == 0)
+			return 0;
 		@Cleanup val t = timer.open();
 		int bc = 0;
 		for (Cell c : level.goals)
 			frozen[c.id] = s.box(c) && LevelUtil.is_frozen_on_goal(c, s.box);
-		for (Cell b : level.cells)
-			if (b.alive && s.box(b)) {
+		for (Cell b : level.alive)
+			if (s.box(b)) {
 				if (b.goal && frozen[b.id])
 					for (Cell goal : level.goals)
 						hungarian.costs[bc][goal.id] = goal == b ? 0 : Infinity;

@@ -38,20 +38,8 @@ public final class Cell {
 		box = ch == Code.Box || ch == Code.BoxGoal;
 	}
 
-	boolean bottleneck_tunnel() {
-		return bottleneck && tunnel();
-	}
-
-	public boolean tunnel() {
-		return moves.length == 2;
-	}
-
-	public boolean tunnel_entrance() {
-		return tunnel() && (!moves[0].cell.tunnel() || !moves[1].cell.tunnel());
-	}
-
-	public boolean tunnel_interior() {
-		return tunnel() && moves[0].cell.tunnel() && moves[1].cell.tunnel();
+	public boolean straight() {
+		return moves.length == 2 && moves[0].dir == moves[1].dir.reverse;
 	}
 
 	public boolean connected_to(Cell b) {

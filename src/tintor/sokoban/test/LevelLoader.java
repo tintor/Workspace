@@ -1,6 +1,6 @@
 package tintor.sokoban.test;
 
-import tintor.common.Log;
+import tintor.common.Util;
 import tintor.sokoban.Level;
 
 public class LevelLoader {
@@ -11,7 +11,7 @@ public class LevelLoader {
 
 		for (String filename : files.split("\\s"))
 			for (Level level : Level.loadAll(filename))
-				Log.raw("%s cells:%d alive:%d boxes:%d state_space:%s", level.name, level.cells.length,
+				Util.print("%s cells:%d alive:%d boxes:%d state_space:%s\n", level.name, level.cells.length,
 						level.alive.length, level.num_boxes, level.state_space());
 	}
 }

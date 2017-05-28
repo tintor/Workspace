@@ -65,10 +65,12 @@ class StateKey {
 		return new StateKey(a.id, nbox);
 	}
 
-	private boolean more_goals_than_boxes_in_room(Cell a, Cell door, Level level) {
-		assert door.moves.length == 2 && door.bottleneck;
+	private boolean more_goals_than_boxes_in_room_of_alive_cells(Cell a, Cell door, Level level) {
+		assert door.moves.length == 2 && door.box_bottleneck;
 		int result = 0;
 		for (Cell b : level.visitor.init(a).markVisited(door)) {
+			if (!b.alive)
+				continue;
 			if (b.goal)
 				result += 1;
 			if (box(b))
@@ -83,13 +85,20 @@ class StateKey {
 		if (b.goal) {
 			// TODO if a box is pushed inside a tunnel with a box already inside (on goal) and a goal in between,
 			// then keep pushing the box all the way through to that goal
-
-			return b.moves.length == 2 && b.bottleneck && !box(b.move(dir).cell)
-					&& more_goals_than_boxes_in_room(b.move(dir).cell, b, level);
+			return b.straight() && b.box_bottleneck && !box(b.move(dir).cell)
+					&& more_goals_than_boxes_in_room_of_alive_cells(b.move(dir).cell, b, level);
 		}
+
+		assert a.alive && b.alive;
+		assert a.moves.length != 2 || a.straight();
+		assert b.moves.length != 2 || b.straight();
 
 		// push through non-bottleneck tunnel
 		if (a.moves.length == 2 && b.moves.length == 2)
+			return true;
+
+		// from: "No influence pushes" at http://www.sokobano.de/wiki/index.php?title=Solver
+		if (a.moves.length == 2 && b.moves.length == 3 && b.move(dir) != null)
 			return true;
 
 		// push through bottleneck tunnel (until agent can reach the other side)
@@ -153,8 +162,8 @@ public final class State extends StateKey {
 		assert dist <= total_dist;
 		int dir = (int) ((value >>> 26) & 3);
 		int pushes = (int) (value >>> 28) & 0xF;
-		int prev_agent = (int) ((value >>> 32) & 0xFF);
-		int symmetry = (int) ((value >>> 40) & 0x7);
+		int prev_agent = (int) ((value >>> 32) & 0x3FF);
+		int symmetry = (int) ((value >>> 42) & 0x7);
 		assert prev_agent != 255 : String.format("%x", value);
 		State q = new State(agent, box, symmetry, dist, dir, pushes, prev_agent);
 		q.set_heuristic(total_dist - dist);
@@ -171,14 +180,14 @@ public final class State extends StateKey {
 		assert 0 <= dist && dist <= total_dist : dist + " " + total_dist;
 		assert range(dir, 4);
 		assert range(pushes, 16);
-		assert range(prev_agent, 256);
+		assert range(prev_agent, 1024);
 		assert range(symmetry, 8);
 		v |= total_dist;
 		v |= dist << 13;
 		v |= dir << 26;
 		v |= ((long) pushes) << 28;
 		v |= ((long) prev_agent) << 32;
-		v |= ((long) symmetry) << 40;
+		v |= ((long) symmetry) << 42;
 		return v;
 	}
 
