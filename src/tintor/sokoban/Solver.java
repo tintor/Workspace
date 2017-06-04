@@ -1,12 +1,38 @@
 package tintor.sokoban;
 
+import static tintor.common.Util.print;
+
 import java.io.FileWriter;
 
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
+import tintor.common.Array;
 import tintor.common.CpuTimer;
 import tintor.common.Flags;
-import tintor.common.Log;
+
+// TODO: when we cleanup ClosedSet and OpenSet from new deadlock we can also cleanup PatternIndex
+
+// TODO: less expensive (to compute) heuristic for levels with a lot of conflicts
+
+// TODO: add 3x3 patterns to is_simple_deadlock checker
+
+// TODO: Packing sequence from http://www.sokobano.de/wiki/index.php?title=JSoko_Solver
+
+// microban1 - solved!
+// microban2 - solved!
+// microban3 - all except: 58(try without heuristic)
+// microban4 - all except: 56(brute force, quickly solvable with parking), 57(23min), 75(40+min), 99
+// microban5 - all except: 24 and 26
+// simple - all except: 30 and 59
+// original - 1-10 solved!
+
+// BUG nabokosmos:37 no solution!
+// BUG goal-zone deadlock doesn't seem to work for spiros:197
+// BUG deadlock detection by heuristic doesn't seem to work (original:90 + weaken)
+
+// TODO: look for Auction algorithm implementation as alternative to Hungarian algorithm
+
+// TODO: count number of free goals at the start. If very low (ie. just 1, then turn off heuristic) microban4:57
 
 // Make Original.java run levels in parallel now that we can measure CpuTime
 
@@ -15,11 +41,12 @@ import tintor.common.Log;
 // Solved without unstuck:
 // original:10 15h30m
 // original:11 2m43s closed:200k
-// 
 
 // TODO remove useless dead cell rooms (ie. original:25)
 
 // Unsolved
+// microban4:57 1) requires 1 box deadlock patterns (box right in front of tunnel, with agent on the left)
+//              2) solving with -unstuck_period=20 -heuristic_mult=0 -goalzone=off
 // original:19 has 3 useless dead and 1 useless alive cell at the top
 // original:10 need patterns for bipartite deadlocks (add bipartite matching to Deadlock.check())
 // original:23 [boxes:18 alive:104 space:73] 5 rooms (1 goal room) in a line with 4 doors between them
@@ -167,19 +194,41 @@ public class Solver {
 	}
 
 	final static Flags.Int trace = new Flags.Int("trace", 2);
+	final static Flags.Text skip = new Flags.Text("skip", "");
 
 	public static void main(String[] args) throws Exception {
 		args = Sokoban.init(args, 1, 1);
-		Level level = Level.load(args[0]);
-		Log.raw("cells:%d alive:%d boxes:%d state_space:%s goal_room_entrance:%s", level.cells.length,
+		String[] skips = Array.map_inline(skip.value.split(","), s -> ":" + s);
+		print("[%s]\n", args[0]);
+		if (!args[0].contains(":")) {
+			for (Level level : Level.loadAll(args[0]))
+				if (Array.find(skips, s -> level.name.endsWith(s)) == null) {
+					timer.time_ns = 0;
+					print("%s\n", level.name);
+					solve(level);
+					print("\n");
+				}
+			return;
+		}
+		solve(Level.load(args[0]));
+	}
+
+	static Flags.Bool show_level_details = new Flags.Bool("show_level_details", false);
+
+	static void solve(Level level) {
+		print("cells:%s alive:%s boxes:%s state_space:%s goal_room_entrance:%s\n", level.cells.length,
 				level.alive.length, level.num_boxes, level.state_space(), level.goal_section_entrance != null);
 		level.print(level.start);
-		Log.raw("bottleneck");
-		level.print(p -> p.bottleneck ? '.' : ' ');
-		Log.raw("box_bottleneck");
-		level.print(p -> p.box_bottleneck ? '.' : ' ');
-		Log.raw("rooms");
-		level.print(p -> hex(p.room));
+
+		if (show_level_details.value) {
+			print("bottleneck\n");
+			level.print(p -> p.bottleneck ? '.' : ' ');
+			print("box_bottleneck\n");
+			level.print(p -> p.box_bottleneck ? '.' : ' ');
+			print("rooms\n");
+			level.print(p -> hex(p.room));
+		}
+
 		AStarSolver solver = new AStarSolver(level);
 		solver.trace = (int) trace.value;
 
@@ -187,14 +236,16 @@ public class Solver {
 		State end = solver.solve();
 		timer.close();
 		if (end == null) {
-			Log.raw("no solution! %s", timer);
+			print("no solution! %s\n", timer);
+			System.exit(0);
 		} else {
 			State[] solution = solver.extractPath(end);
 			printSolution(level, solution);
 			int pushes = 0;
 			for (State s : solution)
 				pushes += s.pushes;
-			Log.raw("solved in %d pushes! %s", pushes, timer);
+			print("solved in %s pushes! %s\n", pushes, timer);
 		}
+		print("\n");
 	}
 }

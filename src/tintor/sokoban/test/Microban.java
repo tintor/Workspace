@@ -31,8 +31,8 @@ public class Microban {
 			for (Level level : space[i]) {
 				try {
 					print("START %s\n", level.name);
-					print("cells:%d alive:%d ", level.cells.length, level.alive.length);
-					print("boxes:%d state_space:%s\n", level.num_boxes, level.state_space());
+					print("cells:%s alive:%s ", level.cells.length, level.alive.length);
+					print("boxes:%s state_space:%s\n", level.num_boxes, level.state_space());
 
 					AStarSolver solver = new AStarSolver(level);
 					solver.trace = 2;
@@ -46,7 +46,7 @@ public class Microban {
 					} else {
 						solved += 1;
 						solver.extractPath(end);
-						print("solved in %d steps! %s\n", end.dist, timer);
+						print("solved in %s steps! %s\n", end.dist, timer);
 						totalDist += end.dist;
 					}
 					totalClosed += solver.closed.size();
@@ -69,7 +69,7 @@ public class Microban {
 				System.gc();
 				Thread.sleep(10);
 			}
-		print("solved %d, unsolved %d, DIST %d, CLOSED %d, OPEN %d\n", solved, unsolved, totalDist, totalClosed,
+		print("solved %s, unsolved %s, DIST %s, CLOSED %s, OPEN %s\n", solved, unsolved, totalDist, totalClosed,
 				totalOpen);
 		print("snapshot [52.729 Nightly:58 I solved 390, unsolved 0, DIST 40830, CLOSED 20262253, OPEN 438244\n");
 	}

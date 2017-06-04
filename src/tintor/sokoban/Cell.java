@@ -1,16 +1,20 @@
 package tintor.sokoban;
 
+import tintor.common.Bits;
+
 public final class Cell {
 	public static enum Dir {
 		Left, Up, Right, Down;
 
 		Dir reverse;
 		Dir next;
+		Dir prev;
 
 		static {
 			for (Dir d : Dir.values()) {
 				d.reverse = Dir.values()[d.ordinal() ^ 2];
 				d.next = Dir.values()[(d.ordinal() + 1) % 4];
+				d.prev = Dir.values()[(d.ordinal() + 3) % 4];
 			}
 		}
 	}
@@ -38,6 +42,10 @@ public final class Cell {
 		box = ch == Code.Box || ch == Code.BoxGoal;
 	}
 
+	public boolean box(int[] boxes) {
+		return id < boxes.length * 32 && Bits.test(boxes, id);
+	}
+
 	public boolean straight() {
 		return moves.length == 2 && moves[0].dir == moves[1].dir.reverse;
 	}
@@ -53,7 +61,7 @@ public final class Cell {
 		return dir[d];
 	}
 
-	Move move(Dir d) {
+	public Move move(Dir d) {
 		return dir[d.ordinal()];
 	}
 

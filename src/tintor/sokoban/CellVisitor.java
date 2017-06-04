@@ -26,10 +26,11 @@ public final class CellVisitor implements Iterable<Cell> {
 		return true;
 	}
 
-	public void add(Cell a) {
+	public CellVisitor add(Cell a) {
 		assert !set[a.id];
 		set[a.id] = true;
 		queue[tail++] = a;
+		return this;
 	}
 
 	public int tail() {

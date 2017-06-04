@@ -12,6 +12,11 @@ import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public final class Array {
+	public void fill(int[][] array, int value) {
+		for (int[] a : array)
+			Arrays.fill(a, value);
+	}
+
 	public <T> T[] map_inline(T[] array, Function<T, T> fn) {
 		for (int i = 0; i < array.length; i++)
 			array[i] = fn.apply(array[i]);
@@ -48,6 +53,18 @@ public final class Array {
 			if (fn.test(array[i]))
 				return i;
 		return -1;
+	}
+
+	public interface BytePredicate {
+		boolean test(byte value);
+	}
+
+	public int count(byte[] array, BytePredicate fn) {
+		int count = 0;
+		for (byte e : array)
+			if (fn.test(e))
+				count += 1;
+		return count;
 	}
 
 	public int count(int[] array, IntPredicate fn) {
@@ -101,6 +118,12 @@ public final class Array {
 		boolean[] array = new boolean[size];
 		for (int i = 0; i < size; i++)
 			array[i] = fn.test(i);
+		return array;
+	}
+
+	public byte[] ofByte(int size0, byte value) {
+		byte[] array = new byte[size0];
+		Arrays.fill(array, value);
 		return array;
 	}
 

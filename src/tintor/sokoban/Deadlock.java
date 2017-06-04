@@ -1,7 +1,11 @@
 package tintor.sokoban;
 
+import static tintor.common.InstrumentationAgent.deepSizeOf;
+import static tintor.common.Util.print;
+
 import java.io.FileWriter;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import lombok.Cleanup;
@@ -9,11 +13,10 @@ import lombok.SneakyThrows;
 import lombok.val;
 import tintor.common.Array;
 import tintor.common.AutoTimer;
+import tintor.common.BipartiteMatching;
 import tintor.common.Bits;
 import tintor.common.Flags;
 import tintor.common.For;
-import tintor.common.InstrumentationAgent;
-import tintor.common.Log;
 import tintor.common.MurmurHash3;
 import tintor.common.OpenAddressingHashSet;
 import tintor.common.Util;
@@ -25,7 +28,7 @@ final class GoalZoneCache {
 	boolean deadlock;
 	int hash;
 
-	GoalZoneCache(int[] agent, int[] frozen_boxes, int[] boxes, Level level) {
+	GoalZoneCache(int[] agent, int[] frozen_boxes, int[] boxes) {
 		this.agent = Array.clone(agent);
 		this.frozen_boxes = Array.clone(frozen_boxes);
 		this.boxes = Array.clone(boxes);
@@ -65,13 +68,15 @@ public final class Deadlock {
 
 	private FileWriter goal_zone_deadlocks_file;
 	private FileWriter is_valid_level_deadlocks_file;
+	private FileWriter unstuck_fail_file;
 
 	private static final AutoTimer timer = new AutoTimer("deadlock");
 	private static final AutoTimer timer_frozen = new AutoTimer("deadlock.frozen");
-	private static final AutoTimer timer_minimize = new AutoTimer("deadlock.minimize");
 	private static final AutoTimer timer_goalzone = new AutoTimer("deadlock.goalzone");
 	private static final AutoTimer timer_cleanup = new AutoTimer("deadlock.cleanup");
 	private static final AutoTimer timer_unstuck = new AutoTimer("deadlock.unstuck");
+	private static final AutoTimer timer_bipartite = new AutoTimer("deadlock.bipartite");
+	private static final AutoTimer timer_icorral = new AutoTimer("deadlock.icorral");
 
 	private int deadlocks;
 	private int non_deadlocks;
@@ -79,16 +84,69 @@ public final class Deadlock {
 
 	private int cleanup_count;
 
-	private int box_deadlocks;
+	private int simple_deadlocks;
 	private int pattern_deadlocks;
 	private int frozen_box_deadlocks;
 	private int goalzone_deadlocks;
+	private int goalzone_cache_deadlocks;
 	private int reachable_free_goals_deadlocks;
 	private int isvalidlevel_filter_deadlocks;
 	private int isvalidlevel_deadlocks;
+	private int bipartite_deadlocks;
+	private int icorral_deadlocks;
+	private int icorral2_deadlocks;
 
 	public int unstuck_bad;
 	public int unstuck_good;
+
+	@SneakyThrows
+	public Deadlock(Level level) {
+		this.level = level;
+		visitor = new CellVisitor(level.cells.length);
+		patternIndex = new PatternIndex(level);
+		goal_zone_deadlocks_file = new FileWriter(level.name + "_goalzone_deadlocks.txt");
+		is_valid_level_deadlocks_file = new FileWriter(level.name + "_isvalidlevel_deadlocks.txt");
+		unstuck_fail_file = new FileWriter(level.name + "_unstuck_fail.txt");
+		temp_box = new int[(level.alive.length + 31) / 32];
+		explored = new StateSet(level.alive.length, level.cells.length);
+		are_all_goals_in_the_same_tunnel = are_all_goals_in_the_same_tunnel();
+	}
+
+	@SneakyThrows
+	void report() {
+		cleanup();
+
+		print("dead:%s live:%s rev:%s ", deadlocks, non_deadlocks, trivial);
+		print("db:%s ivl_db:%s ", patternIndex.size(), goal_zone_cache.size());
+		print("unstuck[good:%s bad:%s]\n", unstuck_good, unstuck_bad);
+
+		print("dead[box:%s pattern:%s ", simple_deadlocks, pattern_deadlocks);
+		print("fb:%s goalzone:%s goalzone_cache:%s ", frozen_box_deadlocks, goalzone_deadlocks,
+				goalzone_cache_deadlocks);
+		print("icorral:%s icorral2:%s ", icorral_deadlocks, icorral2_deadlocks);
+		print("reach_free_goals:%s bipartite:%s ", reachable_free_goals_deadlocks, bipartite_deadlocks);
+		print("ivl_filter:%s ivl:%s]\n", isvalidlevel_filter_deadlocks, isvalidlevel_deadlocks);
+
+		print("pattern_index_memory:%s ", deepSizeOf(patternIndex));
+		print("goal_zone_cache_memory:%s ", deepSizeOf(goal_zone_cache));
+		print("cleanup:%s\n", cleanup_count);
+
+		patternIndex.flush();
+		goal_zone_deadlocks_file.flush();
+		is_valid_level_deadlocks_file.flush();
+		unstuck_fail_file.flush();
+	}
+
+	void cleanup() {
+		if (patternIndex.hasNew()) {
+			{
+				@Cleanup val t = timer_cleanup.openExclusive();
+				open.remove_if(this::should_cleanup);
+				closed.remove_if(this::should_cleanup);
+			}
+			patternIndex.clearNew();
+		}
+	}
 
 	private boolean should_cleanup(int agent, int[] box, int offset) {
 		if (!patternIndex.matchesNew(agent, box, offset, level.num_boxes))
@@ -97,16 +155,82 @@ public final class Deadlock {
 		return true;
 	}
 
+	public boolean isICorralDeadlock(StateKey s) {
+		@Cleanup val t = timer_icorral.openExclusive();
+		boolean[] agent_reachable = LevelUtil.find_agent_reachable_cells(s, level, null);
+
+		ArrayList<byte[]> corrals = new ArrayList<>();
+		corrals.clear();
+		level.visitor.init();
+		for (Cell c : level.cells)
+			if (!level.visitor.visited(c) && !s.box(c) && !agent_reachable[c.id])
+				corrals.add(LevelUtil.build_corral(c, s));
+
+		ArrayList<StateKey> pushes = new ArrayList<>();
+		loop:
+		for (byte[] corral : corrals)
+			if (LevelUtil.is_unsolved_corral(corral, s, level) && LevelUtil.is_i_corral(corral, s, level)) {
+				// Create a new StateKey without any non-corral boxes
+				int[] boxes = new int[s.box.length];
+				for (Cell c : level.alive)
+					if (s.box(c) && corral[c.id] >= 0)
+						Bits.set(boxes, c.id);
+				StateKey sc = new StateKey(s.agent, boxes);
+
+				// Find all non-deadlock pushes into I-corral
+				pushes.clear();
+				for (Cell a : visitor.init(level.cells[sc.agent]))
+					for (Move p : a.moves) {
+						if (!sc.box(p.cell)) {
+							visitor.try_add(p.cell);
+							continue;
+						}
+
+						StateKey b = sc.push(p, level, false);
+						if (b == null)
+							continue;
+						Cell box = p.cell.move(p.exit_dir).cell;
+						while (!b.box(box))
+							box = box.move(p.exit_dir).cell;
+
+						if (LevelUtil.is_simple_deadlock(level.cells[b.agent], box, b.box))
+							continue;
+
+						if (patternIndex.matches(b.agent, b.box, 0, Bits.count(b.box), true))
+							continue;
+
+						pushes.add(b);
+					}
+				Array.copy(visitor.visited(), 0, agent_reachable, 0, agent_reachable.length);
+
+				// recursion depth is limited by the number of empty cells inside corral
+				for (StateKey b : pushes)
+					if (!isICorralDeadlock(b))
+						continue loop;
+
+				// Add the entire I-Corral to pattern index
+				if (For.all(level.alive, p -> !p.box(sc.box) || !p.goal)) {
+					patternIndex.add(agent_reachable, sc.box, Bits.count(sc.box), false, "i-corral");
+					icorral_deadlocks += 1;
+				} else {
+					icorral2_deadlocks += 1;
+				}
+				return true;
+			}
+		return false;
+	}
+
 	private static final Flags.Int exaustive_limit = new Flags.Int("exaustive_limit", 200000);
 
 	// s can have less boxes than level
 	// TODO maybe parallelize this function
 	public boolean isDeadlockExaustive(StateKey s, CellVisitor visitor, ArrayDeque<StateKey> queue, StateSet set) {
-		// TODO if num boxes < num goals then it can be both solved (for current boxes) and deadlock (for remaining boxes)
+		// TODO if number of boxes < number of goals then it can be both solved (for current boxes) and deadlock (for remaining boxes)
 		// TODO make sure it is not a goal zone deadlock
 		if (level.is_solved(s.box))
 			return false;
 
+		int num_boxes = Bits.count(s.box);
 		allow_more_goals_than_boxes = true;
 		int explored = 0;
 		queue.clear();
@@ -114,10 +238,10 @@ public final class Deadlock {
 
 		try {
 			queue.addLast(s);
-			long next = System.nanoTime() + 2_500_000_000l;
+			long next = System.nanoTime() + 2500 * AutoTimer.Millisecond;
 			while (!queue.isEmpty()) {
 				StateKey a = queue.removeFirst();
-				if (checkFull(a))
+				if (checkInternal2(a, -1, num_boxes))
 					continue;
 				for (Cell agent : visitor.init(level.cells[a.agent]))
 					for (Move p : agent.moves) {
@@ -126,7 +250,7 @@ public final class Deadlock {
 							continue;
 						}
 						StateKey b = a.push(p, level, false);
-						if (b == null || set.contains(b) || checkIncremental(b, p.exit_dir.ordinal()))
+						if (b == null || set.contains(b) || checkInternal2(b, p.exit_dir.ordinal(), num_boxes))
 							continue;
 						if (level.is_solved(b.box))
 							// TODO if num boxes < num goals then it can be both solved (for current boxes) and deadlock (for remaining boxes)
@@ -137,7 +261,7 @@ public final class Deadlock {
 					}
 				long now = System.nanoTime();
 				if (now >= next) {
-					Log.raw("explored:%s set:%s queue:%s", Util.human(explored), Util.human(set.size()),
+					print("explored:%s set:%s queue:%s\n", Util.human(explored), Util.human(set.size()),
 							Util.human(queue.size()));
 					next = now + 2_500_000_000l;
 				}
@@ -151,6 +275,9 @@ public final class Deadlock {
 		return true;
 	}
 
+	private static final Flags.Bool unstuck_debug = new Flags.Bool("unstuck_debug", false);
+
+	@SneakyThrows
 	boolean unstuck(StateKey recent, StateKey current) {
 		// TODO split this timer into 2 (one timer just for minimization)
 		@Cleanup val t = timer_unstuck.openExclusive();
@@ -166,14 +293,18 @@ public final class Deadlock {
 		StateSet set = new StateSet(level.alive.length, level.cells.length);
 
 		StateKey q = new StateKey(current.agent, boxes);
-		Log.raw("unstuck - begin");
-		level.print(q);
+		if (unstuck_debug.value) {
+			print("unstuck - begin\n");
+			level.print(q);
+		}
 		// TODO maybe have higher exhaustive limit for this first call to isDeadlockExaustive()
 
 		// TODO cache results for the first call to isDeadlockExaustive(), to avoid recomputing it!
 		// TODO OR next time we get asked for state S that returned ExaustiveLimit before, increase exhaustive limit!
 		if (!isDeadlockExaustive(q, visitor, queue, set)) {
-			Log.raw("unstuck - failed");
+			if (unstuck_debug.value)
+				print("unstuck - failed\n");
+			unstuck_fail_file.write(Code.emojify(level.render(q)));
 			unstuck_bad += 1;
 			return false;
 		}
@@ -194,69 +325,47 @@ public final class Deadlock {
 					visitor.try_add(m.cell);
 		}
 		// TODO try to move agent even more
-		patternIndex.add(agent, boxes, Bits.count(boxes), true);
+		patternIndex.add(agent, boxes, Bits.count(boxes), unstuck_debug.value, "unstuck");
 		// TODO try generating more patterns based on it (by pushing it in) 
-		Log.raw("unstuck - successful");
 		cleanup();
+		if (unstuck_debug.value)
+			print("unstuck - successful");
 		unstuck_good += 1;
 		return true;
 	}
 
-	void cleanup() {
-		if (patternIndex.hasNew()) {
-			{
-				@Cleanup val t = timer_cleanup.openExclusive();
-				open.remove_if(this::should_cleanup);
-				closed.remove_if(this::should_cleanup);
+	// TODO for microban4:56, one goal cell is at the tunnel entrance
+	private final boolean are_all_goals_in_the_same_tunnel;
+
+	private boolean are_all_goals_in_the_same_tunnel() {
+		Cell a = level.goals[0];
+		assert a.goal;
+		if (!a.straight())
+			return false;
+		int count = 1;
+		for (Move m : a.moves)
+			if (m.dist == 1) {
+				Cell b = m.cell;
+				while (b.alive && b.straight()) {
+					Move bm = b.move(m.dir);
+					if (bm.dist != 1 || !bm.alive)
+						break;
+					if (b.goal)
+						count += 1;
+					b = bm.cell;
+				}
 			}
-			patternIndex.clearNew();
-		}
+		return count == level.goals.length;
 	}
 
-	// applies Util.human to every int / long argument
-	private static void log(String format, Object... args) {
-		for (int i = 0; i < args.length; i++) {
-			if (args[i] instanceof Integer)
-				args[i] = Util.human((int) (Integer) args[i]);
-			if (args[i] instanceof Long)
-				args[i] = Util.human((long) (Long) args[i]);
-		}
-		Log.raw(format, args);
-	}
-
-	@SneakyThrows
-	void report() {
-		cleanup();
-
-		log("dead:%s live:%s rev:%s db:%s ivl_db:%s unstuck[good:%s bad:%s]", deadlocks, non_deadlocks, trivial,
-				patternIndex.size(), goal_zone_cache.size(), unstuck_good, unstuck_bad);
-		log("dead[boxd:%s pattern:%s fb:%s goalzone:%s reach_free_goals:%s ivl_filter:%s ivl:%s]", box_deadlocks,
-				pattern_deadlocks, frozen_box_deadlocks, goalzone_deadlocks, reachable_free_goals_deadlocks,
-				isvalidlevel_filter_deadlocks, isvalidlevel_deadlocks);
-		log("pattern_index_memory:%s goal_zone_cache_memory:%s cleanup:%s",
-				InstrumentationAgent.deepSizeOf(patternIndex), InstrumentationAgent.deepSizeOf(goal_zone_cache),
-				cleanup_count);
-
-		patternIndex.flush();
-		goal_zone_deadlocks_file.flush();
-		is_valid_level_deadlocks_file.flush();
-	}
-
-	@SneakyThrows
-	public Deadlock(Level level) {
-		this.level = level;
-		visitor = new CellVisitor(level.cells.length);
-		patternIndex = new PatternIndex(level);
-		goal_zone_deadlocks_file = new FileWriter(level.name + "_goalzone_deadlocks.txt");
-		is_valid_level_deadlocks_file = new FileWriter(level.name + "_isvalidlevel_deadlocks.txt");
-		temp_box = new int[(level.alive.length + 31) / 32];
-		explored = new StateSet(level.alive.length, level.cells.length);
-	}
+	private static final Flags.Bool goalzone = new Flags.Bool("goalzone", true);
 
 	@SneakyThrows
 	private boolean isGoalZoneDeadlock(StateKey s) {
+		if (!goalzone.value)
+			return false;
 		@Cleanup val t = timer_goalzone.open();
-		if (!level.has_goal_zone)
+		if (!level.has_goal_zone || are_all_goals_in_the_same_tunnel)
 			return false;
 
 		// remove all boxes not on goals
@@ -268,17 +377,27 @@ public final class Deadlock {
 		if (Bits.count(box) == 0)
 			return false;
 
+		// Compute all agent reachable cells
 		for (Cell a : visitor.init(level.cells[s.agent]))
 			for (Move m : a.moves)
 				if (!s.box(m.cell))
 					visitor.try_add(m.cell);
-		// TODO cache results
+		boolean[] agent = visitor.visited().clone();
+
+		// Cache lookup
+		s = new StateKey(s.agent, box);
+		val cache_new = new GoalZoneCache(Util.compressToIntArray(agent), new int[box.length], box);
+		val cache_lookup = goal_zone_cache.get(cache_new);
+		if (cache_lookup != null) {
+			goalzone_cache_deadlocks += 1;
+			return cache_lookup.deadlock;
+		}
 
 		// move agent and try to push remaining boxes
 		// TODO assume goals and agent position can fit in 64bit long
 		queue.clear();
 		explored.clear();
-		queue.addLast(new StateKey(s.agent, box));
+		queue.addLast(s);
 		while (!queue.isEmpty()) {
 			StateKey q = queue.removeFirst();
 			visitor.init(level.cells[q.agent]);
@@ -291,8 +410,10 @@ public final class Deadlock {
 				if (a.goal) {
 					reachableGoals += 1;
 					assert boxesOnGoals + reachableGoals <= level.num_boxes;
-					if (boxesOnGoals + reachableGoals == level.num_boxes)
+					if (boxesOnGoals + reachableGoals == level.num_boxes) {
+						goal_zone_cache.insert(cache_new);
 						return false;
+					}
 				}
 				for (Move e : a.moves) {
 					Cell b = e.cell;
@@ -305,8 +426,10 @@ public final class Deadlock {
 						continue;
 					if (!c.cell.goal) {
 						// box is removed
-						if (--boxesOnGoals == 0)
+						if (--boxesOnGoals == 0) {
+							goal_zone_cache.insert(cache_new);
 							return false;
+						}
 						Bits.clear(q.box, b.id);
 						visitor.add(b);
 						continue;
@@ -327,7 +450,10 @@ public final class Deadlock {
 			}
 		}
 		goalzone_deadlocks += 1;
+		// TODO multiple agent spots
 		goal_zone_deadlocks_file.write(Code.emojify(level.render(s)));
+		cache_new.deadlock = true;
+		goal_zone_cache.insert(cache_new);
 		return true;
 	}
 
@@ -335,14 +461,16 @@ public final class Deadlock {
 		Deadlock, NotFrozen, GoalZoneDeadlock,
 	}
 
-	// Note: modifies input array!
 	private final int[] temp_box;
 
+	// Note: modifies input array!
 	@SneakyThrows
 	private Result containsFrozenBoxes(final int agent, int[] box, int num_boxes) {
 		@Cleanup val t = timer_frozen.open();
-		if (num_boxes < 2)
+		if (num_boxes < 2) {
+			Arrays.fill(box, 0);
 			return Result.NotFrozen;
+		}
 		int pushed_boxes = 0;
 		Array.copy(box, 0, temp_box, 0, box.length);
 
@@ -363,7 +491,7 @@ public final class Deadlock {
 
 				Bits.clear(box, b.id);
 				Bits.set(box, c.cell.id);
-				boolean m = LevelUtil.is_2x2_deadlock(c.cell, box)
+				boolean m = LevelUtil.is_simple_deadlock(b, c.cell, box)
 						|| patternIndex.matches(b.id, box, 0, num_boxes, true);
 				Bits.clear(box, c.cell.id);
 				if (m) {
@@ -372,8 +500,10 @@ public final class Deadlock {
 				}
 
 				// agent pushes box from B to C (and box disappears)
-				if (--num_boxes == 1)
+				if (--num_boxes == 1) {
+					Arrays.fill(box, 0);
 					return Result.NotFrozen;
+				}
 				pushed_boxes += 1;
 				visitor.init(b);
 				break;
@@ -408,7 +538,7 @@ public final class Deadlock {
 				}
 
 			val visited = Util.compressToIntArray(visitor.visited());
-			val cache_new = new GoalZoneCache(visited, box, original_box, level);
+			val cache_new = new GoalZoneCache(visited, box, original_box);
 			GoalZoneCache cache = goal_zone_cache.get(cache_new);
 			if (cache == null) {
 				val z = level.render(p -> {
@@ -435,96 +565,143 @@ public final class Deadlock {
 		return Result.NotFrozen;
 	}
 
-	// Looks for boxes not on goal that can't be moved
-	// return true - means it is definitely a deadlock
-	// return false - not sure if it is a deadlock
-	private boolean checkInternal(StateKey s, int s_dir, int num_boxes, boolean incremental) {
-		// TODO do we really need this?
-		if (level.is_solved_fast(s.box))
-			return false;
-		if (incremental && LevelUtil.is_2x2_deadlock(level.cells[s.agent].move(s_dir).cell, s.box)) {
-			box_deadlocks += 1;
-			return true;
-		}
-		if (patternIndex.matches(s.agent, s.box, 0, num_boxes, incremental)) {
-			pattern_deadlocks += 1;
-			return true;
-		}
-		if (isGoalZoneDeadlock(s))
-			return true;
+	private boolean isFrozenBoxesDeadlock(StateKey s, int[] boxes, int num_boxes) {
+		Result result = containsFrozenBoxes(s.agent, boxes, num_boxes);
+		if (result == Result.Deadlock) {
+			frozen_box_deadlocks += 1;
+			boolean[] agent = Array.clone(visitor.visited());
 
-		int[] box = Array.clone(s.box);
-		Result result = containsFrozenBoxes(s.agent, box, num_boxes);
-		if (result == Result.NotFrozen)
-			return false;
-		// if we have boxes frozen on goals, we can't store that pattern
-		if (result == Result.GoalZoneDeadlock)
-			return true;
+			// TODO there could be more than one minimal pattern from box
+			num_boxes = Bits.count(boxes);
+			// try removing boxes to generalize the pattern
+			for (Cell b : level.alive)
+				if (Bits.test(boxes, b.id) && !level.is_solved(boxes)) {
+					int[] box_copy = Array.clone(boxes);
+					Bits.clear(box_copy, b.id);
+					if (containsFrozenBoxes(s.agent, box_copy, num_boxes - 1) == Result.Deadlock) {
+						Bits.clear(boxes, b.id);
+						num_boxes -= 1;
+						for (Move m : b.moves)
+							if (agent[m.cell.id])
+								agent[b.id] = true;
+					}
+				}
+			// try moving agent to unreachable cells to generalize the pattern
+			for (Cell a : level.cells)
+				if (!agent[a.id] && (!a.alive || !Bits.test(boxes, a.id))
+						&& containsFrozenBoxes(a.id, Array.clone(boxes), num_boxes) == Result.Deadlock)
+					Util.updateOr(agent, visitor.visited());
 
-		frozen_box_deadlocks += 1;
-		boolean[] agent = Array.clone(visitor.visited());
-		num_boxes = minimizePattern(s, agent, box, Bits.count(box));
-		patternIndex.add(agent, box, num_boxes, false);
+			patternIndex.add(agent, boxes, num_boxes, false, "frozen");
+		}
+		// TODO store GoalZonePattern also
+		return result != Result.NotFrozen;
+	}
+
+	boolean[][] graph;
+	int[] match;
+	boolean[] seen;
+
+	private boolean containsBipartiteMatchingDeadlockInternal(int[] boxes, int[] frozen) {
+		int bc = 0;
+		for (Cell b : level.alive)
+			if (Bits.test(boxes, b.id)) {
+				if (b.goal && Bits.test(frozen, b.id))
+					for (Cell g : level.goals)
+						graph[bc][g.id] = g == b;
+				else
+					for (Cell g : level.goals)
+						graph[bc][g.id] = !Bits.test(frozen, g.id) && b.distance_box[g.id] < Cell.Infinity;
+				bc += 1;
+			}
+		return BipartiteMatching.maxBPM(graph, bc, match, seen) < bc;
+	}
+
+	private boolean containsBipartiteMatchingDeadlock(int[] boxes, int[] frozen) {
+		@Cleanup val t = timer_bipartite.open();
+		if (graph == null) {
+			graph = new boolean[level.num_boxes][level.goals.length];
+			match = new int[level.goals.length];
+			seen = new boolean[level.goals.length];
+		}
+
+		if (!containsBipartiteMatchingDeadlockInternal(boxes, frozen))
+			return false;
+
+		bipartite_deadlocks += 1;
+		boolean[] agent = Array.ofBool(level.cells.length, i -> true);
+		int num_boxes = Bits.count(boxes);
+		for (Cell b : level.alive)
+			if (Bits.test(boxes, b.id) && !level.is_solved(boxes) && !Bits.test(frozen, b.id)) {
+				Bits.clear(boxes, b.id);
+				if (containsBipartiteMatchingDeadlockInternal(boxes, frozen))
+					num_boxes -= 1;
+				else
+					Bits.set(boxes, b.id);
+			}
+		patternIndex.add(agent, boxes, num_boxes, false, "bipartite");
 		return true;
 	}
 
-	// TODO there could be more than one minimal pattern from box
-	private int minimizePattern(StateKey s, boolean[] agent, int[] box, int num_boxes) {
-		@Cleanup val t = timer_minimize.openExclusive();
-		// try removing boxes to generalize the pattern
-		for (Cell i : level.cells)
-			if (i.alive && Bits.test(box, i.id) && !level.is_solved(box)) {
-				int[] box_copy = Array.clone(box);
-				Bits.clear(box_copy, i.id);
-				if (containsFrozenBoxes(s.agent, box_copy, num_boxes - 1) == Result.Deadlock) {
-					Bits.clear(box, i.id);
-					num_boxes -= 1;
-					for (Move z : i.moves)
-						if (agent[z.cell.id])
-							agent[i.id] = true;
-				}
-			}
-		// try moving agent to unreachable cells to generalize the pattern
-		for (int i = 0; i < level.cells.length; i++)
-			if (!agent[i] && (i >= level.alive.length || !Bits.test(box, i))
-					&& containsFrozenBoxes(i, Array.clone(box), num_boxes) == Result.Deadlock)
-				Util.updateOr(agent, visitor.visited());
-		return num_boxes;
+	// Looks for boxes not on goal that can't be moved
+	// return true - means it is definitely a deadlock
+	// return false - not sure if it is a deadlock
+	private boolean checkInternal(StateKey s, int s_dir, int num_boxes) {
+		assert Bits.count(s.box) == num_boxes;
+		if (level.is_solved(s.box))
+			return false;
+		if (s_dir != -1
+				&& LevelUtil.is_simple_deadlock(level.cells[s.agent], level.cells[s.agent].move(s_dir).cell, s.box)) {
+			simple_deadlocks += 1;
+			return true;
+		}
+		if (patternIndex.matches(s.agent, s.box, 0, num_boxes, s_dir != -1)) {
+			pattern_deadlocks += 1;
+			return true;
+		}
+		// TODO goal zone deadlock check might be redundant with ICorralDeadlock
+		if (isGoalZoneDeadlock(s))
+			return true;
+
+		// TODO find the best ordering of deadlock checking functions
+		// TODO move containsFrozenBoxes higher up as isGoalZoneDeadlock and isICorralDeadlock can take advantage of boxes frozen on goals
+		// TODO move frozen boxes into isFrozenBoxesDeadlock()
+		int[] boxes = Array.clone(s.box);
+		if (isFrozenBoxesDeadlock(s, boxes, num_boxes))
+			return true;
+
+		if (containsBipartiteMatchingDeadlock(s.box, boxes))
+			return true;
+
+		if (false && isICorralDeadlock(s))
+			return true;
+
+		return false;
 	}
 
 	private static final Flags.Bool enabled = new Flags.Bool("deadlocks", true);
 
-	public boolean checkIncremental(State s) {
-		@Cleanup val t = timer.open();
-		assert !s.is_initial();
-		return enabled.value && checkIncremental(s, s.dir);
-	}
-
-	private boolean checkIncremental(StateKey s, int dir) {
-		if (LevelUtil.is_reversible_push(s, dir, level)) {
+	private boolean checkInternal2(StateKey s, int dir, int num_boxes) {
+		if (dir != -1 && LevelUtil.is_reversible_push(s, dir, level)) {
 			trivial += 1;
 			return false;
 		}
-		if (checkInternal(s, dir, level.num_boxes, true)) {
+		if (checkInternal(s, dir, num_boxes)) {
 			deadlocks += 1;
 			return true;
 		}
 		non_deadlocks += 1;
 		return false;
+	}
+
+	public boolean checkIncremental(State s) {
+		@Cleanup val t = timer.open();
+		assert !s.is_initial();
+		return enabled.value && checkInternal2(s, s.dir, level.num_boxes);
 	}
 
 	public boolean checkFull(State s) {
 		@Cleanup val t = timer.open();
-		assert !s.is_initial();
-		return enabled.value && checkFull((StateKey) s);
-	}
-
-	private boolean checkFull(StateKey s) {
-		if (checkInternal(s, -1, level.num_boxes, false)) {
-			deadlocks += 1;
-			return true;
-		}
-		non_deadlocks += 1;
-		return false;
+		return enabled.value && checkInternal2((StateKey) s, -1, level.num_boxes);
 	}
 }

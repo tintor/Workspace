@@ -40,14 +40,17 @@ public class Original {
 						level.num_boxes, level.state_space());
 				AStarSolver solver = new AStarSolver(level);
 				solver.trace = 2;
-				solver.closed_size_limit = closed_size_limit.value;
-				solver.min_speed = min_speed.value;
+				solver.max_cpu_time = 10 * 60 * AutoTimer.Second;
 				timer.time_ns = 0;
 				AutoTimer.reset();
 				timer.open();
 				State end = solver.solve();
 				timer.close();
-				if (end == null) {
+
+				if (timer.time_ns > 10 * 60 * AutoTimer.Second) {
+					raw("out of time");
+					unsolved += 1;
+				} else if (end == null) {
 					unsolved += 1;
 					raw("no solution!");
 				} else {
@@ -60,13 +63,9 @@ public class Original {
 				}
 				totalClosed += solver.closed.size();
 				totalOpen += solver.open.size();
-			} catch (AStarSolver.ClosedSizeLimitError e) {
+			} catch (AStarSolver.ExpiredError e) {
 				timer.close();
-				raw("out of closed nodes");
-				unsolved += 1;
-			} catch (AStarSolver.SpeedTooLow e) {
-				timer.close();
-				raw("speed too low");
+				raw("out of time");
 				unsolved += 1;
 			} catch (OutOfMemoryError e) {
 				timer.close();

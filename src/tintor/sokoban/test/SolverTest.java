@@ -46,13 +46,13 @@ public class SolverTest {
 		try {
 			Level level = Level.load(filename);
 			AStarSolver solver = new AStarSolver(level);
-			solver.closed_size_limit = 5000;
+			solver.max_cpu_time = 10 * AutoTimer.Second;
 			try {
 				State end = solver.solve();
 				Assert.assertTrue(end != null);
 				solver.extractPath(end);
-			} catch (AStarSolver.ClosedSizeLimitError e) {
-				Assert.assertTrue("ClosedSizeLimit " + level.state_space(), level.state_space() > 16);
+			} catch (AStarSolver.ExpiredError e) {
+				Assert.assertTrue("ExpiredError " + level.state_space(), level.state_space() > 16);
 			}
 		} catch (MoreThan1024CellsError e) {
 		}

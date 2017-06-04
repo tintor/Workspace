@@ -2,13 +2,16 @@ package tintor.sokoban;
 
 import java.util.Arrays;
 
+import lombok.Cleanup;
+import lombok.val;
 import tintor.common.Array;
+import tintor.common.AutoTimer;
 import tintor.common.Bits;
 import tintor.sokoban.Cell.Dir;
 
 class StateKey {
-	final int agent;
-	final int[] box;
+	public final int agent;
+	public final int[] box;
 
 	public StateKey(int agent, int[] box) {
 		this.agent = agent;
@@ -97,10 +100,6 @@ class StateKey {
 		if (a.moves.length == 2 && b.moves.length == 2)
 			return true;
 
-		// from: "No influence pushes" at http://www.sokobano.de/wiki/index.php?title=Solver
-		if (a.moves.length == 2 && b.moves.length == 3 && b.move(dir) != null)
-			return true;
-
 		// push through bottleneck tunnel (until agent can reach the other side)
 		if (a.moves.length == 2 && a.bottleneck && b.bottleneck)
 			return true;
@@ -164,7 +163,6 @@ public final class State extends StateKey {
 		int pushes = (int) (value >>> 28) & 0xF;
 		int prev_agent = (int) ((value >>> 32) & 0x3FF);
 		int symmetry = (int) ((value >>> 42) & 0x7);
-		assert prev_agent != 255 : String.format("%x", value);
 		State q = new State(agent, box, symmetry, dist, dir, pushes, prev_agent);
 		q.set_heuristic(total_dist - dist);
 		return q;
@@ -220,12 +218,19 @@ public final class State extends StateKey {
 		return new StateKey(prev_agent, nbox);
 	}
 
-	State push(Move m, Level level, boolean optimal, int moves, int prev_agent) {
-		Cell a = m.cell;
+	private static AutoTimer timer_push = new AutoTimer("push");
+
+	public State push(Move m, Level level, boolean optimal, int moves, int prev_agent) {
+		return push(m.cell, m.exit_dir, m.dist, level, optimal, moves, prev_agent);
+	}
+
+	State push(Cell m_cell, Dir m_exit_dir, int m_dist, Level level, boolean optimal, int moves, int prev_agent) {
+		@Cleanup val t = timer_push.open();
+		Cell a = m_cell;
 		assert symmetry == 0;
 		assert box(a.id);
 
-		Dir dir = m.exit_dir;
+		Dir dir = m_exit_dir;
 		Move am = a.move(dir);
 		if (am == null || !am.alive || box(am.cell))
 			return null;
@@ -234,7 +239,7 @@ public final class State extends StateKey {
 		int[] nbox = Array.clone(box);
 		Bits.clear(nbox, a.id);
 		Bits.set(nbox, am.cell.id);
-		int new_dist = optimal ? dist + moves + m.dist : dist + m.dist;
+		int new_dist = optimal ? dist + moves + m_dist : dist + m_dist;
 		int pushes = 1;
 
 		// TODO increase push limit

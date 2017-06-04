@@ -2,6 +2,7 @@ package tintor.common;
 
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import java.util.function.IntPredicate;
 import java.util.function.Predicate;
 
 import lombok.experimental.UtilityClass;
@@ -13,6 +14,13 @@ public class For {
 			if (!fn.test(e))
 				return false;
 		return true;
+	}
+
+	public static boolean any(int[] array, IntPredicate fn) {
+		for (int e : array)
+			if (fn.test(e))
+				return true;
+		return false;
 	}
 
 	public static <T> boolean any(T[] array, Predicate<T> fn) {

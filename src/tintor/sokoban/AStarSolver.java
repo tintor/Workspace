@@ -3,6 +3,8 @@ package tintor.sokoban;
 import static tintor.common.Util.print;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 import lombok.Cleanup;
 import lombok.val;
@@ -12,16 +14,11 @@ import tintor.common.Util;
 import tintor.common.WallTimer;
 
 public final class AStarSolver {
-	public static class ClosedSizeLimitError extends Error {
-		private static final long serialVersionUID = 1L;
-	};
-
-	public static class SpeedTooLow extends Error {
+	public static class ExpiredError extends Error {
 		private static final long serialVersionUID = 1L;
 	};
 
 	static final AutoTimer timer_solve = new AutoTimer("solve");
-	static final AutoTimer timer_moves = new AutoTimer("moves");
 
 	final Level level;
 	public final OpenSet open;
@@ -29,9 +26,8 @@ public final class AStarSolver {
 	final Heuristic heuristic;
 	final Deadlock deadlock;
 
-	public int closed_size_limit = Integer.MAX_VALUE;
+	public long max_cpu_time = AutoTimer.Second * 60 * 60 * 24 * 365;
 	public int trace; // 0 to turn off any tracing
-	public int min_speed = 0;
 
 	private CellVisitor visitor;
 	private int[] moves;
@@ -54,6 +50,10 @@ public final class AStarSolver {
 		moves = new int[level.cells.length];
 		deadlock.closed = closed;
 		deadlock.open = open;
+
+		agent_reachable = new boolean[level.cells.length];
+		common = new boolean[level.cells.length];
+		corrals = new ArrayList<byte[]>();
 	}
 
 	static boolean divisibleByPowerOf2(int a, int p) {
@@ -61,11 +61,14 @@ public final class AStarSolver {
 	}
 
 	private long start_cpu_time;
+	private long end_cpu_time;
 	private long start_wall_time;
 
 	public State solve() {
-		start_cpu_time = Util.threadCpuTime();
+		prev_cpu_time = start_cpu_time = Util.threadCpuTime();
+		end_cpu_time = start_cpu_time + max_cpu_time;
 		start_wall_time = System.nanoTime();
+
 		int h = heuristic.evaluate(level.start);
 		if (h == Integer.MAX_VALUE)
 			return null;
@@ -74,7 +77,7 @@ public final class AStarSolver {
 			return level.start;
 
 		int explored = 0;
-		long next_report = System.nanoTime() + report_time.value * AutoTimer.Second;
+		long next_report = Util.threadCpuTime() + report_time.value * AutoTimer.Second;
 		explore(level.start);
 		State a = null;
 		StateKey recent = null;
@@ -98,13 +101,28 @@ public final class AStarSolver {
 				}
 			}
 
-			if (trace > 1 && System.nanoTime() >= next_report) {
+			long cpu_time = Util.threadCpuTime();
+			if (cpu_time >= end_cpu_time)
+				throw new ExpiredError();
+			if (trace > 1 && cpu_time >= next_report) {
 				report();
 				AutoTimer.report();
 				level.print(a);
-				next_report = System.nanoTime() + report_time.value * AutoTimer.Second;
-				if (speed < min_speed)
-					throw new SpeedTooLow();
+
+				// Find agent reachable cells
+				Arrays.fill(agent_reachable, false);
+				for (Cell v : visitor.init(level.cells[a.agent])) {
+					agent_reachable[v.id] = true;
+					for (Move m : v.moves)
+						if (!visitor.visited(m.cell))
+							if (!a.box(m.cell))
+								visitor.add(m.cell);
+				}
+				byte[] pi_corral = LevelUtil.find_pi_corral(a, level, agent_reachable, corrals, common);
+				if (pi_corral != null)
+					LevelUtil.print_corral(level, pi_corral, a);
+
+				next_report = Util.threadCpuTime() + report_time.value * AutoTimer.Second;
 			}
 		}
 		if (trace > 1)
@@ -114,10 +132,40 @@ public final class AStarSolver {
 		return a;
 	}
 
+	final boolean[] agent_reachable;
+	final boolean[] common;
+	final ArrayList<byte[]> corrals;
+
 	void explore(State a) {
 		closed.add(a);
-		if (closed.size() >= closed_size_limit)
-			throw new ClosedSizeLimitError();
+
+		// Find agent reachable cells
+		Arrays.fill(agent_reachable, false);
+		for (Cell v : visitor.init(level.cells[a.agent])) {
+			agent_reachable[v.id] = true;
+			for (Move m : v.moves)
+				if (!visitor.visited(m.cell))
+					if (!a.box(m.cell))
+						visitor.add(m.cell);
+		}
+
+		// TODO optimize if there is only one box to push we can skip corral search
+		byte[] pi_corral = LevelUtil.find_pi_corral(a, level, agent_reachable, corrals, common);
+		if (pi_corral != null) {
+			// Only push boxes on the corral boundary
+			for (Cell box : level.alive)
+				if (pi_corral[box.id] == 0)
+					for (Move m : box.moves)
+						if (m.alive && m.dist == 1 && pi_corral[m.cell.id] > 0) {
+							Move n = box.rmove(m.dir);
+							if (n != null && (!n.alive || !a.box(n.cell)) && agent_reachable[n.cell.id]) {
+								State b = a.push(box, m.dir, n.dist, level, optimal_solution.value, /*TODO moves*/0,
+										a.agent);
+								process_push(b);
+							}
+						}
+			return;
+		}
 
 		moves[a.agent] = 0; // TODO merge moves to visitor (into set)
 		// TODO stop the loop early after we reach all sides of all boxes
@@ -130,35 +178,36 @@ public final class AStarSolver {
 					continue;
 				}
 
-				timer_moves.open();
-				State b = a.push(p, level, optimal_solution.value, moves[agent.id], a.agent);
-				timer_moves.close();
-
-				if (b == null || closed.contains(b))
-					continue;
-
-				int v_total_dist = open.get_total_dist(b);
-				if (v_total_dist == 0 && deadlock.checkIncremental(b))
-					continue;
-
-				int h = heuristic.evaluate(b);
-				if (h >= cutoff) {
-					cutoffs += 1;
-					continue;
-				}
-				b.set_heuristic(h);
-
-				if (v_total_dist == 0) {
-					if (level.is_solved_fast(b.box)) {
-						open.remove_all_ge(optimal_solution.value ? b.total_dist : 0);
-						cutoff = b.total_dist;
-					}
-					open.add(b);
-					continue;
-				}
-				if (b.total_dist < v_total_dist)
-					open.update(v_total_dist, b);
+				State b = a.push(p.cell, p.exit_dir, p.dist, level, optimal_solution.value, moves[agent.id], a.agent);
+				process_push(b);
 			}
+	}
+
+	private void process_push(State b) {
+		if (b == null || closed.contains(b))
+			return;
+
+		int v_total_dist = open.get_total_dist(b);
+		if (v_total_dist == 0 && deadlock.checkIncremental(b))
+			return;
+
+		int h = heuristic.evaluate(b);
+		if (h >= cutoff) {
+			cutoffs += 1;
+			return;
+		}
+		b.set_heuristic(h);
+
+		if (v_total_dist == 0) {
+			if (level.is_solved_fast(b.box)) {
+				open.remove_all_ge(optimal_solution.value ? b.total_dist : 0);
+				cutoff = b.total_dist;
+			}
+			open.add(b);
+			return;
+		}
+		if (b.total_dist < v_total_dist)
+			open.update(v_total_dist, b);
 	}
 
 	public State[] extractPath(State end) {
@@ -187,7 +236,7 @@ public final class AStarSolver {
 		int delta_open = open.size() - prev_open;
 		prev_cpu_time = now_cpu;
 
-		speed = (speed + 1e9 * delta_closed / delta_time) / 2;
+		speed = 1e9 * delta_closed / delta_time;
 
 		print("%s ", level.name);
 		print("cutoff:%s dead:%s live:%s ", cutoffs, heuristic.deadlocks, heuristic.non_deadlocks);

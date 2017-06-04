@@ -46,7 +46,7 @@ public final class Level {
 	public Cell[] cells;
 	public Cell[] alive;
 	public Cell[] goals;
-	private int[] goal_set;
+	int[] goal_set;
 	public final int num_boxes;
 	public final CellVisitor visitor;
 	public final State start;
@@ -216,9 +216,19 @@ public final class Level {
 
 	private DistAgent move_agent_from_deadend(Cell[] grid, Cell agent) {
 		int dist = 0;
-		// TODO remove restriction on not being able to push box to remove dead end
-		while (!agent.goal && agent.moves.length == 1 && !agent.moves[0].cell.box) {
+		while (!agent.goal && agent.moves.length == 1) {
 			Cell b = agent.moves[0].cell;
+			if (b.box) {
+				Move m = b.move(agent.moves[0].dir);
+				if (m == null)
+					break;
+				Cell c = m.cell;
+				if (c.box)
+					break;
+				b.box = false;
+				c.box = true;
+				buffer[c.xy] = c.goal ? Code.BoxGoal : Code.Box;
+			}
 			buffer[agent.xy] = Code.Wall;
 			buffer[b.xy] = Code.Agent;
 			grid[agent.xy] = null;
@@ -459,10 +469,11 @@ public final class Level {
 
 	private void compute_distances_to_each_goal(int goals, CellPairVisitor pair_visitor) {
 		For.each(cells, g -> g.distance_box = Array.ofInt(goals, Cell.Infinity));
-		int[][] distance = Array.ofInt(cells.length, alive.length, Cell.Infinity);
+		int[][] distance = new int[cells.length][alive.length];
 		for (Cell g : cells)
 			if (g.goal) {
 				pair_visitor.init();
+				Array.fill(distance, Cell.Infinity);
 				for (Move e : g.moves)
 					if (pair_visitor.try_add(e.cell, g))
 						distance[e.cell.id][g.id] = e.dist - 1;
@@ -478,12 +489,21 @@ public final class Level {
 						// TODO moves included only if ! optimal
 						Cell c = e.cell;
 						if (c != box && pair_visitor.try_add(c, box))
-							distance[c.id][box.id] = distance[agent.id][box.id] + e.dist;
+							distance[c.id][box.id] = distance[agent.id][box.id];//+ e.dist;
 						Move m = agent.rmove(e.dir);
 						if (agent.alive && m != null && m.cell == box && pair_visitor.try_add(c, agent))
 							distance[c.id][agent.id] = distance[agent.id][box.id] + e.dist;
 					}
 				}
+				/*print(p -> {
+					if (p == g)
+						return Code.GoalRoomEntrance;
+					if (!p.alive)
+						return Code.Dead;
+					if (distance[cells[cells.length - 1].id][p.id] >= Cell.Infinity)
+						return Code.Space;
+					return (char) ((int) '0' + (distance[cells[cells.length - 1].id][p.id] % 10));
+				});*/
 			}
 	}
 
