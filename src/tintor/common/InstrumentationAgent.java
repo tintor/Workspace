@@ -20,6 +20,9 @@ public class InstrumentationAgent {
 	}
 
 	public static long deepSizeOf(Object obj) {
+		if (obj instanceof DeepSizeOf)
+			return ((DeepSizeOf) obj).deepSizeOf(instrumentation);
+
 		Map<Object, Object> visited = new IdentityHashMap<Object, Object>();
 		Stack<Object> stack = new Stack<Object>();
 		stack.push(obj);

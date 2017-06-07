@@ -1,5 +1,6 @@
 package tintor.common;
 
+import java.lang.instrument.Instrumentation;
 import java.util.Arrays;
 import java.util.Iterator;
 
@@ -18,6 +19,10 @@ public final class OpenAddressingHashSet<T> implements IHashSet<T> {
 
 	public int size() {
 		return size;
+	}
+
+	public long deepSizeOfWithoutElements(Instrumentation ins) {
+		return ins.getObjectSize(this) + ins.getObjectSize(array);
 	}
 
 	public int capacity() {

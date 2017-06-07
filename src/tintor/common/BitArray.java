@@ -9,6 +9,10 @@ public final class BitArray {
 		bits = new int[(length + 31) / 32];
 	}
 
+	public int[] bits() {
+		return bits;
+	}
+
 	public void clear() {
 		Arrays.fill(bits, 0);
 	}

@@ -12,6 +12,14 @@ import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public final class Array {
+	public int min(int[] array) {
+		int min = Integer.MAX_VALUE;
+		for (int a : array)
+			if (a < min)
+				min = a;
+		return min;
+	}
+
 	public void fill(int[][] array, int value) {
 		for (int[] a : array)
 			Arrays.fill(a, value);

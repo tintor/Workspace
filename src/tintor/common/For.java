@@ -8,7 +8,41 @@ import java.util.function.Predicate;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
-public class For {
+public final class For {
+	public interface IntIntPredicate {
+		boolean test(int value, int value2);
+	}
+
+	public static boolean all(int sizeA, int sizeB, IntIntPredicate fn) {
+		for (int i = 0; i < sizeA; i++)
+			for (int j = 0; j < sizeB; j++)
+				if (!fn.test(i, j))
+					return false;
+		return true;
+	}
+
+	public static boolean any(int sizeA, int sizeB, IntIntPredicate fn) {
+		for (int i = 0; i < sizeA; i++)
+			for (int j = 0; j < sizeB; j++)
+				if (fn.test(i, j))
+					return true;
+		return false;
+	}
+
+	public static boolean all(int size, IntPredicate fn) {
+		for (int i = 0; i < size; i++)
+			if (!fn.test(i))
+				return false;
+		return true;
+	}
+
+	public static boolean any(int size, IntPredicate fn) {
+		for (int i = 0; i < size; i++)
+			if (fn.test(i))
+				return true;
+		return false;
+	}
+
 	public static <T> boolean all(T[] array, Predicate<T> fn) {
 		for (T e : array)
 			if (!fn.test(e))

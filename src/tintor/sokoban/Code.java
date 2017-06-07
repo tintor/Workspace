@@ -11,6 +11,8 @@ public class Code {
 	public final char Goal = '.';
 	public final char Agent = '@';
 	public final char Space = ' ';
+	public final char Sink = '~';
+	public final char AgentSink = '©';
 
 	public final char Dead = ':';
 	public final char AliveTunnel = 't';
@@ -18,7 +20,7 @@ public class Code {
 	public final char GoalRoomEntrance = 'b';
 	public final char FrozenOnGoal = 'm';
 
-	private String emojify(char c) {
+	public String emojify(char c) {
 		if (c == ' ')
 			return "🕸️";
 		if (c == Wall)
@@ -45,6 +47,10 @@ public class Code {
 			return "🚩";
 		if (c == FrozenOnGoal)
 			return "Ⓜ️";
+		if (c == Sink)
+			return "♨️";
+		if (c == AgentSink)
+			return "😅";
 		if (c == '0')
 			return "0️⃣";
 		if (c == '1')
@@ -81,12 +87,14 @@ public class Code {
 
 	public String emojify(char[] buffer) {
 		boolean add_space = System.console() != null;
-		StringBuilder sb = new StringBuilder();
+		StringBuilder sb = new StringBuilder(buffer.length * 3);
 		for (char c : buffer) {
 			sb.append(emojify(c));
 			if (add_space && c != '\n')
 				sb.append(' ');
 		}
+		if (sb.length() > buffer.length * 3)
+			throw new Error(sb.length() + " vs " + buffer.length);
 		return sb.toString();
 	}
 }

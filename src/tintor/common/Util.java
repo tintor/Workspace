@@ -10,17 +10,42 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Iterator;
 import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import java.util.function.IntPredicate;
 import java.util.function.IntUnaryOperator;
 import java.util.function.Supplier;
 
 import lombok.SneakyThrows;
+import lombok.val;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public final class Util {
+	@SneakyThrows
+	public static void fork_join(int count, IntConsumer fn) {
+		if (count == 1) {
+			fn.accept(0);
+			return;
+		}
+
+		ExecutorService executor = Executors.newFixedThreadPool(count);
+		for (int i = 0; i < count; i++) {
+			val fi = i;
+			executor.submit(() -> fn.accept(fi));
+		}
+		executor.shutdown();
+		executor.awaitTermination(365, TimeUnit.DAYS);
+	}
+
+	public static void fork_join(IntConsumer fn) {
+		fork_join(Runtime.getRuntime().availableProcessors(), fn);
+	}
+
 	private static final ThreadMXBean threadMxBean = ManagementFactory.getThreadMXBean();
 
 	// applies Util.human to every int / long argument

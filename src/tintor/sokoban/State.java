@@ -238,6 +238,7 @@ public final class State extends StateKey {
 
 		int[] nbox = Array.clone(box);
 		Bits.clear(nbox, a.id);
+		// TODO implement sinks
 		Bits.set(nbox, am.cell.id);
 		int new_dist = optimal ? dist + moves + m_dist : dist + m_dist;
 		int pushes = 1;

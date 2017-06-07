@@ -24,6 +24,7 @@ public final class Cell {
 	Move[] moves;
 	public final int xy;
 	public boolean goal;
+	public boolean sink;
 	boolean box;
 	int id;
 	public boolean alive;
@@ -34,12 +35,14 @@ public final class Cell {
 
 	static final int Infinity = Integer.MAX_VALUE / 2; // limitation due to Hungarian
 	int[] distance_box; // distance[goal_orginal]
+	int distance_box_min; // min(distance_box)
 
 	Cell(Level level, int xy, char ch) {
 		this.level = level;
 		id = this.xy = xy;
 		goal = ch == Code.Goal || ch == Code.AgentGoal || ch == Code.BoxGoal;
 		box = ch == Code.Box || ch == Code.BoxGoal;
+		sink = ch == Code.Sink || ch == Code.AgentSink;
 	}
 
 	public boolean box(int[] boxes) {
