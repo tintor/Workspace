@@ -34,7 +34,7 @@ public class Microban {
 					print("cells:%s alive:%s ", level.cells.length, level.alive.length);
 					print("boxes:%s state_space:%s\n", level.num_boxes, level.state_space());
 
-					AStarSolver solver = new AStarSolver(level);
+					AStarSolver solver = new AStarSolver(level, true);
 					solver.trace = 2;
 					timer.time_ns = 0;
 					timer.open();

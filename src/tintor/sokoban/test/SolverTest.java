@@ -45,7 +45,7 @@ public class SolverTest {
 		AutoTimer.enabled = false;
 		try {
 			Level level = Level.load(filename);
-			AStarSolver solver = new AStarSolver(level);
+			AStarSolver solver = new AStarSolver(level, true);
 			solver.max_cpu_time = 10 * AutoTimer.Second;
 			try {
 				State end = solver.solve();

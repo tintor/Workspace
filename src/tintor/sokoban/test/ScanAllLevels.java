@@ -28,7 +28,7 @@ public class ScanAllLevels {
 			Log.info("bottleneck");
 			level.print(p -> p.bottleneck ? '.' : ' ');
 			if (MinStateSpace <= state_space && state_space <= MaxStateSpace) {
-				AStarSolver solver = new AStarSolver(level);
+				AStarSolver solver = new AStarSolver(level, true);
 				solver.trace = 1;
 				try {
 					if (solver.solve() != null)

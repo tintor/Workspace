@@ -127,15 +127,22 @@ public final class PatternIndex {
 	private static final AutoTimer timer_match = new AutoTimer("pattern.match");
 
 	@SneakyThrows
-	public PatternIndex(Level level) {
+	public PatternIndex(Level level, boolean enable_logging) {
 		this.level = level;
 		box_length = (level.alive.length + 31) / 32;
 		pattern_index = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
 		pattern_index_near = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
 		pattern_index_new = Array.make(level.cells.length, i -> new PatternList(level.num_boxes, level.alive.length));
 		histogram = new int[level.num_boxes];
-		pattern_file = new FileWriter(level.name + "_patterns.txt");
+		pattern_file = enable_logging ? new FileWriter(level.name + "_patterns.txt") : null;
 		patterns = new OpenAddressingIntArrayHashSet((level.cells.length + 31) / 32 + box_length);
+	}
+
+	@Override
+	@SneakyThrows
+	protected void finalize() {
+		if (pattern_file != null)
+			pattern_file.close();
 	}
 
 	public void load(String file) {
@@ -173,6 +180,8 @@ public final class PatternIndex {
 
 	@SneakyThrows
 	private void addToFile(boolean[] agent, int[] box, boolean verbose, String source) {
+		if (!verbose && pattern_file == null)
+			return;
 		char[] render = level.render(p -> {
 			if (p.id < box.length * 32 && Bits.test(box, p.id))
 				return p.goal ? Code.BoxGoal : Code.Box;
@@ -182,9 +191,11 @@ public final class PatternIndex {
 		});
 		if (verbose)
 			System.out.print(Code.emojify(render));
-		pattern_file.write(source);
-		pattern_file.write('\n');
-		pattern_file.write(Code.emojify(render));
+		if (pattern_file != null) {
+			pattern_file.write(source);
+			pattern_file.write('\n');
+			pattern_file.write(Code.emojify(render));
+		}
 	}
 
 	@SneakyThrows
@@ -226,6 +237,7 @@ public final class PatternIndex {
 	}
 
 	public void clearNew() {
+		// TODO remove any old pattern that is contained in any of the new patterns
 		for (PatternList p : pattern_index_new)
 			p.clear();
 	}

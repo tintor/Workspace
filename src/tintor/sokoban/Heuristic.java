@@ -20,6 +20,7 @@ final class Heuristic {
 	long deadlocks;
 	long non_deadlocks;
 	final boolean[] frozen;
+	boolean use_cheap;
 
 	Heuristic(Level level, boolean optimal) {
 		this.level = level;
@@ -28,6 +29,7 @@ final class Heuristic {
 		hungarian = new Hungarian(level.num_boxes);
 		boxes = new Cell[num_boxes];
 		frozen = new boolean[num_boxes];
+		use_cheap = level.goals.length == 0; // level has all sinks instead of goals
 	}
 
 	private static final Flags.Int heuristic_mult = new Flags.Int("heuristic_mult", 3);
@@ -36,29 +38,37 @@ final class Heuristic {
 		if (heuristic_mult.value == 0)
 			return 0;
 		@Cleanup val t = timer.open();
-		int bc = 0;
-		for (Cell c : level.goals)
-			frozen[c.id] = s.box(c) && LevelUtil.is_frozen_on_goal(c, s.box);
-		for (Cell b : level.alive)
-			if (s.box(b)) {
-				if (b.goal && frozen[b.id])
-					for (Cell goal : level.goals)
-						hungarian.costs[bc][goal.id] = goal == b ? 0 : Infinity;
-				else
-					for (Cell goal : level.goals)
-						hungarian.costs[bc][goal.id] = frozen[goal.id] ? Infinity : b.distance_box[goal.id];
-				boxes[bc++] = b;
-			}
-		assert bc == boxes.length;
+		int h = 0;
 
-		int[] result = hungarian.execute();
-		For.each(result, (i, e) -> result[i] = boxes[e].distance_box[i]);
-		if (result.contains(Infinity)) {
-			deadlocks += 1;
-			return Integer.MAX_VALUE;
+		if (use_cheap) {
+			for (Cell b : level.alive)
+				if (s.box(b))
+					h += b.distance_box_min;
+		} else {
+			int bc = 0;
+			for (Cell c : level.goals)
+				frozen[c.id] = s.box(c) && LevelUtil.is_frozen_on_goal(c, s.box);
+			for (Cell b : level.alive)
+				if (s.box(b)) {
+					if (b.goal && frozen[b.id])
+						for (Cell goal : level.goals)
+							hungarian.costs[bc][goal.id] = goal == b ? 0 : Infinity;
+					else
+						for (Cell goal : level.goals)
+							hungarian.costs[bc][goal.id] = frozen[goal.id] ? Infinity : b.distance_box[goal.id];
+					boxes[bc++] = b;
+				}
+			assert bc == boxes.length;
+
+			int[] result = hungarian.execute();
+			For.each(result, (i, e) -> result[i] = boxes[e].distance_box[i]);
+			if (result.contains(Infinity)) {
+				deadlocks += 1;
+				return Integer.MAX_VALUE;
+			}
+			h = result.sum();
 		}
 
-		int h = result.sum();
 		assert h >= 0;
 		non_deadlocks += 1;
 		return optimal ? h : h * (int) heuristic_mult.value;

@@ -10,6 +10,7 @@ import lombok.Cleanup;
 import lombok.val;
 import tintor.common.AutoTimer;
 import tintor.common.Flags;
+import tintor.common.Ticker;
 import tintor.common.Util;
 import tintor.common.WallTimer;
 
@@ -39,12 +40,12 @@ public final class AStarSolver {
 	private static final Flags.Int report_time = new Flags.Int("report_time", 20); // in seconds
 	private static final Flags.Int unstuck_period = new Flags.Int("unstuck_period", 16);
 
-	public AStarSolver(Level level) {
+	public AStarSolver(Level level, boolean enable_logging) {
 		this.level = level;
 		open = new OpenSet(level.alive.length, level.cells.length);
 		closed = new ClosedSet(level);
 		heuristic = new Heuristic(level, optimal_solution.value);
-		deadlock = new Deadlock(level);
+		deadlock = new Deadlock(level, enable_logging);
 
 		visitor = new CellVisitor(level.cells.length);
 		moves = new int[level.cells.length];
@@ -76,58 +77,37 @@ public final class AStarSolver {
 		if (level.is_solved_fast(level.start.box))
 			return level.start;
 
+		final Ticker ticker = new Ticker(report_time.value * 1000, trace > 1);
 		int explored = 0;
-		long next_report = Util.threadCpuTime() + report_time.value * AutoTimer.Second;
 		explore(level.start);
 		State a = null;
 		StateKey recent = null;
 		while (true) {
-			{
-				@Cleanup val t = timer_solve.open();
-				a = open.remove_min();
-				if (a == null || level.is_solved_fast(a.box))
-					break;
-				if (!a.is_initial() && deadlock.checkFull(a))
-					continue;
-
-				explore(a);
-				explored += 1;
-				// TODO auto-adjust frequency here so that deadlock.unstuck is just below 35% of time
-				// (or run deadlock.unstuck in a separate thread 100% of time)
-				if (divisibleByPowerOf2(explored, unstuck_period.value)) {
-					if (recent != null)
-						deadlock.unstuck(recent, a);
-					recent = a;
-				}
+			if (ticker.tick) {
+				ticker.tick = false;
+				report(a);
 			}
 
-			long cpu_time = Util.threadCpuTime();
-			if (cpu_time >= end_cpu_time)
-				throw new ExpiredError();
-			if (trace > 1 && cpu_time >= next_report) {
-				report();
-				AutoTimer.report();
-				level.print(a);
+			@Cleanup val t = timer_solve.open();
+			a = open.remove_min();
+			if (a == null || level.is_solved_fast(a.box))
+				break;
+			if (!a.is_initial() && deadlock.checkFull(a))
+				continue;
 
-				// Find agent reachable cells
-				Arrays.fill(agent_reachable, false);
-				for (Cell v : visitor.init(level.cells[a.agent])) {
-					agent_reachable[v.id] = true;
-					for (Move m : v.moves)
-						if (!visitor.visited(m.cell))
-							if (!a.box(m.cell))
-								visitor.add(m.cell);
-				}
-				byte[] pi_corral = LevelUtil.find_pi_corral(a, level, agent_reachable, corrals, common);
-				if (pi_corral != null)
-					LevelUtil.print_corral(level, pi_corral, a);
-
-				next_report = Util.threadCpuTime() + report_time.value * AutoTimer.Second;
+			explore(a);
+			explored += 1;
+			// TODO auto-adjust frequency here so that deadlock.unstuck is just below 35% of time
+			// (or run deadlock.unstuck in a separate thread 100% of time)
+			if (divisibleByPowerOf2(explored, unstuck_period.value)) {
+				if (recent != null)
+					deadlock.unstuck(recent, a);
+				recent = a;
 			}
 		}
 		if (trace > 1)
-			report();
-		if (trace > 0)
+			report(null);
+		else if (trace > 0)
 			AutoTimer.report();
 		return a;
 	}
@@ -228,9 +208,12 @@ public final class AStarSolver {
 	private int prev_closed = 0;
 	private double speed = 0;
 
-	private void report() {
+	private void report(State a) {
 		long now = System.nanoTime();
 		long now_cpu = Util.threadCpuTime();
+		if (now_cpu >= end_cpu_time)
+			throw new ExpiredError();
+
 		long delta_time = now_cpu - prev_cpu_time;
 		int delta_closed = closed.size() - prev_closed;
 		int delta_open = open.size() - prev_open;
@@ -250,5 +233,23 @@ public final class AStarSolver {
 
 		prev_closed = closed.size();
 		prev_open = open.size();
+
+		AutoTimer.report();
+		if (a == null)
+			return;
+		level.print(a);
+
+		// Find agent reachable cells
+		Arrays.fill(agent_reachable, false);
+		for (Cell v : visitor.init(level.cells[a.agent])) {
+			agent_reachable[v.id] = true;
+			for (Move m : v.moves)
+				if (!visitor.visited(m.cell))
+					if (!a.box(m.cell))
+						visitor.add(m.cell);
+		}
+		byte[] pi_corral = LevelUtil.find_pi_corral(a, level, agent_reachable, corrals, common);
+		if (pi_corral != null)
+			LevelUtil.print_corral(level, pi_corral, a);
 	}
 }

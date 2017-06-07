@@ -102,7 +102,7 @@ public final class Level {
 		}
 	}
 
-	private Level(char[] buffer, String name, int weaken_amount) {
+	Level(char[] buffer, String name, int weaken_amount) {
 		int w = 0;
 		while (buffer[w] != '\n')
 			w++;
@@ -505,6 +505,8 @@ public final class Level {
 					return (char) ((int) '0' + (distance[cells[cells.length - 1].id][p.id] % 10));
 				});*/
 			}
+		for (Cell b : alive)
+			b.distance_box_min = Array.min(b.distance_box);
 	}
 
 	private State compute_goal_and_start(Cell agent, int dist) {

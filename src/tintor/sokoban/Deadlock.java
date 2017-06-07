@@ -4,6 +4,7 @@ import static tintor.common.InstrumentationAgent.deepSizeOf;
 import static tintor.common.Util.print;
 
 import java.io.FileWriter;
+import java.lang.instrument.Instrumentation;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,41 +16,84 @@ import tintor.common.Array;
 import tintor.common.AutoTimer;
 import tintor.common.BipartiteMatching;
 import tintor.common.Bits;
+import tintor.common.DeepSizeOf;
 import tintor.common.Flags;
 import tintor.common.For;
 import tintor.common.MurmurHash3;
 import tintor.common.OpenAddressingHashSet;
 import tintor.common.Util;
 
-final class GoalZoneCache {
-	final int[] agent;
-	final int[] frozen_boxes;
-	final int[] boxes;
-	boolean deadlock;
-	int hash;
-
-	GoalZoneCache(int[] agent, int[] frozen_boxes, int[] boxes) {
-		this.agent = Array.clone(agent);
-		this.frozen_boxes = Array.clone(frozen_boxes);
-		this.boxes = Array.clone(boxes);
-
-		int a = 0;
-		a = MurmurHash3.hash(agent, a);
-		a = MurmurHash3.hash(frozen_boxes, a);
-		a = MurmurHash3.hash(boxes, a);
-		hash = a;
+final class GoalZoneCache implements DeepSizeOf {
+	public static enum Result {
+		Deadlock, NonDeadlock, Unknown
 	}
 
-	@Override
-	public boolean equals(Object o) {
-		GoalZoneCache c = (GoalZoneCache) o;
-		return hash == c.hash && Arrays.equals(agent, c.agent) && Arrays.equals(frozen_boxes, c.frozen_boxes)
-				&& Arrays.equals(boxes, c.boxes);
+	public final static class Element {
+		private final int[] agent;
+		private final int[] frozen_boxes;
+		private final int[] boxes;
+		private final int hash;
+		public final Result state;
+
+		private Element(int[] agent, int[] frozen_boxes, int[] boxes, Result state, int hash) {
+			this.agent = Array.clone(agent);
+			this.frozen_boxes = Array.clone(frozen_boxes);
+			this.boxes = Array.clone(boxes);
+			this.hash = hash;
+			this.state = state;
+		}
+
+		Element(int[] agent, int[] frozen_boxes, int[] boxes) {
+			this.agent = agent;
+			this.frozen_boxes = frozen_boxes;
+			this.boxes = boxes;
+			this.state = Result.Unknown;
+
+			int a = 0;
+			a = MurmurHash3.hash(agent, a);
+			a = MurmurHash3.hash(frozen_boxes, a);
+			a = MurmurHash3.hash(boxes, a);
+			hash = a;
+		}
+
+		Element deep_copy(Result state) {
+			return new Element(agent, frozen_boxes, boxes, state, hash);
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			Element c = (Element) o;
+			return hash == c.hash && Arrays.equals(agent, c.agent) && Arrays.equals(frozen_boxes, c.frozen_boxes)
+					&& Arrays.equals(boxes, c.boxes);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
 	}
 
-	@Override
-	public int hashCode() {
-		return hash;
+	private final OpenAddressingHashSet<Element> cache = new OpenAddressingHashSet<>();
+	private Element last;
+
+	// Note: input arrays must not change by the time of insert!
+	public Element lookup(int[] agent, int[] frozen_boxes, int[] boxes) {
+		Element a = new Element(agent, frozen_boxes, boxes);
+		Element b = cache.get(a);
+		return b == null ? a : b;
+	}
+
+	public void insert(Element e, boolean deadlock) {
+		cache.insert(last = e.deep_copy(deadlock ? Result.Deadlock : Result.NonDeadlock));
+	}
+
+	public int size() {
+		return cache.size();
+	}
+
+	public long deepSizeOf(Instrumentation ins) {
+		long elementSize = last != null ? ins.getObjectSize(last) : 0;
+		return cache.deepSizeOfWithoutElements(ins) + cache.size() * elementSize;
 	}
 }
 
@@ -60,7 +104,7 @@ public final class Deadlock {
 	public final PatternIndex patternIndex;
 	private final CellVisitor visitor;
 	private final Level level;
-	private final OpenAddressingHashSet<GoalZoneCache> goal_zone_cache = new OpenAddressingHashSet<>();
+	private final GoalZoneCache goal_zone_cache = new GoalZoneCache();
 
 	// Used by isGoalZoneDeadlock
 	private final ArrayDeque<StateKey> queue = new ArrayDeque<>();
@@ -100,16 +144,30 @@ public final class Deadlock {
 	public int unstuck_good;
 
 	@SneakyThrows
-	public Deadlock(Level level) {
+	public Deadlock(Level level, boolean enable_logging) {
 		this.level = level;
 		visitor = new CellVisitor(level.cells.length);
-		patternIndex = new PatternIndex(level);
-		goal_zone_deadlocks_file = new FileWriter(level.name + "_goalzone_deadlocks.txt");
-		is_valid_level_deadlocks_file = new FileWriter(level.name + "_isvalidlevel_deadlocks.txt");
-		unstuck_fail_file = new FileWriter(level.name + "_unstuck_fail.txt");
+		patternIndex = new PatternIndex(level, enable_logging);
+
+		goal_zone_deadlocks_file = enable_logging ? new FileWriter(level.name + "_goalzone_deadlocks.txt") : null;
+		is_valid_level_deadlocks_file = enable_logging ? new FileWriter(level.name + "_isvalidlevel_deadlocks.txt")
+				: null;
+		unstuck_fail_file = enable_logging ? new FileWriter(level.name + "_unstuck_fail.txt") : null;
+
 		temp_box = new int[(level.alive.length + 31) / 32];
 		explored = new StateSet(level.alive.length, level.cells.length);
 		are_all_goals_in_the_same_tunnel = are_all_goals_in_the_same_tunnel();
+	}
+
+	@Override
+	@SneakyThrows
+	protected void finalize() {
+		if (goal_zone_deadlocks_file != null)
+			goal_zone_deadlocks_file.close();
+		if (is_valid_level_deadlocks_file != null)
+			is_valid_level_deadlocks_file.close();
+		if (unstuck_fail_file != null)
+			unstuck_fail_file.close();
 	}
 
 	@SneakyThrows
@@ -132,9 +190,12 @@ public final class Deadlock {
 		print("cleanup:%s\n", cleanup_count);
 
 		patternIndex.flush();
-		goal_zone_deadlocks_file.flush();
-		is_valid_level_deadlocks_file.flush();
-		unstuck_fail_file.flush();
+		if (goal_zone_deadlocks_file != null)
+			goal_zone_deadlocks_file.flush();
+		if (is_valid_level_deadlocks_file != null)
+			is_valid_level_deadlocks_file.flush();
+		if (unstuck_fail_file != null)
+			unstuck_fail_file.flush();
 	}
 
 	void cleanup() {
@@ -304,7 +365,8 @@ public final class Deadlock {
 		if (!isDeadlockExaustive(q, visitor, queue, set)) {
 			if (unstuck_debug.value)
 				print("unstuck - failed\n");
-			unstuck_fail_file.write(Code.emojify(level.render(q)));
+			if (unstuck_fail_file != null)
+				unstuck_fail_file.write(Code.emojify(level.render(q)));
 			unstuck_bad += 1;
 			return false;
 		}
@@ -385,18 +447,19 @@ public final class Deadlock {
 		boolean[] agent = visitor.visited().clone();
 
 		// Cache lookup
-		s = new StateKey(s.agent, box);
-		val cache_new = new GoalZoneCache(Util.compressToIntArray(agent), new int[box.length], box);
-		val cache_lookup = goal_zone_cache.get(cache_new);
-		if (cache_lookup != null) {
+		val cache = goal_zone_cache.lookup(Util.compressToIntArray(agent), new int[box.length], box);
+		if (cache.state == GoalZoneCache.Result.Deadlock) {
 			goalzone_cache_deadlocks += 1;
-			return cache_lookup.deadlock;
+			return true;
 		}
+		if (cache.state == GoalZoneCache.Result.NonDeadlock)
+			return false;
 
 		// move agent and try to push remaining boxes
 		// TODO assume goals and agent position can fit in 64bit long
 		queue.clear();
 		explored.clear();
+		s = new StateKey(s.agent, box);
 		queue.addLast(s);
 		while (!queue.isEmpty()) {
 			StateKey q = queue.removeFirst();
@@ -411,7 +474,7 @@ public final class Deadlock {
 					reachableGoals += 1;
 					assert boxesOnGoals + reachableGoals <= level.num_boxes;
 					if (boxesOnGoals + reachableGoals == level.num_boxes) {
-						goal_zone_cache.insert(cache_new);
+						goal_zone_cache.insert(cache, false);
 						return false;
 					}
 				}
@@ -427,7 +490,7 @@ public final class Deadlock {
 					if (!c.cell.goal) {
 						// box is removed
 						if (--boxesOnGoals == 0) {
-							goal_zone_cache.insert(cache_new);
+							goal_zone_cache.insert(cache, false);
 							return false;
 						}
 						Bits.clear(q.box, b.id);
@@ -436,10 +499,10 @@ public final class Deadlock {
 					}
 					if (!Bits.test(q.box, c.cell.id)) {
 						// push box to c
-						box = Array.clone(q.box);
-						Bits.clear(box, b.id);
-						Bits.set(box, c.cell.id);
-						StateKey m = new StateKey(b.id, box);
+						int[] boxes = Array.clone(q.box);
+						Bits.clear(boxes, b.id);
+						Bits.set(boxes, c.cell.id);
+						StateKey m = new StateKey(b.id, boxes);
 						if (!explored.contains(m)) {
 							explored.insert(m);
 							queue.addLast(m);
@@ -452,8 +515,7 @@ public final class Deadlock {
 		goalzone_deadlocks += 1;
 		// TODO multiple agent spots
 		goal_zone_deadlocks_file.write(Code.emojify(level.render(s)));
-		cache_new.deadlock = true;
-		goal_zone_cache.insert(cache_new);
+		goal_zone_cache.insert(cache, true);
 		return true;
 	}
 
@@ -515,7 +577,7 @@ public final class Deadlock {
 		return containsFrozenGoalBoxes(pushed_boxes, box, temp_box, agent);
 	}
 
-	private static boolean allow_more_goals_than_boxes = false;
+	private boolean allow_more_goals_than_boxes = false;
 
 	@SneakyThrows
 	private Result containsFrozenGoalBoxes(int pushed_boxes, int[] box, int[] original_box, int agent) {
@@ -538,9 +600,12 @@ public final class Deadlock {
 				}
 
 			val visited = Util.compressToIntArray(visitor.visited());
-			val cache_new = new GoalZoneCache(visited, box, original_box);
-			GoalZoneCache cache = goal_zone_cache.get(cache_new);
-			if (cache == null) {
+			val cache = goal_zone_cache.lookup(visited, box, original_box);
+			if (cache.state == GoalZoneCache.Result.Deadlock) {
+				isvalidlevel_deadlocks += 1;
+				return Result.GoalZoneDeadlock;
+			}
+			if (cache.state == GoalZoneCache.Result.Unknown) {
 				val z = level.render(p -> {
 					if (p.id == agent)
 						return p.goal ? Code.AgentGoal : Code.Agent;
@@ -550,15 +615,14 @@ public final class Deadlock {
 						return p.goal ? Code.BoxGoal : Code.Box;
 					return p.goal ? Code.Goal : Code.Space;
 				});
-				cache_new.deadlock = !level.is_valid_level(z, allow_more_goals_than_boxes);
-				goal_zone_cache.insert(cache_new);
-				cache = cache_new;
-				if (cache_new.deadlock)
-					is_valid_level_deadlocks_file.write(Code.emojify(z));
-			}
-			if (cache.deadlock) {
-				isvalidlevel_deadlocks += 1;
-				return Result.GoalZoneDeadlock;
+				boolean deadlock = !level.is_valid_level(z, allow_more_goals_than_boxes);
+				goal_zone_cache.insert(cache, deadlock);
+				if (deadlock) {
+					isvalidlevel_deadlocks += 1;
+					if (is_valid_level_deadlocks_file != null)
+						is_valid_level_deadlocks_file.write(Code.emojify(z));
+					return Result.GoalZoneDeadlock;
+				}
 			}
 		}
 
@@ -673,6 +737,7 @@ public final class Deadlock {
 		if (containsBipartiteMatchingDeadlock(s.box, boxes))
 			return true;
 
+		// TODO run I-corral deadlock checker in background
 		if (false && isICorralDeadlock(s))
 			return true;
 
@@ -702,6 +767,6 @@ public final class Deadlock {
 
 	public boolean checkFull(State s) {
 		@Cleanup val t = timer.open();
-		return enabled.value && checkInternal2((StateKey) s, -1, level.num_boxes);
+		return enabled.value && checkInternal2(s, -1, level.num_boxes);
 	}
 }

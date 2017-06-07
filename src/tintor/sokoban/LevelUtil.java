@@ -1,16 +1,112 @@
 package tintor.sokoban;
 
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
 import lombok.Cleanup;
+import lombok.SneakyThrows;
 import lombok.val;
 import lombok.experimental.UtilityClass;
 import tintor.common.Array;
 import tintor.common.AutoTimer;
+import tintor.common.BitArray;
 import tintor.common.Bits;
 import tintor.common.For;
 import tintor.sokoban.Cell.Dir;
+
+@UtilityClass
+class Deadlock3x3 {
+	// $$.  $$.  $$.  $#.  #$.  (any of the boxes can be replaced with wall, but not all of them)
+	// $.$  $.#  $.$  $.$  $.#
+	// .$$  .#    ##  .#$  .#.
+	static boolean is_3x3_deadlock(Cell agent, Cell pushed_box, int[] boxes) {
+		if (true)
+			return false;
+
+		// pushed_box on the side
+		for (Dir dir : Dir.values()) {
+			Move m = pushed_box.move(dir);
+			if (m == null || m.dist > 1 || m.cell.box(boxes) || m.cell == agent)
+				continue;
+			if (is_3x3_deadlock_center(m.cell, boxes))
+				return true;
+		}
+		// pushed_box on the corner
+		for (Dir dir : Dir.values()) {
+			Move a = pushed_box.move(dir);
+			if (a != null && a.dist == 1) {
+				Move m = a.cell.move(dir.next);
+				if (m == null || m.dist > 1 || m.cell.box(boxes) || m.cell == agent)
+					continue;
+				if (is_3x3_deadlock_center(m.cell, boxes))
+					return true;
+			}
+
+			Move b = pushed_box.move(dir.next);
+			if (b != null && b.dist == 1) {
+				Move m = b.cell.move(dir.prev);
+				if (m == null || m.dist > 1 || m.cell.box(boxes) || m.cell == agent)
+					continue;
+				if (is_3x3_deadlock_center(m.cell, boxes))
+					return true;
+			}
+		}
+		return false;
+	}
+
+	private static final char[] decode = { Code.Space, Code.Goal, Code.Box, Code.BoxGoal, Code.Wall };
+
+	private static int encode(char c) {
+		for (int i = 0; i < decode.length; i++)
+			if (c == decode[i])
+				return i;
+		throw new Error();
+	}
+
+	private static final int[] pow5 = new int[8];
+	private static final BitArray is_3x3_deadlock = new BitArray(781250/*= (5^8)*2 */);
+
+	@SneakyThrows
+	private static void loadIs3x3Deadlock() {
+		DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream("is_3x3_deadlock.raw")));
+		for (int i = 0; i < is_3x3_deadlock.bits().length; i++)
+			is_3x3_deadlock.bits()[i] = dis.readInt();
+		dis.close();
+	}
+
+	{
+		pow5[0] = 1;
+		for (int i = 1; i < pow5.length; i++)
+			pow5[i] = pow5[i - 1] * 5;
+		loadIs3x3Deadlock();
+	}
+
+	private static boolean is_3x3_deadlock_center(Cell center, int[] boxes) {
+		if (true)
+			return false;
+
+		int p = 00000000;
+		for (Dir dir : Dir.values()) {
+			// TODO finish
+			int q = pow5[1 + dir.ordinal() * 2];
+			Move m = center.move(dir);
+			if (m == null)
+				p += encode(Code.Wall) * q;
+			else if (m.dist == 1 && m.cell.box(boxes))
+				p += encode(m.cell.goal ? Code.BoxGoal : Code.Goal) * q;
+			else if (m.dist == 1 && !m.cell.box(boxes))
+				p += encode(m.cell.goal ? Code.Goal : Code.Space) * q;
+
+			Move n = center.move(dir.next);
+			// TODO corners
+		}
+
+		return is_3x3_deadlock.get(p);
+	}
+}
 
 @UtilityClass
 public class LevelUtil {
@@ -46,7 +142,7 @@ public class LevelUtil {
 
 	public static boolean is_simple_deadlock(Cell agent, Cell pushed_box, int[] boxes) {
 		return is_2x2_deadlock(pushed_box, boxes) || is_tunnel_deadlock(agent, pushed_box, boxes)
-				|| is_2x3_deadlock(pushed_box, boxes) || is_3x3_deadlock(agent, pushed_box, boxes);
+				|| is_2x3_deadlock(pushed_box, boxes) || Deadlock3x3.is_3x3_deadlock(agent, pushed_box, boxes);
 	}
 
 	// #$.
@@ -69,27 +165,8 @@ public class LevelUtil {
 		return false;
 	}
 
-	// $$.  $$.  $$.  $#.  (any of the boxes can be replaced with wall, but not all of them)
-	// $.$  $.#  $.$  $.$
-	// .$$  .#    ##  .#$
-	private static boolean is_3x3_deadlock(Cell agent, Cell pushed_box, int[] boxes) {
-		if (true)
-			return false;
-		// pushed_box on the side
-		for (Dir dir : Dir.values()) {
-			Move m = pushed_box.move(dir);
-			if (m == null || m.dist > 1 || m.cell.box(boxes))
-				continue;
-			Cell c = m.cell; // center
-			// TODO put surrounding cells into 8 byte array
-		}
-		// pushed_box on the corner
-		for (Dir dir : Dir.values()) {
-
-		}
-		return false;
-	}
-
+	// TODO measure how effective it is
+	// TODO many other tunnel cases: see 3x3 deadlock patterns
 	// is tunnel with 2 boxes without agent or goals in between
 	public static boolean is_tunnel_deadlock(Cell agent, Cell pushed_box, int[] boxes) {
 		if (pushed_box.moves.length == 2) {

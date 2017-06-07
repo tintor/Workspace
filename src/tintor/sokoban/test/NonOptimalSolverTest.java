@@ -50,7 +50,7 @@ public class NonOptimalSolverTest {
 
 	private void solve(String filename) {
 		Level level = Level.load(filename);
-		AStarSolver solver = new AStarSolver(level);
+		AStarSolver solver = new AStarSolver(level, false);
 		State end = solver.solve();
 		Assert.assertTrue(end != null);
 	}

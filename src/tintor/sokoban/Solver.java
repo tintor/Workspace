@@ -24,7 +24,7 @@ import tintor.common.Flags;
 // microban4 - all except: 56(brute force, quickly solvable with parking), 57(23min), 75(40+min), 99
 // microban5 - all except: 24 and 26
 // simple - all except: 30 and 59
-// original - 1-10 solved!
+// original - 48 / 90 solved (44 under 7.5min, remaining 3 under 1 hour + level 18 in 7.5+ hours)
 
 // BUG nabokosmos:37 no solution!
 // BUG goal-zone deadlock doesn't seem to work for spiros:197
@@ -163,6 +163,7 @@ import tintor.common.Flags;
 // TODO: [Last] How can search be parallelized?
 //       - parallel explore(a)
 //       - parallel pattern search
+//       - run I-corral deadlock checker on Closed set (or on last explored node) in background
 // TODO: Nightly mode - run all microban + original levels over night (catching OOMs) and report results
 // TODO: Look at the sokoban PhD for more ideas.
 
@@ -229,7 +230,7 @@ public class Solver {
 			level.print(p -> hex(p.room));
 		}
 
-		AStarSolver solver = new AStarSolver(level);
+		AStarSolver solver = new AStarSolver(level, true);
 		solver.trace = (int) trace.value;
 
 		timer.open();
