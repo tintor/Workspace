@@ -87,14 +87,12 @@ public class Code {
 
 	public String emojify(char[] buffer) {
 		boolean add_space = System.console() != null;
-		StringBuilder sb = new StringBuilder(buffer.length * 3);
+		StringBuilder sb = new StringBuilder(buffer.length * 4);
 		for (char c : buffer) {
 			sb.append(emojify(c));
 			if (add_space && c != '\n')
 				sb.append(' ');
 		}
-		if (sb.length() > buffer.length * 3)
-			throw new Error(sb.length() + " vs " + buffer.length);
 		return sb.toString();
 	}
 }
