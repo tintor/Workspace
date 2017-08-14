@@ -45,7 +45,7 @@ public class Sokoban {
 		//server.start();
 
 		for (Class<?> c : new Class<?>[] { Deadlock.class, OpenSet.class, ClosedSet.class, PatternIndex.class,
-				Heuristic.class, State.class, AStarSolver.class, Level.class })
+				Heuristic.class, State.class, AStarSolver.class, Level.class, Code.class })
 			Class.forName(c.getName());
 		KeepAwake.enable();
 		return Flags.parse(args, min, max);

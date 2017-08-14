@@ -1,6 +1,7 @@
 package tintor.sokoban;
 
 import lombok.experimental.UtilityClass;
+import tintor.common.Flags;
 
 @UtilityClass
 public class Code {
@@ -85,7 +86,11 @@ public class Code {
 		return "" + c;
 	}
 
+        final static Flags.Bool emojify = new Flags.Bool("emojify", true);
+
 	public String emojify(char[] buffer) {
+		if (!emojify.value)
+			return new String(buffer);
 		boolean add_space = System.console() != null;
 		StringBuilder sb = new StringBuilder(buffer.length * 4);
 		for (char c : buffer) {
