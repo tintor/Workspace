@@ -23,9 +23,9 @@ public class Code {
 
 	public String emojify(char c) {
 		if (c == ' ')
-			return "🕸️";
+			return "🕸️ ";
 		if (c == Wall)
-			return "✴️";
+			return "✴️ ";
 		if (c == '\n')
 			return "\n";
 		if (c == Agent)
@@ -33,7 +33,7 @@ public class Code {
 		if (c == Box)
 			return "🔴";
 		if (c == Goal)
-			return "🏳";
+			return "🏳 ";
 		if (c == BoxGoal)
 			return "🔵";
 		if (c == AgentGoal)
@@ -47,7 +47,7 @@ public class Code {
 		if (c == GoalRoomEntrance)
 			return "🚩";
 		if (c == FrozenOnGoal)
-			return "Ⓜ️";
+			return "Ⓜ️ ";
 		if (c == Sink)
 			return "♨️";
 		if (c == AgentSink)
@@ -91,7 +91,7 @@ public class Code {
 	public String emojify(char[] buffer) {
 		if (!emojify.value)
 			return new String(buffer);
-		boolean add_space = System.console() != null;
+		boolean add_space = false; //System.console() != null;
 		StringBuilder sb = new StringBuilder(buffer.length * 4);
 		for (char c : buffer) {
 			sb.append(emojify(c));

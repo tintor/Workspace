@@ -6,3 +6,4 @@ bin/
 *.txt
 src/tintor/*/*.class
 src/tintor/arena/
+/.metadata/

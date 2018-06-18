@@ -22,8 +22,9 @@ public final class ClosedSet {
 	}
 
 	void report() {
-		System.out.printf("closed:%s memory:%s\n", Util.human(size()),
-				Util.human(InstrumentationAgent.deepSizeOf(map)));
+        long map_size = InstrumentationAgent.deepSizeOf(map);
+		System.out.printf("closed:%s memory:%s element_bytes:%.2f\n", Util.human(size()),
+				Util.human(map_size), (double)map_size / size());
 	}
 
 	public void remove_if(StateKeyPredicate fn) {

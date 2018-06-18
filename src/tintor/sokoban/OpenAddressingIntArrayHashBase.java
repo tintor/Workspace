@@ -160,6 +160,8 @@ class OpenAddressingIntArrayHashBase {
 			throw new Error("can't grow anymore");
 		int old_capacity = mask + 1;
 		final int[] old_key = key;
+        if (key.length * 2 >= 4*1000*1000)
+            System.out.printf("[info] growing hash table to %s mb\n", key.length * 8 / 1024 / 1024);
 		key = new int[key.length * 2];
 		mask = mask * 2 + 1;
 		assert mask == key.length / N - 1;
@@ -197,17 +199,39 @@ class OpenAddressingIntArrayHashBase {
 	}
 
 	protected final boolean empty(int a, int[] key) {
-		for (int i = 0; i < N; i++)
-			if (key[N * a + i] != 0)
-				return false;
-		return true;
+        switch (N) {
+        case 1:
+			return key[a] == 0;
+        case 2:
+			return key[2 * a] == 0 && key[2 * a + 1] == 0;
+        case 3:
+			return key[3 * a] == 0 && key[3 * a + 1] == 0 && key[3 * a + 2] == 0;
+        case 4:
+			return key[4 * a] == 0 && key[4 * a + 1] == 0 && key[4 * a + 2] == 0 && key[4 * a + 3] == 0;
+        default:
+		    for (int i = 0; i < N; i++)
+				if (key[N * a + i] != 0)
+					return false;
+			return true;
+        }
 	}
 
 	protected final boolean equal(int a, int[] k) {
-		for (int i = 0; i < N; i++)
-			if (key[N * a + i] != k[i])
-				return false;
-		return true;
+        switch (N) {
+        case 1:
+			return key[a] == k[0];
+        case 2:
+			return key[2 * a] == k[0] && key[2 * a + 1] == k[1];
+        case 3:
+			return key[3 * a] == k[0] && key[3 * a + 1] == k[1] && key[3 * a + 2] == k[2];
+        case 4:
+			return key[4 * a] == k[0] && key[4 * a + 1] == k[1] && key[4 * a + 2] == k[2] && key[4 * a + 3] == k[3];
+        default:
+		    for (int i = 0; i < N; i++)
+				if (key[N * a + i] != k[i])
+					return false;
+			return true;
+        }
 	}
 
 	protected final boolean equal(int a, int[] k, int offset) {

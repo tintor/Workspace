@@ -40,17 +40,17 @@ public class Original {
 						level.num_boxes, level.state_space());
 				AStarSolver solver = new AStarSolver(level, true);
 				solver.trace = 2;
-				solver.max_cpu_time = 10 * 60 * AutoTimer.Second;
+				//solver.max_cpu_time = 10 * 60 * AutoTimer.Second;
 				timer.time_ns = 0;
 				AutoTimer.reset();
 				timer.open();
 				State end = solver.solve();
 				timer.close();
 
-				if (timer.time_ns > 10 * 60 * AutoTimer.Second) {
+				/*if (timer.time_ns > 10 * 60 * AutoTimer.Second) {
 					raw("out of time");
 					unsolved += 1;
-				} else if (end == null) {
+				} else*/ if (end == null) {
 					unsolved += 1;
 					raw("no solution!");
 				} else {
